@@ -21,7 +21,11 @@ Create one Railway service per row. Root directory: `/`. No public port.
 | `worker-export`   | `npm run worker:export`    |
 | `worker-das`      | `npm run worker:das`       |
 
-Build command (each): `npm ci && npx prisma generate`
+Build command (each): `npm ci` (runs `postinstall` → Prisma generate with a placeholder URL if `DATABASE_URL` is unset).
+
+**Required shared variables** (project → Variables, or `railway variables` after `railway service` link): at minimum `DATABASE_URL`, `REDIS_URL`. Without `DATABASE_URL`, builds fail at `prisma generate`.
+
+**CLI auth:** Use a **project token** from Project → Settings → Tokens as `RAILWAY_TOKEN` (not account Bearer tokens). Local dev: `railway login` stores auth in `~/.railway/config.json`.
 
 Optional: `worker-intelligence` → `npm run worker:intelligence`
 

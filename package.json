@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "concurrently \"next dev\" \"bash scripts/start_services.sh --wait\"",
     "build": "next build",
-    "postinstall": "prisma generate",
+    "postinstall": "node scripts/prisma-generate.mjs",
     "deploy:vercel": "bash scripts/deploy-vercel.sh",
     "env:vercel": "bash scripts/sync-vercel-env.sh",
     "start": "next start",
