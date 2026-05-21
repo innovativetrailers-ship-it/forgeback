@@ -1,3 +1,4 @@
+import type OpenAI from 'openai'
 import { execSync } from 'child_process'
 import { mkdirSync, rmSync, existsSync } from 'fs'
 import { join } from 'path'
