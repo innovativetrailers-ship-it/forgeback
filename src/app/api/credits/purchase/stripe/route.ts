@@ -2,9 +2,15 @@ import { auth } from '@/lib/auth'
 import Stripe from 'stripe'
 import { NextResponse } from 'next/server'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-04-22.dahlia',
-})
+let _stripe: Stripe | null = null
+function getStripe(): Stripe {
+  if (!_stripe) {
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: '2026-04-22.dahlia',
+    })
+  }
+  return _stripe
+}
 
 export async function POST(req: Request) {
   const session = await auth()
@@ -12,7 +18,7 @@ export async function POST(req: Request) {
 
   const { priceId, mode = 'payment' } = await req.json() as { priceId: string; mode?: string }
 
-  const checkoutSession = await stripe.checkout.sessions.create({
+  const checkoutSession = await getStripe().checkout.sessions.create({
     mode: mode as 'payment' | 'subscription',
     payment_method_types: ['card'],
     line_items: [{ price: priceId, quantity: 1 }],
