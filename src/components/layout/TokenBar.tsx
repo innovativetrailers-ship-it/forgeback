@@ -26,7 +26,7 @@ export function TokenBar() {
   const { data: credits } = useQuery({
     queryKey: ['credits-balance'],
     queryFn: async () => {
-      const res = await fetch('/api/credits/balance')
+      const res = await fetch('/api/credits/balance', { credentials: 'include' })
       if (!res.ok) return { balance: 0 }
       return res.json() as Promise<{ balance: number }>
     },

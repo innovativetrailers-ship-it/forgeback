@@ -34,18 +34,20 @@ export function useCredits() {
   const { data, isLoading } = useQuery<CreditBalance>({
     queryKey: ['credits', 'balance'],
     queryFn: async () => {
-      const res = await fetch('/api/credits/balance')
+      const res = await fetch('/api/credits/balance', { credentials: 'include' })
       if (!res.ok) throw new Error('Failed to fetch balance')
       return res.json()
     },
     enabled: !!session?.user,
     refetchInterval: 30_000,
+    retry: false,
   })
 
   const purchaseMutation = useMutation({
     mutationFn: async (packIndex: number) => {
       const res = await fetch('/api/credits/purchase', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ packIndex }),
       })
