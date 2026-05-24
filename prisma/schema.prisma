@@ -53,7 +53,9 @@ enum LoraStatus {
 model User {
   id                 String    @id @default(cuid())
   email              String    @unique
+  emailVerified      DateTime?
   name               String?
+  image              String?
   avatarUrl          String?
   passwordHash       String?
   role               UserRole  @default(FREE)
