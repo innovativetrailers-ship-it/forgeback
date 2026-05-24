@@ -10,11 +10,16 @@ const isBuildTime =
   process.env.NEXT_PHASE === 'phase-export'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // Skip PrismaAdapter during build — it opens a DB connection on init.
+  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   adapter: isBuildTime ? undefined : PrismaAdapter(db),
   session: { strategy: 'jwt' },
   pages: { signIn: '/login' },
   trustHost: true,
+  logger: {
+    error(code, ...message) {
+      console.error('[Auth Error]', code, JSON.stringify(message))
+    },
+  },
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',
