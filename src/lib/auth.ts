@@ -80,7 +80,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         ;(session.user as { creditBalance?: number }).creditBalance =
           token.creditBalance as number
 
-        // Re-fetch live credit balance on every session check
+        // Sync live credit balance from DB on every session check
         const dbUser = await db.user.findUnique({
           where: { id: token.id as string },
           select: { creditBalance: true, role: true },
@@ -94,3 +94,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 })
+
