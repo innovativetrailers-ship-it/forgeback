@@ -12,6 +12,8 @@ const PUBLIC_PATHS = [
   '/api/webhooks',
   '/api/health',
   '/review',
+  '/site.webmanifest',
+  '/manifest.json',
 ]
 
 function isPublic(pathname: string): boolean {
@@ -44,6 +46,6 @@ export const proxy = auth((req) => {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|eot)).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico|site\\.webmanifest|manifest\\.json|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|webmanifest|json|woff2?|ttf|eot)).*)',
   ],
 }
