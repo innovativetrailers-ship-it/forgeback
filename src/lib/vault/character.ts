@@ -56,9 +56,13 @@ export async function getCharacter(id: string) {
   return db.vaultCharacter.findUnique({ where: { id } })
 }
 
-export async function listCharacters(projectId: string) {
+export async function listCharacters(projectId?: string, userId?: string) {
   return db.vaultCharacter.findMany({
-    where: { projectId },
+    where: projectId
+      ? { projectId }
+      : userId
+        ? { project: { userId } }
+        : {},
     orderBy: { renderCount: 'desc' },
   })
 }

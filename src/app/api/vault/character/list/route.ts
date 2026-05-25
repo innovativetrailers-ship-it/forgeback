@@ -5,9 +5,8 @@ export async function GET(request: NextRequest) {
   const userId = request.headers.get('x-user-id')
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const projectId = request.nextUrl.searchParams.get('projectId')
-  if (!projectId) return NextResponse.json({ error: 'projectId required' }, { status: 400 })
+  const projectId = request.nextUrl.searchParams.get('projectId') ?? undefined
 
-  const characters = await listCharacters(projectId)
+  const characters = await listCharacters(projectId, userId)
   return NextResponse.json(characters)
 }
