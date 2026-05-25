@@ -40,6 +40,20 @@ function suppressTeardown(client: Redis): Redis {
   return client
 }
 
+function makeRetryStrategy(label: string) {
+  return (times: number) => {
+    if (times > 5) {
+      console.error(`[Redis:${label}] Max retries reached, giving up`)
+      return null
+    }
+    return Math.min(times * 500, 3000)
+  }
+}
+
+function makeReconnectOnError(err: Error): boolean {
+  return err.message.includes('READONLY') || err.message.includes('ETIMEDOUT')
+}
+
 export function createRedisConnection(): Redis {
   return suppressTeardown(
     new Redis(buildRedisUrl(), {
@@ -48,7 +62,8 @@ export function createRedisConnection(): Redis {
       keyPrefix: CINEMA_KEY_PREFIX,
       tls: {},
       enableOfflineQueue: false,
-      reconnectOnError: (err: Error) => err.message.includes('READONLY'),
+      retryStrategy: makeRetryStrategy('app'),
+      reconnectOnError: makeReconnectOnError,
     })
   )
 }
@@ -60,7 +75,8 @@ export function createBullMQConnection(): Redis {
       lazyConnect: true,
       tls: {},
       enableOfflineQueue: false,
-      reconnectOnError: (err: Error) => err.message.includes('READONLY'),
+      retryStrategy: makeRetryStrategy('bullmq'),
+      reconnectOnError: makeReconnectOnError,
     })
   )
 }

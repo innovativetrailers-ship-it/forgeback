@@ -58,11 +58,25 @@ cron.schedule('0 3 1 * *', async () => {
 
 // Hourly: monitor training queue and trigger fine-tune at threshold
 async function monitorTrainingQueue(): Promise<void> {
-  const queueLength = await getIntelligenceQueueLength('training:probe_signals')
-  console.log(`[Intelligence Cron] Training queue depth: ${queueLength}`)
+  try {
+    const queueLength = await getIntelligenceQueueLength('training:probe_signals')
+    console.log(`[Intelligence Cron] Training queue depth: ${queueLength}`)
 
-  if (queueLength >= 1000) {
-    await triggerTrainingRun()
+    if (queueLength >= 1000) {
+      await triggerTrainingRun()
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (
+      msg.includes('ETIMEDOUT') ||
+      msg.includes("Stream isn't writeable") ||
+      msg.includes('Connection is closed') ||
+      msg.includes('ECONNRESET')
+    ) {
+      console.warn('[Intelligence Cron] Redis unavailable, skipping tick:', msg)
+      return
+    }
+    console.error('[Intelligence Cron] Training queue monitor failed:', err)
   }
 }
 
@@ -79,16 +93,8 @@ async function triggerTrainingRun(): Promise<void> {
 
 // Run hourly training queue monitor
 setInterval(monitorTrainingQueue, 60 * 60 * 1000)
-
-// Also run at startup (but don't crash if Redis is unavailable)
-;(async () => {
-  try {
-    await monitorTrainingQueue()
-  } catch (err) {
-    console.error('[Intelligence Cron] Startup queue check failed:', err)
-    console.log('[Intelligence Cron] Continuing without initial queue check — will retry hourly')
-  }
-})()
+// Also run at startup
+monitorTrainingQueue().catch(err => console.error('[Intelligence Cron] Startup queue check failed:', err))
 
 console.log('[Intelligence Cron] All schedules registered')
 console.log('  - Every 6h: model update detection')
