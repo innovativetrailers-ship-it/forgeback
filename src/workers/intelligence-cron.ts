@@ -79,8 +79,16 @@ async function triggerTrainingRun(): Promise<void> {
 
 // Run hourly training queue monitor
 setInterval(monitorTrainingQueue, 60 * 60 * 1000)
-// Also run at startup
-monitorTrainingQueue().catch(err => console.error('[Intelligence Cron] Startup queue check failed:', err))
+
+// Also run at startup (but don't crash if Redis is unavailable)
+;(async () => {
+  try {
+    await monitorTrainingQueue()
+  } catch (err) {
+    console.error('[Intelligence Cron] Startup queue check failed:', err)
+    console.log('[Intelligence Cron] Continuing without initial queue check — will retry hourly')
+  }
+})()
 
 console.log('[Intelligence Cron] All schedules registered')
 console.log('  - Every 6h: model update detection')
