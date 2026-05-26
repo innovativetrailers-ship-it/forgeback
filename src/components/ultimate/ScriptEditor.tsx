@@ -116,7 +116,7 @@ export function ScriptEditor({ onScenesExtracted, onGenerateStoryboard }: Props)
       const res = await fetch('/api/studio/storyboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script }),
+        body: JSON.stringify({ scriptText: script }),
       })
       const data = await res.json() as { shots?: ScriptScene[] }
       if (data.shots) {

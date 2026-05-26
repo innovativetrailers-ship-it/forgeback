@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { nanoid } from 'nanoid'
 import { db } from '@/lib/db'
 import { renderQueue, getPriorityForRole } from '@/lib/queue'
-import { checkAndDeductCredits, OPERATION_COSTS } from '@/lib/credits'
+import { checkAndDeductCredits, refundCredits, OPERATION_COSTS } from '@/lib/credits'
 import { routeToModel, getOperationCostKey } from '@/lib/models/router'
 import { decomposeClip } from '@/lib/routing/SceneDecomposer'
 import { dispatchClip } from '@/lib/routing/MediaDispatcher'
@@ -183,18 +183,26 @@ export async function POST(request: NextRequest) {
     },
   })
 
-  await renderQueue.add(
-    'render',
-    {
-      jobId: renderJob.id,
-      userId,
-      projectId,
-      type,
-      modelId: model,
-      payload,
-    },
-    { priority: getPriorityForRole(userRole) }
-  )
+  try {
+    await renderQueue.add(
+      'render',
+      {
+        jobId: renderJob.id,
+        userId,
+        projectId,
+        type,
+        modelId: model,
+        payload,
+      },
+      { priority: getPriorityForRole(userRole) }
+    )
+  } catch (queueErr) {
+    // Queue unavailable (Redis down) — mark job failed and refund credits
+    await db.renderJob.update({ where: { id: renderJob.id }, data: { status: 'FAILED', errorMessage: 'Queue unavailable' } })
+    await refundCredits(userId, cost).catch(() => {})
+    console.error('[jobs/create] Queue error:', (queueErr as Error).message)
+    return NextResponse.json({ error: 'Job queue temporarily unavailable. Credits refunded.' }, { status: 503 })
+  }
 
   return NextResponse.json({ jobId: renderJob.id, status: 'QUEUED' })
 }
