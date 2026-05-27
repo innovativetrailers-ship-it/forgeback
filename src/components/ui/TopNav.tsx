@@ -142,7 +142,13 @@ export function TopNav() {
             <DropdownMenu>
               <DropdownMenuTrigger className="rounded-full ring-1 ring-border/40 hover:ring-[#00e5c8]/20 transition-all outline-none">
                 <Avatar className="w-7 h-7">
-                  {user.image && <AvatarImage src={user.image} alt={user.name ?? ''} />}
+                  {user.image && (
+                    <AvatarImage
+                      src={user.image}
+                      alt={user.name ?? ''}
+                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.style.display = 'none' }}
+                    />
+                  )}
                   <AvatarFallback className="bg-[#00e5c8]/10 text-[#00e5c8] text-xs font-bold">
                     {initials}
                   </AvatarFallback>

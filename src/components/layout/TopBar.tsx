@@ -216,7 +216,13 @@ export function TopBar() {
             <DropdownMenu>
               <DropdownMenuTrigger className="rounded-full ring-1 ring-[var(--border-mid)] hover:ring-[var(--teal-border)] transition-all outline-none">
                 <Avatar className="w-6 h-6">
-                  {user.image && <AvatarImage src={user.image} alt={user.name ?? ''} />}
+                  {user.image && (
+                    <AvatarImage
+                      src={user.image}
+                      alt={user.name ?? ''}
+                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.style.display = 'none' }}
+                    />
+                  )}
                   <AvatarFallback className="bg-[var(--teal-glow)] text-[var(--teal-bright)] text-[10px] font-bold">{initials}</AvatarFallback>
                 </Avatar>
               </DropdownMenuTrigger>
