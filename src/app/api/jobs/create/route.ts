@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
   } catch (queueErr) {
     // Queue unavailable (Redis down) — mark job failed and refund credits
     await db.renderJob.update({ where: { id: renderJob.id }, data: { status: 'FAILED', errorMessage: 'Queue unavailable' } })
-    await refundCredits(userId, cost).catch(() => {})
+    await refundCredits(userId, cost, 'queue_unavailable').catch(() => {})
     console.error('[jobs/create] Queue error:', (queueErr as Error).message)
     return NextResponse.json({ error: 'Job queue temporarily unavailable. Credits refunded.' }, { status: 503 })
   }
