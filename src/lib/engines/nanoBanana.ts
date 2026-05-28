@@ -52,7 +52,7 @@ export async function generateWithNanoBanana(
   if (!imageData?.data) throw new Error('Nano Banana returned no image data')
 
   const buffer   = Buffer.from(imageData.data, 'base64')
-  const imageUrl = await uploadToR2(buffer, `generated/${Date.now()}.jpg`)
+  const imageUrl = await uploadToR2(buffer, `generated/${Date.now()}.jpg`, 'image/jpeg')
 
   return { imageUrl }
 }

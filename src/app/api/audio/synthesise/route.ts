@@ -18,6 +18,6 @@ export async function POST(req: Request) {
   await deductCredits(db, userId, cost, `TTS: ${text.slice(0, 40)}`)
 
   const buf = await synthesiseVoice({ text, voiceId, stability, similarity })
-  const url = await uploadToR2(buf, `audio/${userId}/${Date.now()}.mp3`)
+  const url = await uploadToR2(buf, `audio/${userId}/${Date.now()}.mp3`, 'audio/mpeg')
   return Response.json({ audioUrl: url, cost })
 }
