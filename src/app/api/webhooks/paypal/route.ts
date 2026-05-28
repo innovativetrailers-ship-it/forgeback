@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       const [userId, packId] = customId.split(':')
       const pack = CREDIT_PACKS.find((p) => p.packId === packId)
       if (userId && pack) {
-        await addCredits(userId, pack.credits, `paypal:${event.resource.id}`)
+        await addCredits(db, userId, pack.credits, `paypal:${event.resource.id}`)
       }
       break
     }
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       const customId = event.resource.custom_id ?? event.resource.custom ?? ''
       const [userId, planId] = customId.split(':')
       if (userId && planId && planId in ROLE_MAP) {
-        await handleSubscriptionRenewal(userId, planId as 'pro' | 'studio' | 'ultimate')
+        await handleSubscriptionRenewal(db, userId, planId as 'pro' | 'studio' | 'ultimate')
       }
       break
     }

@@ -1,271 +1,218 @@
-import { db } from './db'
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { MODEL_COSTS, TIER_ENGINE_MAP } from './routing/engineRegistry'
 
-export const TIER_MONTHLY_CREDITS: Record<string, number> = {
-  FREE: 50,
-  PRO: 500,
-  STUDIO: 2000,
-  ULTIMATE: 6000,
-  ADMIN: 9_999_999,
+export function calculateGenerationCost(model: string, durationSeconds: number): number {
+  const ratePerFiveSeconds = MODEL_COSTS[model]
+  if (!ratePerFiveSeconds) {
+    console.warn(`[credits] Unknown model "${model}", defaulting to ltx-2.3-fast`)
+    return Math.ceil((MODEL_COSTS['ltx-2.3-fast'] / 5) * durationSeconds)
+  }
+  return Math.ceil((ratePerFiveSeconds / 5) * durationSeconds)
 }
 
-export const STRIPE_PRICES: Record<string, Record<string, string>> = {
-  pro:      { monthly: process.env.STRIPE_PRICE_PRO_MONTHLY ?? '', yearly: process.env.STRIPE_PRICE_PRO_YEARLY ?? '' },
-  studio:   { monthly: process.env.STRIPE_PRICE_STUDIO_MONTHLY ?? '', yearly: process.env.STRIPE_PRICE_STUDIO_YEARLY ?? '' },
-  ultimate: { monthly: process.env.STRIPE_PRICE_ULTIMATE_MONTHLY ?? '', yearly: process.env.STRIPE_PRICE_ULTIMATE_YEARLY ?? '' },
+export function calculateSimpleCost(tier: string, durationSeconds: number): number {
+  const engine = TIER_ENGINE_MAP[tier] ?? 'ltx-2.3-fast'
+  return calculateGenerationCost(engine, durationSeconds)
+}
+
+export function calculateOrchestrationCost(
+  segments: Array<{ assignedModel: string; duration: number }>
+): number {
+  return Math.ceil(
+    segments.reduce((sum, seg) => sum + calculateGenerationCost(seg.assignedModel, seg.duration), 0)
+  )
 }
 
 export const OPERATION_COSTS: Record<string, number> = {
-  // Video generation (per 5 seconds)
-  generate_ltx: 1,
-  generate_wan: 2,
-  generate_animatediff: 1,
-  generate_luma: 8,
-  generate_pika: 8,
-  generate_minimax: 10,
-  generate_cog: 6,
-  generate_kling_standard: 18,
-  generate_kling_pro: 25,
-  generate_seedance: 20,
-  generate_runway: 22,
-  generate_skyreels: 20,
-  generate_veo3: 35,
-  generate_sora: 40,
-  generate_hunyuan: 12,
-  // Processing
-  relight_iclight: 2,
-  upscale_4x: 3,
-  face_restore: 2,
-  lipsync: 5,
-  transcribe: 1,
-  remove_bg: 1,
-  depth_map: 1,
-  proxy_draft: 0, // Always free
-  // Character
-  lora_training: 60,
-  ip_adapter_inject: 1,
-  // Audio
-  music_generate_30s: 5,
-  music_generate_120s: 15,
-  speech_generate: 3,
-  foley_generate: 4,
-  // 3D / CGI
-  cgi_generate_3d: 20,
-  cgi_composite: 5,
-  // Export
-  export_1080p: 8,
-  export_4k: 20,
-  export_dcp: 40,
-  harmonise: 2,
-  colour_grade: 2,
-  continuity_check: 5,
-  // Extras
-  auto_social: 10,
-  ai_director: 50,
-  storyboard_gen: 15,
-  // Casting & characters (per 5s clip)
-  multi_character_cast_2: 5,
-  multi_character_cast_3_5: 8,
-  multi_character_cast_6plus: 12,
-  // Makeup FX
-  makeup_sfx_pregeneration: 0,
-  makeup_sfx_postgeneration: 4,
-  makeup_reference_transfer: 5,
-  makeup_progression_set: 15,
-  // Green screen & compositing
-  greenscreen_chroma_key: 3,
-  greenscreen_ai_matting: 6,
-  backdrop_ai_generate: 10,
-  backdrop_composite: 4,
-  // Recasting
-  recast_face_swap: 8,
-  recast_full_character: 15,
-  recast_project_wide: 50,
-  // Film production
-  film_scene_production: 20,
-  film_act_assembly: 10,
-  film_full_production: 100,
-  // Series
-  series_bible_generation: 15,
-  episode_production: 50,
-  social_episode: 20,
-  // Reference analysis
-  reference_quick_analysis: 5,
-  reference_deep_analysis: 15,
-  reference_script_generate: 20,
-  reference_style_apply: 8,
-  // Upscaling (per minute of video)
-  upscale_2x_fast: 1,
-  upscale_4x_standard: 3,
-  upscale_4x_anime: 2,
-  upscale_4x_face: 4,
-  upscale_4x_maximum: 6,
-  upscale_8x: 10,
-  upscale_image_2x: 1,
-  upscale_image_4x: 2,
-  upscale_image_face: 2,
-  grain_restore: 1,
-  face_enhance_only: 2,
-  // Advanced features
-  optical_flow_retime: 3,
-  morph_cut: 2,
-  planar_track: 2,
-  surface_replace: 3,
-  video_stabilise: 1,
-  auto_reframe: 2,
-  clip_extend: 5,
-  // Audio AI
-  filler_remove: 1,
-  studio_sound: 2,
-  overdub_word: 3,
-  video_translate: 15,
-  // Content intelligence
-  highlight_extract: 5,
-  performance_capture: 8,
-  avatar_create: 10,
-  avatar_video: 5,
-  talking_photo: 3,
-  // Interchange & pipeline handoff
-  export_interchange_native: 0,    // EDL, FCPXML, DaVinci XML — free
-  export_interchange_aaf: 2,       // AAF, OTIOZ — require Python service
-  // Pro Tools / audio delivery
-  stem_render: 5,                  // Full stem render (dialogue/music/sfx/mx/mix)
-  export_omf: 3,                   // OMF export for Pro Tools
-  export_pt_xml: 0,                // Pro Tools session XML — free
-  // IMF delivery
-  imf_package: 40,                 // IMF APP2/APP2E/APP4DI package
-  // Production tracking
-  shotgrid_sync: 0,                // ShotGrid sync — free (uses own API key)
-  frameio_upload: 2,               // Frame.io upload per clip
-  // Media bins
-  bin_auto_organise: 5,            // AI auto-organise bins with Model 1
+  'nano-banana-2':                  2,
+  'nano-banana-pro':                5,
+  'flux-pro':                       4,
+  'elevenlabs_tts_per_100_chars':   1,
+  'elevenlabs_clone_voice':        20,
+  'elevenlabs_overdub':             2,
+  'elevenlabs_sts_per_30s':         3,
+  'elevenlabs_sfx_per_5s':          1,
+  'suno_music_per_30s':             5,
+  'audiocraft_ambient_per_30s':     2,
+  'optical_flow_retime_per_min':    4,
+  'morph_cut':                      3,
+  'video_stabilise_per_min':        2,
+  'clip_extend_2s':                10,
+  'clip_extend_4s':                18,
+  'clip_extend_8s':                32,
+  'filler_word_removal':            1,
+  'silence_removal':                0,
+  'speaker_separation_per_min':     5,
+  'video_translation_per_min':      8,
+  'object_removal_per_clip':       20,
+  'planar_track_per_min':           3,
+  'particle_bake_per_second':       1,
+  'export_dcp':                    40,
+  'export_imf':                    30,
+  'export_stems':                   5,
+  'c2pa_injection':                 0,
+  'rough_cut_per_clip':             1,
+  'emotion_analysis_per_project':   5,
+  'mogrt_apply_template':           2,
+  'mogrt_ai_generate':             15,
+  'storyboard_per_scene':           3,
+  'slides_to_video_per_slide':      2,
+  'brand_kit_apply':                0,
 }
 
-export class CreditError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'CreditError'
-  }
-}
-
-export async function checkAndDeductCredits(
-  userId: string,
-  operation: string,
-  multiplier: number = 1
+export async function deductCredits(
+  db:          any,
+  userId:      string,
+  credits:     number,
+  description: string,
+  vendor?:     string,
+  vendorCostUSD?: number,
 ): Promise<void> {
-  if (!(operation in OPERATION_COSTS)) {
-    throw new CreditError(`Unknown operation: ${operation}`)
+  const user = await db.user.findUnique({
+    where:  { id: userId },
+    select: { creditBalance: true, role: true },
+  })
+
+  if (user?.role === 'ADMIN') return
+
+  if ((user?.creditBalance ?? 0) < credits) {
+    throw new Error(`Insufficient credits: need ${credits}, have ${user?.creditBalance ?? 0}`)
   }
 
-  const cost = OPERATION_COSTS[operation] * multiplier
+  const newBalance = user!.creditBalance - credits
 
-  if (cost === 0) return
-
-  await db.$transaction(async (tx) => {
-    const user = await tx.user.findUnique({
-      where: { id: userId },
-      select: { creditBalance: true, role: true },
-    })
-
-    if (!user) throw new CreditError('User not found')
-
-    // ADMIN bypass — log operation but never deduct credits
-    if (user.role === 'ADMIN') {
-      await tx.apiUsageLog.create({
-        data: {
-          provider: 'admin_bypass',
-          model: operation,
-          userId,
-          costCents: 0,
-          latencyMs: 0,
-          success: true,
-        },
-      }).catch(() => { /* apiUsageLog may not exist yet — fail silently */ })
-      return
-    }
-
-    if (user.creditBalance < cost) {
-      throw new CreditError(
-        `Insufficient credits. Required: ${cost}, Available: ${user.creditBalance}`
-      )
-    }
-
-    await tx.user.update({
-      where: { id: userId },
-      data: { creditBalance: { decrement: cost } },
-    })
-
+  await db.$transaction(async (tx: any) => {
+    await tx.user.update({ where: { id: userId }, data: { creditBalance: { decrement: credits } } })
     await tx.creditTransaction.create({
-      data: {
-        userId,
-        amount: -cost,
-        type: 'deduction',
-        description: `${operation} x${multiplier}`,
-      },
+      data: { userId, amount: -credits, description, balanceAfter: newBalance },
     })
+    if (vendor && vendorCostUSD !== undefined) {
+      await tx.vendorUsageLog?.create({
+        data: { userId, vendor, operation: description, costUSD: vendorCostUSD, creditCost: credits },
+      })
+    }
   })
-}
 
-export async function handleSubscriptionRenewal(
-  userId: string,
-  planId: 'pro' | 'studio' | 'ultimate'
-): Promise<void> {
-  const roleMap: Record<string, string> = { pro: 'PRO', studio: 'STUDIO', ultimate: 'ULTIMATE' }
-  const credits = TIER_MONTHLY_CREDITS[roleMap[planId]] ?? 0
-  await db.user.update({
-    where: { id: userId },
-    data: { creditBalance: credits },
-  })
-}
-
-export async function refundOperationCredits(
-  userId: string,
-  operation: string,
-  reason?: string,
-): Promise<void> {
-  const amount = OPERATION_COSTS[operation] ?? 0
-  if (amount === 0) return
-  await refundCredits(userId, amount, reason ?? `Refund: ${operation}`)
+  // Best-effort Stripe balance sync
+  try {
+    const stripeCustomer = await db.stripeCustomer?.findUnique({ where: { userId } })
+    if (stripeCustomer?.stripeCustomerId) {
+      const { stripe, creditsToUSDCents } = await import('./payments/stripe')
+      const debitCents = creditsToUSDCents(credits)
+      await stripe.customers.createBalanceTransaction(
+        stripeCustomer.stripeCustomerId,
+        { amount: debitCents, currency: 'usd', description: `Usage: ${description}` }
+      )
+      await db.stripeCustomer.update({
+        where: { userId },
+        data:  { stripeBalanceCents: { decrement: debitCents } },
+      })
+    }
+  } catch (err: unknown) {
+    console.error('[credits] Stripe balance sync failed:', err instanceof Error ? err.message : err)
+  }
 }
 
 export async function refundCredits(
-  userId: string,
-  amount: number,
-  reason: string
+  dbOrUserId: any,
+  userIdOrAmount: string | number,
+  amountOrReason?: number | string,
+  reason?: string
 ): Promise<void> {
-  await db.$transaction([
-    db.user.update({
-      where: { id: userId },
-      data: { creditBalance: { increment: amount } },
-    }),
-    db.creditTransaction.create({
-      data: {
-        userId,
-        amount,
-        type: 'refund',
-        description: reason,
-      },
-    }),
-  ])
+  if (typeof dbOrUserId === 'string') {
+    // Legacy: refundCredits(userId, amount, reason)
+    const { db } = await import('./db')
+    const userId = dbOrUserId
+    const amount = userIdOrAmount as number
+    const rsn    = amountOrReason as string ?? ''
+    await db.user.update({ where: { id: userId }, data: { creditBalance: { increment: amount } } })
+    await db.creditTransaction.create({ data: { userId, amount, description: `Refund: ${rsn}`, balanceAfter: 0 } })
+    return
+  }
+  const db     = dbOrUserId
+  const userId = userIdOrAmount as string
+  const amount = amountOrReason as number
+  const rsn    = reason ?? ''
+  await db.user.update({ where: { id: userId }, data: { creditBalance: { increment: amount } } })
+  await db.creditTransaction.create({ data: { userId, amount, description: `Refund: ${rsn}`, balanceAfter: 0 } })
+}
+
+// Overloaded: new API (db, userId, amount, description) OR legacy (userId, operationKey)
+export async function checkAndDeductCredits(
+  dbOrUserId:          any,
+  userIdOrOperationKey: string,
+  credits?:            number,
+  description?:        string
+): Promise<void> {
+  if (typeof dbOrUserId === 'string') {
+    // Legacy call: checkAndDeductCredits(userId, operationKey)
+    const { db } = await import('./db')
+    const userId       = dbOrUserId
+    const operationKey = userIdOrOperationKey
+    const cost         = OPERATION_COSTS[operationKey] ?? 0
+    if (cost === 0) return
+    return deductCredits(db, userId, cost, operationKey)
+  }
+  // New call: checkAndDeductCredits(db, userId, amount, description)
+  return deductCredits(dbOrUserId, userIdOrOperationKey, credits ?? 0, description ?? '')
+}
+
+// ── Backward-compatible shims ──────────────────────────────────────────────────
+
+export async function refundOperationCredits(
+  dbOrUserId: any,
+  userIdOrKey: string,
+  creditKeyOrUndefined?: string
+): Promise<void> {
+  if (typeof dbOrUserId === 'string') {
+    // Legacy: refundOperationCredits(userId, creditKey)
+    const { db } = await import('./db')
+    const cost = OPERATION_COSTS[userIdOrKey] ?? 0
+    if (cost > 0) await refundCredits(db, dbOrUserId, cost, userIdOrKey)
+    return
+  }
+  const creditKey = creditKeyOrUndefined ?? userIdOrKey
+  const cost = OPERATION_COSTS[creditKey] ?? 0
+  if (cost > 0) await refundCredits(dbOrUserId, userIdOrKey, cost, creditKey)
 }
 
 export async function addCredits(
-  userId: string,
-  amount: number,
-  stripeId?: string
+  dbOrUserId:  any,
+  userIdOrAmount: string | number,
+  amountOrDesc?: number | string,
+  description?: string
 ): Promise<void> {
-  await db.$transaction([
-    db.user.update({
-      where: { id: userId },
-      data: { creditBalance: { increment: amount } },
-    }),
-    db.creditTransaction.create({
-      data: {
-        userId,
-        amount,
-        type: 'purchase',
-        description: `Purchased ${amount} credits`,
-        stripeId,
-      },
-    }),
-  ])
+  if (typeof dbOrUserId === 'string') {
+    // Legacy: addCredits(userId, amount, description)
+    const { db } = await import('./db')
+    const userId = dbOrUserId
+    const amount = userIdOrAmount as number
+    const desc   = amountOrDesc as string ?? ''
+    await db.user.update({ where: { id: userId }, data: { creditBalance: { increment: amount } } })
+    await db.creditTransaction.create({ data: { userId, amount, description: desc, balanceAfter: 0 } })
+    return
+  }
+  const db     = dbOrUserId
+  const userId = userIdOrAmount as string
+  const amount = amountOrDesc as number
+  const desc   = description ?? ''
+  await db.user.update({ where: { id: userId }, data: { creditBalance: { increment: amount } } })
+  await db.creditTransaction.create({ data: { userId, amount, description: desc, balanceAfter: 0 } })
+}
+
+export const TIER_MONTHLY_CREDITS: Record<string, number> = {
+  FREE:    50,
+  PRO:     1000,
+  STUDIO:  5000,
+  ADMIN:   999999,
+}
+
+export async function handleSubscriptionRenewal(
+  db:     any,
+  userId: string,
+  planId: string
+): Promise<void> {
+  const role    = planId.toUpperCase()
+  const credits = TIER_MONTHLY_CREDITS[role] ?? 50
+  await addCredits(db, userId, credits, `Subscription renewal: ${planId}`)
 }

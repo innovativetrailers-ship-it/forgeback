@@ -77,6 +77,10 @@ model User {
   brandKits       BrandKit[]
   filmProjects    FilmProject[]
   seriesProjects  SeriesProject[]
+  clonedVoices    ClonedVoice[]
+  stripeCustomer  StripeCustomer?
+  stripeDeposits  StripeDeposit[]
+  vendorUsage     VendorUsageLog[]
 
   @@index([email])
 }
@@ -198,18 +202,20 @@ model RenderJob {
 }
 
 model CreditTransaction {
-  id          String    @id @default(cuid())
-  userId      String
-  amount      Int
-  type        String
-  description String
-  jobId       String?
-  stripeId    String?
-  createdAt   DateTime  @default(now())
+  id           String   @id @default(cuid())
+  userId       String
+  amount       Int
+  type         String?
+  description  String
+  jobId        String?
+  stripeId     String?
+  balanceAfter Int      @default(0)
+  createdAt    DateTime @default(now())
 
-  user        User      @relation(fields: [userId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([createdAt])
 }
 
 model TrainingData {
@@ -680,4 +686,57 @@ model TrainingSignal {
   ingestedAt         DateTime @default(now())
 
   @@index([processed, signalType])
+}
+
+model ClonedVoice {
+  id          String   @id @default(cuid())
+  userId      String
+  voiceId     String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, voiceId])
+  @@index([userId])
+}
+
+model StripeCustomer {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  stripeCustomerId     String   @unique
+  stripeBalanceCents   Int      @default(0)
+  lifetimeDepositCents Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model StripeDeposit {
+  id                    String   @id @default(cuid())
+  userId                String
+  stripeCustomerId      String
+  paymentIntentId       String   @unique
+  amountCents           Int
+  platformFeeCents      Int
+  vendorAllocationCents Int
+  status                String   @default("pending")
+  createdAt             DateTime @default(now())
+  user                  User     @relation(fields: [userId], references: [id])
+}
+
+model VendorUsageLog {
+  id         String   @id @default(cuid())
+  userId     String
+  vendor     String
+  operation  String
+  costUSD    Float
+  creditCost Int
+  requestId  String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([vendor])
+  @@index([createdAt])
 }
