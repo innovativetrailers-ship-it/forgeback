@@ -1,6 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MODEL_COSTS, TIER_ENGINE_MAP } from './routing/engineRegistry'
 
+export class CreditError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'CreditError'
+  }
+}
+
 export function calculateGenerationCost(model: string, durationSeconds: number): number {
   const ratePerFiveSeconds = MODEL_COSTS[model]
   if (!ratePerFiveSeconds) {

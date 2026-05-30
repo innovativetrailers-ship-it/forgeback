@@ -168,11 +168,13 @@ export async function callEngine(params: {
   if (params.model === 'runway-gen4') {
     const RunwayML = (await import('@runwayml/sdk')).default
     const client   = new RunwayML({ apiKey: process.env.RUNWAY_API_KEY! })
-    const task     = await client.imageToVideo.create({
-      model:      'gen4_turbo',
-      promptText: params.prompt,
-      duration:   params.duration as 5 | 10,
-      ...(params.imageUrl ? { promptImage: params.imageUrl } : {}),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const task = await (client.imageToVideo.create as any)({
+      model:       'gen4_turbo',
+      promptText:  params.prompt,
+      duration:    params.duration as 5 | 10,
+      ratio:       '1280:720',
+      promptImage: params.imageUrl ?? '',
     })
     return { jobId: task.id }
   }

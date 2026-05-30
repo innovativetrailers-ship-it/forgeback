@@ -54,7 +54,7 @@ export async function speechToSpeech(params: {
   modelId?:    string
 }): Promise<Buffer> {
   const formData = new FormData()
-  formData.append('audio',    new Blob([params.audioBuffer], { type: 'audio/mpeg' }), 'input.mp3')
+  formData.append('audio',    new Blob([new Uint8Array(params.audioBuffer)], { type: 'audio/mpeg' }), 'input.mp3')
   formData.append('model_id', params.modelId ?? 'eleven_multilingual_sts_v2')
   const res = await fetch(`${BASE}/speech-to-speech/${params.voiceId}`, {
     method: 'POST', headers: { 'xi-api-key': API_KEY() }, body: formData,
