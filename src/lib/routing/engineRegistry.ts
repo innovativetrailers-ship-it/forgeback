@@ -19,6 +19,7 @@ export const MODEL_COSTS: Record<string, number> = {
   'hunyuan-r-dmesh':      25,
   'nano-banana-2':         2,
   'nano-banana-pro':       5,
+  'grok-imagine-video':   20,  // $0.05/s API cost → 20cr/5s covers margin
 }
 
 export const MODEL_SPECIALTIES: Record<string, {
@@ -135,6 +136,12 @@ export const MODEL_SPECIALTIES: Record<string, {
     weaknesses: ['full_scene', 'long_form'],
     bestFor:    'Object replacement, product shots, targeted frame edits',
   },
+  'grok-imagine-video': {
+    costTier:   'mid',
+    strengths:  ['native_audio', 'speed', 'photorealism', 'text_to_video', 'image_to_video', 'creative_style', 'short_clips'],
+    weaknesses: ['max_15s', 'not_on_fal'],
+    bestFor:    'Fast photorealistic clips with native audio, 6–15s, ~30s generation time',
+  },
 }
 
 export const FAL_MODEL_IDS: Record<string, string> = {
@@ -162,6 +169,9 @@ export const FAL_MODEL_IDS: Record<string, string> = {
   'nano-banana-pro':      'fal-ai/gemini-pro-image',
   'flux-pro':             'fal-ai/flux-pro',
   'flux-ultra':           'fal-ai/flux-pro/v1.1-ultra',
+
+  // grok-imagine-video intentionally excluded — uses XAI_API_KEY directly via api.x.ai
+  // All other models above use FAL_API_KEY
 
   // LLMs via OpenRouter on FAL
   'claude-sonnet':        'openrouter/anthropic/claude-sonnet-4-6',

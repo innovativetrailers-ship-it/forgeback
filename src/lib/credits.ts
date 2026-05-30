@@ -31,6 +31,7 @@ export function calculateOrchestrationCost(
 }
 
 export const OPERATION_COSTS: Record<string, number> = {
+  'grok-imagine-video':            20,  // $0.05/s xAI API → 20cr/5s
   'nano-banana-2':                  2,
   'nano-banana-pro':                5,
   'flux-pro':                       4,

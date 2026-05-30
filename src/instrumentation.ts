@@ -19,6 +19,7 @@ export async function register() {
     suno:       ['SUNO_API_KEY'],
     payments:   ['STRIPE_SECRET_KEY', 'NEXT_PUBLIC_STRIPE_PUBLIC_KEY'],
     social:     ['TIKTOK_CLIENT_ID', 'INSTAGRAM_APP_ID', 'YOUTUBE_CLIENT_ID'],
+    xai_video:  ['XAI_API_KEY'],
     maps:       ['MAPILLARY_ACCESS_TOKEN', 'CESIUM_ION_ACCESS_TOKEN'],
     stock:      ['PEXELS_API_KEY'],
   }
