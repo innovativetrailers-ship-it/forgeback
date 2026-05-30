@@ -1,122 +1,93 @@
-import { SignJWT } from 'jose'
+// Kling now routes through FAL (fal-ai/kling-video) — no direct Kling API key needed
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
-const BASE_URL = 'https://api.klingai.com/v1'
-
-async function getKlingToken(): Promise<string> {
-  const secret = new TextEncoder().encode(process.env.KLING_API_SECRET!)
-  return new SignJWT({ iss: process.env.KLING_API_KEY })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('30m')
-    .setIssuedAt()
-    .sign(secret)
-}
-
-async function klingRequest<T>(
-  method: string,
-  path: string,
-  body?: unknown
-): Promise<T> {
-  const token = await getKlingToken()
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Kling API error ${res.status}: ${err}`)
-  }
-  return res.json()
-}
-
-function mapAspectRatio(ar: string): string {
-  const map: Record<string, string> = {
-    '16:9': '16:9',
-    '9:16': '9:16',
-    '1:1': '1:1',
-    '4:3': '4:3',
-    '21:9': '16:9',
-  }
-  return map[ar] ?? '16:9'
-}
+const FAL_MODEL_PRO      = 'fal-ai/kling-video/v1.6/pro/text-to-video'
+const FAL_MODEL_STANDARD = 'fal-ai/kling-video/v1.6/standard/text-to-video'
+const FAL_I2V_PRO        = 'fal-ai/kling-video/v1.6/pro/image-to-video'
+const FAL_I2V_STANDARD   = 'fal-ai/kling-video/v1.6/standard/image-to-video'
 
 export async function generateVideo(
   input: GenerateVideoInput,
-  model: 'standard' | 'pro' = 'standard'
+  tier: 'standard' | 'pro' = 'standard'
 ): Promise<GenerateVideoOutput> {
-  const endpoint = input.startFrameUrl
-    ? '/videos/image2video'
-    : '/videos/text2video'
+  const isI2V      = Boolean(input.startFrameUrl)
+  const falModelId = isI2V
+    ? (tier === 'pro' ? FAL_I2V_PRO : FAL_I2V_STANDARD)
+    : (tier === 'pro' ? FAL_MODEL_PRO : FAL_MODEL_STANDARD)
 
-  interface KlingTask {
-    task_id: string
+  const falInput: Record<string, unknown> = {
+    prompt:       input.prompt,
+    duration:     String(input.duration ?? 5),
+    aspect_ratio: input.aspectRatio ?? '16:9',
+  }
+  if (input.negativePrompt)     falInput.negative_prompt = input.negativePrompt
+  if (input.startFrameUrl)      falInput.image_url        = input.startFrameUrl
+  if (input.seed !== undefined) falInput.seed             = input.seed
+
+  const res = await fetch(`https://fal.run/${falModelId}`, {
+    method:  'POST',
+    headers: {
+      Authorization:  `Key ${process.env.FAL_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ input: falInput }),
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Kling FAL error ${res.status}: ${err}`)
   }
 
-  const body = {
-    model_name: model === 'pro' ? 'kling-v1-pro' : 'kling-v1',
-    prompt: input.prompt,
-    negative_prompt: input.negativePrompt,
-    duration: input.duration,
-    aspect_ratio: mapAspectRatio(input.aspectRatio),
-    ...(input.startFrameUrl && { image_url: input.startFrameUrl }),
-    ...(input.cameraMotion && { camera_type: input.cameraMotion }),
-    ...(input.seed !== undefined && { seed: input.seed }),
+  const data = await res.json() as {
+    request_id?: string
+    video?:      { url?: string; cover_image_url?: string }
+    video_url?:  string
   }
 
-  const data = await klingRequest<{ data: KlingTask }>(
-    'POST',
-    endpoint,
-    body
-  )
+  const jobId        = data.request_id ?? `kling_${Date.now()}`
+  const videoUrl     = data.video?.url ?? data.video_url
+  const thumbnailUrl = data.video?.cover_image_url
 
   return {
-    jobId: data.data.task_id,
-    status: 'pending',
-    pollUrl: `${BASE_URL}${endpoint}/${data.data.task_id}`,
+    jobId,
+    status:       videoUrl ? 'complete' : 'pending',
+    videoUrl,
+    thumbnailUrl,
+    pollUrl: videoUrl ? undefined : `https://queue.fal.run/${falModelId}/requests/${jobId}`,
   }
 }
 
 export async function pollStatus(
-  externalJobId: string,
-  isImageToVideo: boolean = false
+  requestId: string,
+  isImageToVideo = false
 ): Promise<GenerateVideoOutput> {
-  const endpoint = isImageToVideo
-    ? `/videos/image2video/${externalJobId}`
-    : `/videos/text2video/${externalJobId}`
+  const falModelId = isImageToVideo ? FAL_I2V_PRO : FAL_MODEL_PRO
 
-  interface KlingPollResult {
-    data: {
-      task_id: string
-      task_status: string
-      task_result?: { videos?: Array<{ url: string; cover_image_url?: string }> }
-      task_status_msg?: string
-    }
+  const res = await fetch(
+    `https://queue.fal.run/${falModelId}/requests/${requestId}`,
+    { headers: { Authorization: `Key ${process.env.FAL_API_KEY}` } }
+  )
+
+  if (!res.ok) throw new Error(`Kling poll error ${res.status}`)
+
+  const data = await res.json() as {
+    status?:    string
+    video?:     { url?: string; cover_image_url?: string }
+    video_url?: string
+    error?:     string
   }
 
-  const data = await klingRequest<KlingPollResult>('GET', endpoint)
-  const task = data.data
-
-  if (task.task_status === 'succeed') {
-    const video = task.task_result?.videos?.[0]
+  if (data.status === 'COMPLETED' || data.video?.url || data.video_url) {
     return {
-      jobId: externalJobId,
-      status: 'complete',
-      videoUrl: video?.url,
-      thumbnailUrl: video?.cover_image_url,
+      jobId:        requestId,
+      status:       'complete',
+      videoUrl:     data.video?.url ?? data.video_url,
+      thumbnailUrl: data.video?.cover_image_url,
     }
   }
-
-  if (task.task_status === 'failed') {
-    return {
-      jobId: externalJobId,
-      status: 'failed',
-      error: task.task_status_msg ?? 'Kling generation failed',
-    }
+  if (data.status === 'FAILED') {
+    return { jobId: requestId, status: 'failed', error: data.error ?? 'Kling generation failed' }
   }
 
-  return { jobId: externalJobId, status: 'processing' }
+  return { jobId: requestId, status: 'processing' }
 }

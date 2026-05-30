@@ -1,105 +1,77 @@
+// Veo 3.1 now routes through FAL (fal-ai/veo3) — no Vertex AI SDK needed
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
-const PROJECT = process.env.GOOGLE_PROJECT_ID ?? ''
-const LOCATION = process.env.GOOGLE_LOCATION ?? 'us-central1'
-const MODEL = 'veo-3.0-generate-preview'
-
-const API_BASE = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT}/locations/${LOCATION}/publishers/google/models/${MODEL}`
-
-async function getAccessToken(): Promise<string> {
-  // Use Application Default Credentials via metadata server or service account
-  const { GoogleAuth } = await import('@google-cloud/vertexai').then(
-    (m) => ({ GoogleAuth: (m as { GoogleAuth?: unknown }).GoogleAuth })
-  ).catch(() => ({ GoogleAuth: null }))
-
-  if (GoogleAuth) {
-    // Vertex AI SDK path
-    const auth = new (GoogleAuth as new (opts: Record<string, string[]>) => { getAccessToken: () => Promise<string> })({
-      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-    })
-    return auth.getAccessToken()
-  }
-
-  throw new Error('GoogleAuth not available')
-}
+const FAL_MODEL = 'fal-ai/veo3'
 
 export async function generateVideo(
   input: GenerateVideoInput
 ): Promise<GenerateVideoOutput> {
-  const token = await getAccessToken()
-
-  const body = {
-    instances: [
-      {
-        prompt: input.prompt,
-        ...(input.startFrameUrl && { image: { bytesBase64Encoded: '', gcsUri: input.startFrameUrl } }),
-      },
-    ],
-    parameters: {
-      aspectRatio: input.aspectRatio,
-      durationSeconds: input.duration,
-      ...(input.seed !== undefined && { seed: input.seed }),
-      ...(input.negativePrompt && { negativePrompt: input.negativePrompt }),
-    },
+  const falInput: Record<string, unknown> = {
+    prompt:       input.prompt,
+    duration:     input.duration,
+    aspect_ratio: input.aspectRatio ?? '16:9',
   }
+  if (input.negativePrompt) falInput.negative_prompt = input.negativePrompt
+  if (input.startFrameUrl)  falInput.image_url        = input.startFrameUrl
+  if (input.seed !== undefined) falInput.seed          = input.seed
 
-  const res = await fetch(`${API_BASE}:predict`, {
-    method: 'POST',
+  const res = await fetch(`https://fal.run/${FAL_MODEL}`, {
+    method:  'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization:  `Key ${process.env.FAL_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ input: falInput }),
   })
 
   if (!res.ok) {
     const err = await res.text()
-    throw new Error(`Veo3 API error ${res.status}: ${err}`)
+    throw new Error(`Veo3 FAL error ${res.status}: ${err}`)
   }
 
-  const data = await res.json() as { name?: string }
+  const data = await res.json() as {
+    request_id?: string
+    video?:      { url?: string }
+    video_url?:  string
+  }
 
-  // Veo3 returns a long-running operation
+  // FAL returns synchronous result or a request_id for polling
+  const jobId    = data.request_id ?? `veo3_${Date.now()}`
+  const videoUrl = data.video?.url ?? data.video_url
+
   return {
-    jobId: data.name ?? '',
-    status: 'pending',
-    pollUrl: `https://${LOCATION}-aiplatform.googleapis.com/v1/${data.name}`,
+    jobId,
+    status:   videoUrl ? 'complete' : 'pending',
+    videoUrl,
+    pollUrl:  videoUrl ? undefined : `https://queue.fal.run/${FAL_MODEL}/requests/${jobId}`,
   }
 }
 
-export async function pollStatus(operationName: string): Promise<GenerateVideoOutput> {
-  const token = await getAccessToken()
-
+export async function pollStatus(requestId: string): Promise<GenerateVideoOutput> {
   const res = await fetch(
-    `https://${LOCATION}-aiplatform.googleapis.com/v1/${operationName}`,
-    {
-      headers: { Authorization: `Bearer ${token}` },
-    }
+    `https://queue.fal.run/${FAL_MODEL}/requests/${requestId}`,
+    { headers: { Authorization: `Key ${process.env.FAL_API_KEY}` } }
   )
 
-  if (!res.ok) {
-    throw new Error(`Veo3 poll error ${res.status}`)
+  if (!res.ok) throw new Error(`Veo3 poll error ${res.status}`)
+
+  const data = await res.json() as {
+    status?:     string
+    video?:      { url?: string }
+    video_url?:  string
+    error?:      string
   }
 
-  interface Veo3Operation {
-    done?: boolean
-    error?: { message?: string }
-    response?: { videos?: Array<{ gcsUri?: string }> }
-  }
-
-  const data = await res.json() as Veo3Operation
-
-  if (data.done) {
-    if (data.error) {
-      return { jobId: operationName, status: 'failed', error: data.error.message }
-    }
-    const videoUri = data.response?.videos?.[0]?.gcsUri
+  if (data.status === 'COMPLETED' || data.video?.url || data.video_url) {
     return {
-      jobId: operationName,
-      status: 'complete',
-      videoUrl: videoUri,
+      jobId:    requestId,
+      status:   'complete',
+      videoUrl: data.video?.url ?? data.video_url,
     }
   }
+  if (data.status === 'FAILED') {
+    return { jobId: requestId, status: 'failed', error: data.error ?? 'Generation failed' }
+  }
 
-  return { jobId: operationName, status: 'processing' }
+  return { jobId: requestId, status: 'processing' }
 }

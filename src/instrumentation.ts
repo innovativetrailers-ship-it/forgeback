@@ -2,18 +2,25 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
 
   const CRITICAL = [
-    'AUTH_SECRET', 'DATABASE_URL', 'REDIS_URL',
-    'ANTHROPIC_API_KEY', 'FAL_API_KEY',
-    'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME',
+    'AUTH_SECRET',
+    'DATABASE_URL',
+    'REDIS_URL',
+    'FAL_API_KEY',        // single key covers all 20+ video/image models
+    'ANTHROPIC_API_KEY',  // orchestration stays direct
+    'R2_ACCOUNT_ID',
+    'R2_ACCESS_KEY_ID',
+    'R2_SECRET_ACCESS_KEY',
+    'R2_BUCKET_NAME',
   ]
 
   const OPTIONAL: Record<string, string[]> = {
-    elevenlabs:  ['ELEVENLABS_API_KEY', 'ELEVENLABS_DEFAULT_VOICE_ID'],
-    nano_banana: ['GOOGLE_AI_API_KEY', 'NANO_BANANA_MODEL'],
-    veo:         ['GOOGLE_PROJECT_ID', 'GOOGLE_VERTEX_LOCATION'],
-    kling:       ['KLING_API_KEY', 'KLING_API_SECRET'],
-    runway:      ['RUNWAY_API_KEY'],
-    payments:    ['STRIPE_SECRET_KEY', 'PAYPAL_CLIENT_ID'],
+    runway:     ['RUNWAY_API_KEY'],
+    elevenlabs: ['ELEVENLABS_API_KEY'],
+    suno:       ['SUNO_API_KEY'],
+    payments:   ['STRIPE_SECRET_KEY', 'NEXT_PUBLIC_STRIPE_PUBLIC_KEY'],
+    social:     ['TIKTOK_CLIENT_ID', 'INSTAGRAM_APP_ID', 'YOUTUBE_CLIENT_ID'],
+    maps:       ['MAPILLARY_ACCESS_TOKEN', 'CESIUM_ION_ACCESS_TOKEN'],
+    stock:      ['PEXELS_API_KEY'],
   }
 
   const missing = CRITICAL.filter(k => !process.env[k])

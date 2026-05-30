@@ -165,20 +165,6 @@ export async function callEngine(params: {
   imageUrl?: string
 }): Promise<{ videoUrl?: string; imageUrl?: string; jobId: string }> {
 
-  if (params.model === 'veo-3.1') {
-    const { VertexAI } = await import('@google-cloud/vertexai')
-    const vertex = new VertexAI({
-      project:  process.env.GOOGLE_PROJECT_ID!,
-      location: process.env.GOOGLE_VERTEX_LOCATION ?? 'us-central1',
-    })
-    const model  = vertex.preview.getGenerativeModel({ model: 'veo-3.1-generate-001' })
-    const result = await (model as any).generateVideo({
-      prompt:   params.prompt,
-      duration: params.duration,
-    })
-    return { videoUrl: result.videoUrl, jobId: `veo_${Date.now()}` }
-  }
-
   if (params.model === 'runway-gen4') {
     const RunwayML = (await import('@runwayml/sdk')).default
     const client   = new RunwayML({ apiKey: process.env.RUNWAY_API_KEY! })
@@ -191,17 +177,7 @@ export async function callEngine(params: {
     return { jobId: task.id }
   }
 
-  if (params.model === 'nano-banana-2' || params.model === 'nano-banana-pro') {
-    const { generateWithNanoBanana } = await import('../engines/nanoBanana')
-    const result = await generateWithNanoBanana({
-      prompt:            params.prompt,
-      referenceImageUrl: params.imageUrl,
-      quality:           params.model === 'nano-banana-pro' ? 'pro' : 'standard',
-      style:             'cinematic',
-    })
-    return { imageUrl: result.imageUrl, jobId: `nb_${Date.now()}` }
-  }
-
+  // Everything else — FAL (covers all 20+ models via single key)
   const falModelId = FAL_MODEL_IDS[params.model]
   if (!falModelId) throw new Error(`Unknown model: ${params.model}`)
 
@@ -211,20 +187,21 @@ export async function callEngine(params: {
     aspect_ratio: '16:9',
     resolution:   '1080p',
   }
-  if (params.imageUrl)                   input.image_url = params.imageUrl
-  if (params.model === 'ltx-2.3-fast')   input.quality   = 'fast'
+  if (params.imageUrl)                  input.image_url = params.imageUrl
+  if (params.model === 'ltx-2.3-fast') input.quality   = 'fast'
 
   const result: any = await fetch(`https://fal.run/${falModelId}`, {
     method:  'POST',
     headers: {
-      Authorization: `Key ${process.env.FAL_API_KEY}`,
+      Authorization:  `Key ${process.env.FAL_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ input }),
   }).then(r => r.json())
 
   return {
-    videoUrl: result.video?.url ?? result.video_url,
+    videoUrl: result.video?.url ?? result.video_url ?? result.image?.url,
+    imageUrl: result.image?.url,
     jobId:    result.request_id ?? `fal_${Date.now()}`,
   }
 }

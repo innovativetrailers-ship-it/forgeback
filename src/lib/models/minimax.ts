@@ -1,85 +1,49 @@
+// Minimax now routes through FAL — no direct Minimax API key needed
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
-const BASE_URL = 'https://api.minimax.chat/v1'
-
-async function minimaxRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${process.env.MINIMAX_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Minimax API error ${res.status}: ${err}`)
-  }
-  return res.json()
-}
+const FAL_MODEL = 'fal-ai/minimax-video'
 
 export async function generateVideo(
   input: GenerateVideoInput
 ): Promise<GenerateVideoOutput> {
-  interface MinimaxTask {
-    task_id: string
-    base_resp: { status_code: number; status_msg: string }
-  }
-
-  const body = {
-    model: 'video-01',
+  const falInput: Record<string, unknown> = {
     prompt: input.prompt,
-    ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
-    ...(input.startFrameUrl && { first_frame_image: input.startFrameUrl }),
   }
+  if (input.negativePrompt) falInput.negative_prompt = input.negativePrompt
+  if (input.startFrameUrl)  falInput.first_frame_image = input.startFrameUrl
 
-  const data = await minimaxRequest<MinimaxTask>('POST', '/video_generation', body)
+  const res = await fetch(`https://fal.run/${FAL_MODEL}`, {
+    method:  'POST',
+    headers: { Authorization: `Key ${process.env.FAL_API_KEY}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ input: falInput }),
+  })
+  if (!res.ok) throw new Error(`Minimax FAL error ${res.status}: ${await res.text()}`)
 
-  if (data.base_resp.status_code !== 0) {
-    throw new Error(`Minimax error: ${data.base_resp.status_msg}`)
+  const data = await res.json() as { request_id?: string; video?: { url?: string }; video_url?: string }
+  const jobId    = data.request_id ?? `minimax_${Date.now()}`
+  const videoUrl = data.video?.url ?? data.video_url
+
+  return {
+    jobId,
+    status:  videoUrl ? 'complete' : 'pending',
+    videoUrl,
+    pollUrl: videoUrl ? undefined : `https://queue.fal.run/${FAL_MODEL}/requests/${jobId}`,
   }
-
-  return { jobId: data.task_id, status: 'pending' }
 }
 
-export async function pollStatus(
-  externalJobId: string
-): Promise<GenerateVideoOutput> {
-  interface MinimaxStatus {
-    task_id: string
-    status: 'Preparing' | 'Processing' | 'Success' | 'Fail'
-    file_id?: string
-    base_resp: { status_code: number; status_msg: string }
-  }
-
-  const data = await minimaxRequest<MinimaxStatus>(
-    'GET',
-    `/query/video_generation?task_id=${externalJobId}`
+export async function pollStatus(requestId: string): Promise<GenerateVideoOutput> {
+  const res = await fetch(
+    `https://queue.fal.run/${FAL_MODEL}/requests/${requestId}`,
+    { headers: { Authorization: `Key ${process.env.FAL_API_KEY}` } }
   )
+  if (!res.ok) throw new Error(`Minimax poll error ${res.status}`)
 
-  if (data.status === 'Success' && data.file_id) {
-    // Retrieve file URL
-    interface MinimaxFile {
-      file: { download_url: string }
-    }
-    const fileData = await minimaxRequest<MinimaxFile>(
-      'GET',
-      `/files/retrieve?file_id=${data.file_id}`
-    )
-    return {
-      jobId: externalJobId,
-      status: 'complete',
-      videoUrl: fileData.file.download_url,
-    }
+  const data = await res.json() as { status?: string; video?: { url?: string }; video_url?: string; error?: string }
+  if (data.status === 'COMPLETED' || data.video?.url || data.video_url) {
+    return { jobId: requestId, status: 'complete', videoUrl: data.video?.url ?? data.video_url }
   }
-
-  if (data.status === 'Fail') {
-    return {
-      jobId: externalJobId,
-      status: 'failed',
-      error: data.base_resp.status_msg ?? 'Minimax generation failed',
-    }
+  if (data.status === 'FAILED') {
+    return { jobId: requestId, status: 'failed', error: data.error ?? 'Minimax generation failed' }
   }
-
-  return { jobId: externalJobId, status: 'processing' }
+  return { jobId: requestId, status: 'processing' }
 }

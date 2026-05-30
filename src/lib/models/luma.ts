@@ -1,85 +1,58 @@
+// Luma Ray 3 now routes through FAL — no direct Luma API key needed
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
-const BASE_URL = 'https://api.lumalabs.ai/dream-machine/v1'
-
-async function lumaRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${process.env.LUMA_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Luma API error ${res.status}: ${err}`)
-  }
-  return res.json()
-}
+const FAL_MODEL = 'fal-ai/luma-dream-machine'
 
 export async function generateVideo(
   input: GenerateVideoInput
 ): Promise<GenerateVideoOutput> {
-  interface LumaGeneration {
-    id: string
-    state: string
+  const falInput: Record<string, unknown> = {
+    prompt:       input.prompt,
+    aspect_ratio: input.aspectRatio ?? '16:9',
+    duration:     input.duration,
+  }
+  if (input.startFrameUrl) {
+    falInput.keyframes = { frame0: { type: 'image', url: input.startFrameUrl } }
+  }
+  if (input.endFrameUrl) {
+    falInput.keyframes = {
+      ...(falInput.keyframes as object),
+      frame1: { type: 'image', url: input.endFrameUrl },
+    }
   }
 
-  const body = {
-    prompt: input.prompt,
-    aspect_ratio: input.aspectRatio,
-    duration: input.duration,
-    ...(input.startFrameUrl && {
-      keyframes: {
-        frame0: { type: 'image', url: input.startFrameUrl },
-      },
-    }),
-    ...(input.endFrameUrl && {
-      keyframes: {
-        frame1: { type: 'image', url: input.endFrameUrl },
-      },
-    }),
-  }
+  const res = await fetch(`https://fal.run/${FAL_MODEL}`, {
+    method:  'POST',
+    headers: { Authorization: `Key ${process.env.FAL_API_KEY}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ input: falInput }),
+  })
+  if (!res.ok) throw new Error(`Luma FAL error ${res.status}: ${await res.text()}`)
 
-  const data = await lumaRequest<LumaGeneration>('POST', '/generations', body)
+  const data = await res.json() as { request_id?: string; video?: { url?: string }; video_url?: string }
+  const jobId    = data.request_id ?? `luma_${Date.now()}`
+  const videoUrl = data.video?.url ?? data.video_url
 
   return {
-    jobId: data.id,
-    status: 'pending',
+    jobId,
+    status:  videoUrl ? 'complete' : 'pending',
+    videoUrl,
+    pollUrl: videoUrl ? undefined : `https://queue.fal.run/${FAL_MODEL}/requests/${jobId}`,
   }
 }
 
-export async function pollStatus(
-  externalJobId: string
-): Promise<GenerateVideoOutput> {
-  interface LumaPollResult {
-    id: string
-    state: 'pending' | 'dreaming' | 'completed' | 'failed'
-    failure_reason?: string
-    assets?: { video?: string }
-  }
-
-  const data = await lumaRequest<LumaPollResult>(
-    'GET',
-    `/generations/${externalJobId}`
+export async function pollStatus(requestId: string): Promise<GenerateVideoOutput> {
+  const res = await fetch(
+    `https://queue.fal.run/${FAL_MODEL}/requests/${requestId}`,
+    { headers: { Authorization: `Key ${process.env.FAL_API_KEY}` } }
   )
+  if (!res.ok) throw new Error(`Luma poll error ${res.status}`)
 
-  if (data.state === 'completed') {
-    return {
-      jobId: externalJobId,
-      status: 'complete',
-      videoUrl: data.assets?.video,
-    }
+  const data = await res.json() as { status?: string; video?: { url?: string }; video_url?: string; error?: string }
+  if (data.status === 'COMPLETED' || data.video?.url || data.video_url) {
+    return { jobId: requestId, status: 'complete', videoUrl: data.video?.url ?? data.video_url }
   }
-
-  if (data.state === 'failed') {
-    return {
-      jobId: externalJobId,
-      status: 'failed',
-      error: data.failure_reason ?? 'Luma generation failed',
-    }
+  if (data.status === 'FAILED') {
+    return { jobId: requestId, status: 'failed', error: data.error ?? 'Luma generation failed' }
   }
-
-  return { jobId: externalJobId, status: 'processing' }
+  return { jobId: requestId, status: 'processing' }
 }

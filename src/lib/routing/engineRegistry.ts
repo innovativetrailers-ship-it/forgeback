@@ -138,6 +138,8 @@ export const MODEL_SPECIALTIES: Record<string, {
 }
 
 export const FAL_MODEL_IDS: Record<string, string> = {
+  // Video generation
+  'veo-3.1':              'fal-ai/veo3',
   'kling-3.0':            'fal-ai/kling-video/v1.6/pro/text-to-video',
   'seedance-2.0':         'fal-ai/seedance-video-lite',
   'skyreels-v3':          'fal-ai/skyreels-v2-t2v',
@@ -153,7 +155,21 @@ export const FAL_MODEL_IDS: Record<string, string> = {
   'hunyuan-video-1.5':    'fal-ai/hunyuan-video',
   'hunyuan-hy-motion':    'fal-ai/hunyuan-video',
   'hunyuan-world-mirror': 'fal-ai/hunyuan-video',
+  'hunyuan-r-dmesh':      'fal-ai/hunyuan-video',
+
+  // Image generation — all via FAL
   'nano-banana-2':        'fal-ai/gemini-flash-image',
+  'nano-banana-pro':      'fal-ai/gemini-pro-image',
+  'flux-pro':             'fal-ai/flux-pro',
+  'flux-ultra':           'fal-ai/flux-pro/v1.1-ultra',
+
+  // LLMs via OpenRouter on FAL
+  'claude-sonnet':        'openrouter/anthropic/claude-sonnet-4-6',
+  'claude-haiku':         'openrouter/anthropic/claude-haiku-4-5',
+  'grok-3':               'openrouter/x-ai/grok-3',
+  'groq-llama':           'openrouter/groq/llama-3.3-70b-versatile',
+  'kimi-k2':              'openrouter/moonshotai/kimi-k2-0905',
+  'qwen-max':             'openrouter/qwen/qwen3-7b-max',
 }
 
 export const TIER_ENGINE_MAP: Record<string, string> = {
