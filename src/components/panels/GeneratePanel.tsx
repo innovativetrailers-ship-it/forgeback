@@ -8,6 +8,28 @@ import { useVault } from '@/hooks/useVault'
 import { nanoid } from 'nanoid'
 import { toast } from 'sonner'
 
+interface CameraControl {
+  panDirection:  number
+  tiltDirection: number
+  zoomLevel:     number
+  roll:          number
+  push:          number
+  staticCamera:  boolean
+}
+
+const DEFAULT_CAMERA: CameraControl = {
+  panDirection: 0, tiltDirection: 0, zoomLevel: 1, roll: 0, push: 0, staticCamera: false,
+}
+
+const CAMERA_PRESETS: Record<string, Partial<CameraControl>> = {
+  'Slow push in':    { push: 0.3, zoomLevel: 1.2, panDirection: 0, tiltDirection: 0 },
+  'Ken Burns right': { panDirection: 40, zoomLevel: 1.1, push: 0 },
+  'Aerial reveal':   { tiltDirection: -60, zoomLevel: 0.8, push: -0.2 },
+  'Static tripod':   { staticCamera: true },
+  'Handheld walk':   { push: 0.5, panDirection: 15, tiltDirection: 5 },
+  'Crane up':        { tiltDirection: -30, push: -0.3, zoomLevel: 0.9 },
+}
+
 type Tier = 'draft' | 'standard' | 'cinematic' | 'film'
 
 const TIER_CONFIG: Record<Tier, { label: string; cost: number; color: string }> = {
@@ -31,6 +53,7 @@ export function GeneratePanel() {
   const [isGenerating, setIsGenerating]         = useState(false)
   const [estimatedCost, setEstimatedCost]       = useState(8)
   const [progress, setProgress]                 = useState<number | null>(null)
+  const [camera, setCamera]                     = useState<CameraControl>(DEFAULT_CAMERA)
 
   const queryClient    = useQueryClient()
   const { addClipToTrack, timeline }  = useEditorStore()
@@ -67,6 +90,7 @@ export function GeneratePanel() {
             aspectRatio,
             characterIds: selectedCharacterId ? [selectedCharacterId] : [],
             locationId: selectedLocationId ?? undefined,
+            cameraControl: camera,
           },
         }),
       })
@@ -260,6 +284,53 @@ export function GeneratePanel() {
           </select>
         </div>
       )}
+
+      {/* Camera direction */}
+      <details className="border-t border-[#1a2030] pt-2">
+        <summary className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider cursor-pointer hover:text-white transition">
+          Camera direction
+        </summary>
+        <div className="space-y-2 mt-2">
+          <select
+            onChange={e => {
+              const preset = CAMERA_PRESETS[e.target.value]
+              if (preset) setCamera(prev => ({ ...prev, ...preset }))
+            }}
+            className="w-full px-2 py-1 bg-[#0d1117] border border-[#2a3040] rounded text-xs text-white"
+          >
+            <option value="">Custom</option>
+            {Object.keys(CAMERA_PRESETS).map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          {([
+            { label: 'Pan',  key: 'panDirection',  min: -100, max: 100,  step: 1   },
+            { label: 'Tilt', key: 'tiltDirection', min: -100, max: 100,  step: 1   },
+            { label: 'Zoom', key: 'zoomLevel',     min: 0.5,  max: 4.0,  step: 0.1 },
+            { label: 'Roll', key: 'roll',          min: -30,  max: 30,   step: 1   },
+            { label: 'Push', key: 'push',          min: -1,   max: 1,    step: 0.1 },
+          ] as const).map(({ label, key, min, max, step }) => (
+            <div key={key} className="flex items-center gap-2">
+              <span className="text-[10px] text-[var(--text-tertiary)] w-8 shrink-0">{label}</span>
+              <input
+                type="range" min={min} max={max} step={step}
+                value={camera[key] as number}
+                onChange={e => setCamera(prev => ({ ...prev, [key]: Number(e.target.value) }))}
+                className="flex-1 accent-[#00e5c8] h-1"
+              />
+              <span className="text-[9px] text-[#00e5c8]/80 w-8 text-right font-mono">
+                {(camera[key] as number).toFixed(1)}
+              </span>
+            </div>
+          ))}
+          <label className="flex items-center gap-2 text-[10px] text-gray-300">
+            <input
+              type="checkbox"
+              checked={camera.staticCamera}
+              onChange={e => setCamera(prev => ({ ...prev, staticCamera: e.target.checked }))}
+            />
+            Lock camera
+          </label>
+        </div>
+      </details>
 
       {/* Progress bar */}
       {isGenerating && progress !== null && (

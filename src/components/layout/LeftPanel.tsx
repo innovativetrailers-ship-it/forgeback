@@ -64,6 +64,10 @@ export function LeftPanel() {
     brandkit: 'Brand Kit', brand_kit: 'Brand Kit',
     settings: 'Settings', ai_director: 'AI Director',
     continuity: 'Continuity', audio_mix: 'Audio Mix',
+    transcript: 'Transcript', multicam: 'Multi-Camera',
+    plugin: 'Plugins', camera_ingest: 'Camera Ingest',
+    review: 'Client Review', particle: 'Particle FX',
+    performance: 'Performance Capture',
   }
 
   return (

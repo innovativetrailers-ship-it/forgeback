@@ -9,10 +9,13 @@ export type PanelId =
   | 'audio' | 'stock' | 'script' | 'storyboard' | 'avatar'
   | 'translate' | 'highlight' | 'highlights' | 'brandkit' | 'brand_kit' | 'settings'
   | 'ai_director' | 'continuity' | 'audio_mix'
+  | 'transcript' | 'multicam' | 'plugin' | 'camera_ingest' | 'review'
+  | 'particle' | 'performance'
 
 export type ToolId =
   | 'select' | 'razor' | 'repaint' | 'text' | 'motion_brush'
   | 'track' | 'hand' | 'zoom'
+  | 'crop' | 'morph_cut' | 'stabilise' | 'retime' | 'extend'
 
 /** @deprecated use ToolId */
 export type EditTool = 'select' | 'razor' | 'repaint' | 'motion_brush' | 'text'
@@ -21,11 +24,19 @@ export type RightPanelId =
   | 'properties' | 'colour' | 'audio' | 'vfx' | 'cgi'
   | 'director' | 'upscale' | 'makeup' | 'greenscreen'
   | 'lighting' | 'effects' | 'transform'
+  | 'transcript' | 'stabilise' | 'retime' | 'planar_track'
+  | 'object_removal' | 'emotion' | 'spatial' | 'shoppable'
 
 export type FilmToolbarTab =
   | 'script' | 'storyboard' | 'director' | 'ai_director' | 'continuity'
   | 'cast' | 'locations' | 'colour' | 'vfx_mix' | 'audio_mix'
   | 'greenscreen' | 'sfx_makeup' | 'cgi'
+  | 'multicam' | 'transcript' | 'export_hub' | 'collab_grade' | 'plugin' | 'review'
+
+export type SimpleModeTab =
+  | 'text_to_video' | 'image_to_video' | 'audio_to_video'
+  | 'auto_social' | 'avatar_video' | 'translate' | 'highlights'
+  | 'slides_to_video'
 
 export type EditorMode = 'simple' | 'advanced' | 'ultimate'
 

@@ -87,9 +87,63 @@ function PropertiesTab() {
 }
 
 // ── Lighting tab ──────────────────────────────────────────────────
+interface ICLightConfig {
+  temperature: number
+  intensity:   number
+  direction?:  string
+  fill:        number
+  colorCast?:  string
+  flicker?:    boolean
+  wrap?:       number
+  scatter?:    number
+}
+
+const LIGHTING_PRESETS: Record<string, ICLightConfig> = {
+  'Natural day':  { temperature: 5600, intensity: 100, direction: 'top-front', fill: 0.6 },
+  'Golden hour':  { temperature: 3200, intensity: 120, direction: 'side',      fill: 0.3 },
+  'Night / neon': { temperature: 4000, intensity: 80,  colorCast: '#00e5ff',   fill: 0.1 },
+  'Overcast':     { temperature: 6500, intensity: 60,  wrap: 0.9,              fill: 0.8 },
+  'Studio':       { temperature: 5400, intensity: 100, direction: 'front',     fill: 0.7 },
+  'Candlelight':  { temperature: 1900, intensity: 70,  flicker: true,          fill: 0.05 },
+  'Underwater':   { temperature: 6000, intensity: 70, colorCast: '#0040ff', scatter: 0.8, fill: 0.5 },
+}
+
 function LightingTab() {
+  const { selectedClipId } = useStudioStore()
+  const [activePreset, setActivePreset] = useState<string | null>(null)
+  const [applying, setApplying] = useState(false)
+
+  const applyPreset = async (name: string) => {
+    if (!selectedClipId) return
+    setActivePreset(name)
+    setApplying(true)
+    await fetch('/api/vfx/relight', {
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json' },
+      body:        JSON.stringify({ clipId: selectedClipId, config: LIGHTING_PRESETS[name] }),
+    }).finally(() => setApplying(false))
+  }
+
   return (
     <div className="divide-y divide-[var(--border)]">
+      <Section label="Presets">
+        <div className="grid grid-cols-2 gap-1.5">
+          {Object.keys(LIGHTING_PRESETS).map(name => (
+            <button
+              key={name}
+              onClick={() => void applyPreset(name)}
+              disabled={applying}
+              className={cn(
+                'pill text-[9px] truncate transition',
+                activePreset === name ? 'bg-[var(--teal-bright)] text-black' : ''
+              )}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      </Section>
       <Section label="IC-Light">
         <SliderRow label="Intensity" default={65} />
         <SliderRow label="Angle" default={45} max={360} />
@@ -130,21 +184,94 @@ function ColourTab() {
 }
 
 // ── Effects tab ──────────────────────────────────────────────────
+interface EffectParam { name: string; min: number; max: number }
+
+const EFFECT_PARAMS: Record<string, EffectParam[]> = {
+  rain:                 [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Angle', min: -30, max: 30 }],
+  snow:                 [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Size', min: 0, max: 1 }],
+  fog:                  [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Height', min: 0, max: 1 }],
+  film_grain:           [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Size', min: 0, max: 1 }],
+  halation:             [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Radius', min: 10, max: 100 }],
+  vignette:             [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Feather', min: 0, max: 1 }],
+  lens_flare:           [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Pos X', min: 0, max: 1 }, { name: 'Pos Y', min: 0, max: 1 }],
+  bloom:                [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Radius', min: 1, max: 50 }],
+  chromatic_aberration: [{ name: 'Intensity', min: 0, max: 1 }],
+  motion_blur:          [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Angle', min: 0, max: 360 }],
+  glow:                 [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Threshold', min: 0, max: 1 }],
+  dust_particles:       [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Size', min: 0, max: 1 }],
+  lightning:            [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Branches', min: 1, max: 5 }],
+  fire:                 [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Height', min: 0, max: 1 }],
+  smoke:                [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Density', min: 0, max: 1 }],
+}
+
+function EffectRow({ effectKey, params }: { effectKey: string; params: EffectParam[] }) {
+  const { selectedClipId } = useStudioStore()
+  const [enabled, setEnabled] = useState(false)
+  const [values,  setValues]  = useState<number[]>(params.map(() => 0.5))
+  const [open,    setOpen]    = useState(false)
+
+  const applyEffect = async (nextValues: number[]) => {
+    if (!selectedClipId) return
+    const paramObj: Record<string, number> = {}
+    params.forEach((p, i) => { paramObj[p.name.toLowerCase().replace(/\s+/g, '_')] = nextValues[i] })
+    await fetch('/api/vfx/effect', {
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json' },
+      body:        JSON.stringify({ clipId: selectedClipId, effect: effectKey, params: paramObj }),
+    })
+  }
+
+  const label = effectKey.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+
+  return (
+    <div className="border-b border-[var(--border)] last:border-0">
+      <div className="flex items-center gap-2 py-1">
+        <button
+          onClick={() => setOpen(v => !v)}
+          className="flex-1 text-left text-[10px] text-[var(--text-secondary)] truncate"
+        >
+          {label}
+        </button>
+        <button
+          onClick={() => { const next = !enabled; setEnabled(next); if (next) void applyEffect(values) }}
+          className={cn('w-7 h-3.5 rounded-full transition-colors relative shrink-0',
+            enabled ? 'bg-[var(--teal-bright)]' : 'bg-[var(--bg-active)]')}
+        >
+          <span className={cn('absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all',
+            enabled ? 'left-[14px]' : 'left-0.5')} />
+        </button>
+      </div>
+      {open && enabled && (
+        <div className="pb-2 space-y-1">
+          {params.map((p, i) => (
+            <div key={p.name} className="flex items-center gap-2">
+              <span className="text-[9px] text-[var(--text-tertiary)] w-14 shrink-0">{p.name}</span>
+              <input
+                type="range" min={p.min} max={p.max} step={(p.max - p.min) / 100} value={values[i]}
+                onChange={e => {
+                  const next = values.map((v, j) => j === i ? Number(e.target.value) : v)
+                  setValues(next)
+                  void applyEffect(next)
+                }}
+                className="flex-1 accent-[#00e5c8] h-1"
+              />
+              <span className="text-[9px] text-[var(--text-tertiary)] w-6 text-right">{values[i].toFixed(1)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function EffectsTab() {
   return (
-    <div className="divide-y divide-[var(--border)]">
-      <Section label="Post-FX">
-        <Toggle label="Film Grain" />
-        <Toggle label="Chromatic Aberration" />
-        <Toggle label="Lens Vignette" />
-        <Toggle label="Lens Flare" />
-        <Toggle label="Depth of Field" />
-      </Section>
-      <Section label="Motion">
-        <Toggle label="Motion Blur" />
-        <Toggle label="Stabilise" />
-        <SliderRow label="Blur Amount" default={30} />
-      </Section>
+    <div className="px-3 py-2">
+      <p className="panel-section-label mb-2">Effects</p>
+      {Object.entries(EFFECT_PARAMS).map(([key, params]) => (
+        <EffectRow key={key} effectKey={key} params={params} />
+      ))}
     </div>
   )
 }
