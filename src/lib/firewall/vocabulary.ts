@@ -42,6 +42,9 @@ export const TIER_ID_TO_DISPLAY: Record<string, string> = {
 const MODEL_NAME_PATTERN =
   /\b(Kling|Veo|Seedance|Runway|Luma|Pika|Minimax|Hailuo|HunyuanVideo|Hunyuan|SkyReels|Skyreels|AnimateDiff|Mochi|CogVideoX|LTX|Wan|fal\.ai|FAL|Anthropic|Claude|GPT|Gemini|ByteDance|Google|OpenAI|RunwayML)\b/gi
 
+/** @alias sanitiseForUser — for marketing output pipelines */
+export const sanitiseForMarketing = (text: string) => sanitiseForUser(text)
+
 export function sanitiseForUser(text: string): string {
   return text
     .replace(MODEL_NAME_PATTERN, 'smart processing engine')

@@ -17,7 +17,7 @@ interface PaymentOptionsProps {
 }
 
 export function PaymentOptions({ planId, billing, onSuccess, onBack }: PaymentOptionsProps) {
-  const [loading, setLoading] = useState<'stripe' | 'paypal' | null>(null)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const plan = PLANS.find((p) => p.id === planId)
@@ -26,47 +26,21 @@ export function PaymentOptions({ planId, billing, onSuccess, onBack }: PaymentOp
   const price = billing === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice
 
   const handleStripe = async () => {
-    setLoading('stripe')
+    setLoading(true)
     setError(null)
     try {
       const priceId = STRIPE_PRICE_IDS[planId]?.[billing]
-      const res = await fetch('/api/credits/purchase/stripe', {
+      const res = await fetch('/api/payments/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priceId, mode: 'subscription' }),
+        body: JSON.stringify({ priceId }),
       })
       const data = await res.json() as { url?: string; error?: string }
       if (!res.ok || !data.url) throw new Error(data.error ?? 'Failed to create checkout')
       window.location.href = data.url
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Payment failed')
-      setLoading(null)
-    }
-  }
-
-  const handlePayPal = async () => {
-    setLoading('paypal')
-    setError(null)
-    try {
-      const res = await fetch('/api/credits/purchase/paypal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: price,
-          description: `Cinematic Forge ${plan.name} ${billing}`,
-          packId: planId,
-        }),
-      })
-      const data = await res.json() as { orderId?: string; error?: string }
-      if (!res.ok || !data.orderId) throw new Error(data.error ?? 'Failed to create PayPal order')
-      const base =
-        process.env.NEXT_PUBLIC_PAYPAL_MODE === 'live'
-          ? 'https://www.paypal.com'
-          : 'https://www.sandbox.paypal.com'
-      window.location.href = `${base}/checkoutnow?token=${data.orderId}`
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'PayPal failed')
-      setLoading(null)
+      setLoading(false)
     }
   }
 
@@ -94,24 +68,17 @@ export function PaymentOptions({ planId, billing, onSuccess, onBack }: PaymentOp
 
       <div className="flex flex-col gap-3">
         <button
-          onClick={handleStripe}
-          disabled={!!loading}
+          onClick={() => void handleStripe()}
+          disabled={loading}
           className="w-full py-3 bg-[#00e5c8] text-black font-semibold rounded-lg hover:bg-[#00e5c8]/90 flex items-center justify-center gap-2 disabled:opacity-60 transition"
         >
           <CreditCard size={16} />
-          {loading === 'stripe' ? 'Redirecting…' : 'Pay with Card'}
-        </button>
-        <button
-          onClick={handlePayPal}
-          disabled={!!loading}
-          className="w-full py-3 bg-[#003087] text-white font-semibold rounded-lg hover:bg-[#003087]/90 flex items-center justify-center gap-2 disabled:opacity-60 transition"
-        >
-          {loading === 'paypal' ? 'Redirecting…' : 'Pay with PayPal'}
+          {loading ? 'Redirecting…' : 'Pay with Card'}
         </button>
       </div>
 
       <p className="text-xs text-gray-500 text-center mt-4">
-        Secure payment. Cancel anytime. Access granted immediately on payment confirmation.
+        Secure payment · Stripe encrypted · Cancel anytime
       </p>
     </div>
   )
