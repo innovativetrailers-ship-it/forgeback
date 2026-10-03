@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'reference_style_apply')
   } catch (err) {
+    console.warn("[caught] src/app/api/analysis/match-style/route.ts:26", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -46,6 +48,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ styleDNA, updatedShots })
   } catch (err) {
+    console.warn("[caught] src/app/api/analysis/match-style/route.ts:48", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     await refundOperationCredits(userId, 'reference_style_apply')
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Style matching failed' }, { status: 500 })
   }

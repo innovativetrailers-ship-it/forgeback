@@ -16,7 +16,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let form: FormData
   try {
     form = await req.formData()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/commerce/shoppable/create-with-upload/route.ts:19", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Expected multipart form data' }, { status: 400 })
   }
 
@@ -41,7 +43,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'tags must be a valid ProductTag[]' }, { status: 400 })
     }
     tags = parsed
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/commerce/shoppable/create-with-upload/route.ts:44", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid tags JSON' }, { status: 400 })
   }
 

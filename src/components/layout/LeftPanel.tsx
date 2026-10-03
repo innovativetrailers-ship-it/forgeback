@@ -9,6 +9,8 @@ import { ContinuityPanel } from '@/components/panels/ContinuityPanel'
 import { LocationPanel } from '@/components/panels/LocationPanel'
 import { GeneratePanel } from '@/components/panels/GeneratePanel'
 import { LibraryPanel } from '@/components/panels/LibraryPanel'
+import { TrainingStudioPanel } from '@/components/training/TrainingStudioPanel'
+import { TranslatePanel } from '@/components/panels/TranslatePanel'
 import { X } from 'lucide-react'
 
 // Lazy placeholders for panels
@@ -30,6 +32,7 @@ const PANEL_MAP: Partial<Record<PanelId, React.ReactNode>> = {
   library:     <LibraryPanel />,
   location:    <LocationPanel />,
   cast:        <CharacterCastPanel />,
+  training:    <TrainingStudioPanel />,
   makeup:      <SFXMakeupPanel />,
   greenscreen: <GreenScreenPanel />,
   cgi:         <PlaceholderPanel label="CGI Insertion" />,
@@ -40,7 +43,7 @@ const PANEL_MAP: Partial<Record<PanelId, React.ReactNode>> = {
   script:      <PlaceholderPanel label="Script Editor" />,
   storyboard:  <PlaceholderPanel label="Storyboard" />,
   avatar:      <PlaceholderPanel label="AI Avatar" />,
-  translate:   <PlaceholderPanel label="Auto-Translate" />,
+  translate:   <TranslatePanel />,
   highlight:   <PlaceholderPanel label="Highlight Reel" />,
   brandkit:    <PlaceholderPanel label="Brand Kit" />,
   settings:    <PlaceholderPanel label="Settings" />,
@@ -56,7 +59,8 @@ export function LeftPanel() {
 
   const PANEL_LABELS: Record<PanelId, string> = {
     generate: 'Generate', vault: 'Vault', library: 'Library',
-    location: 'Locations', cast: 'Cast', makeup: 'SFX Makeup',
+    location: 'Locations', cast: 'Cast', training: 'Training Studio',
+    makeup: 'SFX Makeup',
     sfx_makeup: 'SFX Makeup', greenscreen: 'Green Screen', cgi: 'CGI Insert', vfx: 'VFX',
     transitions: 'Transitions', audio: 'Audio', stock: 'Stock Media',
     script: 'Script', storyboard: 'Storyboard', avatar: 'AI Avatar',
@@ -71,7 +75,7 @@ export function LeftPanel() {
   }
 
   return (
-    <aside className="w-[260px] shrink-0 flex flex-col bg-[var(--bg-elevated)] border-r border-[var(--border)] overflow-hidden">
+    <aside className={`${activePanel === 'training' ? 'w-[320px]' : 'w-[260px]'} shrink-0 flex flex-col bg-[var(--bg-elevated)] border-r border-[var(--border)] overflow-hidden`}>
       <div className="flex items-center justify-between px-3 h-8 border-b border-[var(--border)] shrink-0">
         <span className="panel-label">{PANEL_LABELS[activePanel]}</span>
         <button

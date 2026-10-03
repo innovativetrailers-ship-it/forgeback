@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import { NextRequest, NextResponse } from 'next/server'
 import { animatePortraitWithMotion } from '@/lib/character/mocap'
 import { MOCAP_BASE_CREDITS, type FccMocapRequest } from '@/lib/character/characterMotion'
@@ -26,6 +27,8 @@ export async function POST(
   try {
     await checkAndDeductCredits(userId, 'character_mocap')
   } catch (e) {
+    console.warn("[caught] src/app/api/vault/character/[id]/mocap/route.ts:29", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     return NextResponse.json({ error: (e as Error).message }, { status: 402 })
   }
 
@@ -39,7 +42,7 @@ export async function POST(
     })
     return NextResponse.json({ videoUrl })
   } catch (e) {
-    await refundCredits(userId, MOCAP_BASE_CREDITS, 'character_mocap').catch(() => {})
+    await refundCredits(userId, MOCAP_BASE_CREDITS, 'character_mocap').catch((err) => logCaught('app/api/vault/character/[id]/mocap/route', err))
     const message = e instanceof Error ? e.message : 'Mocap failed'
     return NextResponse.json({ error: message }, { status: 500 })
   }

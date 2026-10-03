@@ -9,7 +9,9 @@ export async function fetchJsonSafe<T>(url: string, fallback: T, init?: RequestI
     const text = await res.text()
     if (!text) return fallback
     return JSON.parse(text) as T
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/safeFetch.ts:12", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return fallback
   }
 }

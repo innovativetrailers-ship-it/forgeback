@@ -1,6 +1,8 @@
-import { orchestrateMultiModelGeneration } from '@/lib/routing/MediaRouter'
+import { orchestrate } from '@/lib/orchestration'
+import { priceOrchestratePlan } from '@/lib/routing/estimatePlan'
 import { calculateSimpleCost }             from '@/lib/credits'
 import { TIER_ENGINE_MAP }                 from '@/lib/routing/engineRegistry'
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 
 export async function POST(req: Request) {
   const userId = req.headers.get('x-user-id')
@@ -19,11 +21,18 @@ export async function POST(req: Request) {
   }
 
   if (mode === 'director' && selectedModels && selectedModels.length > 0) {
-    const plan = await orchestrateMultiModelGeneration(prompt, duration, selectedModels)
-    return Response.json(plan)
+    const planned = await orchestrate({
+      prompt,
+      totalDuration: duration,
+      selectedModels,
+      userId,
+      planOnly: true,
+      generationMode: 'draft',
+    })
+    return Response.json(priceOrchestratePlan(planned))
   }
 
-  const engine = TIER_ENGINE_MAP[tier ?? 'standard'] ?? 'ltx-2.3-fast'
+  const engine = TIER_ENGINE_MAP[tier ?? 'standard'] ?? refuseSilentModelSwap(tier ?? 'missing', 'ltx-2.3-fast')
   const cost   = calculateSimpleCost(tier ?? 'standard', duration)
   return Response.json({
     totalCredits:   cost,

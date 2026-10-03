@@ -1,5 +1,6 @@
-import { fal } from '../fal/client'
-import { buildFalVideoInput } from '@/lib/fal/videoPayloads'
+import { fal, falSubscribeBound} from '../fal/client'
+const falSubscribe = falSubscribeBound('lib.models.pika')
+import { buildPayload } from '@/lib/fal/videoPayloads'
 import { resolvePikaEndpoint } from '@/lib/fal/pikaEndpoints'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
@@ -9,7 +10,7 @@ export async function generateVideo(
   const isI2V = Boolean(input.startFrameUrl)
   const model = resolvePikaEndpoint(isI2V)
 
-  const falInput = await buildFalVideoInput(model, 'pika-2.5', {
+  const falInput = await buildPayload(model, 'pika-2.5', {
     prompt: input.prompt,
     duration: input.duration ?? 5,
     aspectRatio: input.aspectRatio ?? '16:9',
@@ -20,7 +21,7 @@ export async function generateVideo(
   if (input.seed !== undefined) falInput.seed = input.seed
 
   try {
-    const result = await fal.subscribe(model, {
+    const result = await falSubscribe(model, {
       input: falInput,
       pollInterval: 3000,
     }) as unknown as { video: { url: string } }
@@ -31,6 +32,8 @@ export async function generateVideo(
       videoUrl: result.video.url,
     }
   } catch (err) {
+    console.warn("[caught] src/lib/models/pika.ts:34", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return {
       jobId: 'fal-' + Date.now(),
       status: 'failed',

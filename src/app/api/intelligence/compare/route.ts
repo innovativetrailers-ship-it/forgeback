@@ -85,7 +85,9 @@ export async function POST(req: NextRequest) {
   let body: { category?: string }
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/intelligence/compare/route.ts:88", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 

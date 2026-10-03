@@ -10,6 +10,9 @@ export interface TimelineRecipe {
   audioMixSettings?: AudioMixSettings
   colourGradeSettings?: ColourGradeSettings
   exportSettings?: ExportSettings
+  /** When on, the editor plays proxyUrl. Export still uses sourceUrl. */
+  editWithProxies?: boolean
+  markers?: Array<{ id: string; time: number; kind: 'beat' | 'mark' }>
 }
 
 export interface Track {
@@ -42,10 +45,34 @@ export interface Clip {
   colourGrade?: ClipColourGrade
   audioSettings?: ClipAudio
   metadata?: Record<string, unknown>
+  /** Deterministic overlay, track, and post-camera. Never replaces the clip media. */
+  control?: import('./controlLayer').ClipControl
+  /** Typed dialogue. Optional. A shot with none stays silent. */
+  dialogue?: import('../audio/dialogueIntent').DialogueLine[]
+  /** Center crop for a social cut-down. The source file stays. */
+  reframe?: '16:9' | '9:16' | '1:1' | '4:5'
+  /** Non-destructive generative take. The parent clip stays until Accept. */
+  generativeOp?: {
+    type: 'fx-inpaint' | 'bridge' | 'extend'
+    parentClipId: string
+    engine: string
+    prompt?: string
+    accepted: boolean
+  }
+  /** Local speed curve. 100 is normal. No model call. */
+  timeRemap?: {
+    enabled: boolean
+    keyframes: Array<{ t: number; speedPct: number }>
+    motionBlur?: { amountPct: number; directionDeg: number; peakOnly: boolean }
+  }
+  /** A look over the clips beneath this range. Not media. */
+  adjustment?: boolean
+  /** This clip plays another sequence. The parent recipe id must not appear inside it. */
+  nestRecipe?: TimelineRecipe
 }
 
 export interface Transition {
-  type: 'cut' | 'dissolve' | 'fade' | 'wipe' | 'zoom' | 'glitch' | 'film_burn'
+  type: 'cut' | 'dissolve' | 'fade' | 'fade-in' | 'fade-out' | 'match' | 'flash' | 'wipe' | 'slide' | 'push' | 'zoom' | 'whip' | 'spin' | 'glitch' | 'blur' | 'film_burn' | 'light_leak' | 'generative-bridge'
   duration: number
   direction?: 'left' | 'right' | 'up' | 'down'
 }
@@ -92,6 +119,8 @@ export interface ClipColourGrade {
   highlights?: number
   temperature?: number
   tint?: number
+  /** Desktop colourist fields. Web renders the core grade and leaves these for desktop. */
+  deep?: import('@cinema/core').DeepGrade
 }
 
 export interface ClipAudio {

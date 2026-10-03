@@ -88,9 +88,10 @@ async function processItem(item: DASQueueItem, dasAvailable: boolean): Promise<v
   }
 
   // Update DB with R2 URL
+  const { objectKeyFromStored } = await import('../lib/storage/r2')
   await db.renderJob.update({
     where: { id: item.jobId },
-    data: { outputUrl },
+    data: { outputUrl, storageKey: objectKeyFromStored(outputUrl) ?? r2Key },
   })
 
   // Broadcast 'stored' SSE event

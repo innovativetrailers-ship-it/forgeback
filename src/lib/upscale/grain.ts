@@ -67,7 +67,9 @@ async function analyseGrainProfile(videoUrl: string, tmpDir: string): Promise<Gr
       blueStrength: rms * 1.1,
       temporalVariation: 0.2,
     }
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/upscale/grain.ts:70", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return {
       size: 1.5,
       intensity: 0.3,

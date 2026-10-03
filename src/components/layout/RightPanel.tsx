@@ -2,9 +2,15 @@
 
 import { useState } from 'react'
 import { useStudioStore } from '@/store/editor'
+import { usePlaybackStore } from '@/store/playbackStore'
 import { cn } from '@/lib/utils'
+import { FILM_EMULATION_LUTS } from '@/lib/studio/filmLuts'
+import { patchTimelineClip } from '@/lib/timeline/syncToPlayback'
+import type { ClipEffectType } from '@/lib/timeline/schema'
+import { ParametricEQ } from '@/components/audio/ParametricEQ'
+import { VoiceDialoguePanel } from '@/components/editor/VoiceDialoguePanel'
 
-type RightTab = 'properties' | 'lighting' | 'colour' | 'effects' | 'audio' | 'transform'
+type RightTab = 'properties' | 'lighting' | 'colour' | 'effects' | 'audio' | 'voice' | 'transform'
 
 const TABS: Array<{ id: RightTab; label: string }> = [
   { id: 'properties', label: 'Props' },
@@ -12,6 +18,7 @@ const TABS: Array<{ id: RightTab; label: string }> = [
   { id: 'colour',     label: 'Colour' },
   { id: 'effects',    label: 'FX' },
   { id: 'audio',      label: 'Audio' },
+  { id: 'voice',      label: 'Voice' },
   { id: 'transform',  label: 'Xform' },
 ]
 
@@ -52,6 +59,7 @@ export function RightPanel() {
             {activeTab === 'colour'     && <ColourTab />}
             {activeTab === 'effects'    && <EffectsTab />}
             {activeTab === 'audio'      && <AudioTab />}
+            {activeTab === 'voice'      && <VoiceTab />}
             {activeTab === 'transform'  && <TransformTab />}
           </>
         )}
@@ -62,24 +70,20 @@ export function RightPanel() {
 
 // ── Properties tab ──────────────────────────────────────────────────
 function PropertiesTab() {
-  const { selectedClipId } = useStudioStore()
+  const selectedClipId = useStudioStore((s) => s.selectedClipId)
+  const recipe = usePlaybackStore((s) => s.recipe)
+  const clip = recipe?.tracks.flatMap((track) => track.clips).find((row) => row.id === selectedClipId)
+  const duration = clip ? Math.max(0, clip.endTime - clip.startTime) : 0
   return (
     <div className="space-y-0 divide-y divide-[var(--border)]">
       <Section label="Clip Info">
         <Row label="ID" value={selectedClipId?.slice(0, 8) ?? '—'} />
-        <Row label="Duration" value="4.0 s" />
-        <Row label="FPS" value="24" />
-        <Row label="Resolution" value="1920 × 1080" />
-      </Section>
-      <Section label="Generation">
-        <Row label="Model" value="Seedance 2.0" />
-        <Row label="Tier" value="Studio" />
-        <Row label="Seed" value="483920" />
-        <Row label="Steps" value="40" />
+        <Row label="Duration" value={`${duration.toFixed(1)} s`} />
+        <Row label="Look" value={clip?.colourGrade?.filmEmulation?.replaceAll('_', ' ') ?? 'none'} />
       </Section>
       <Section label="Prompt">
-        <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed">
-          Medium shot, detective walks through rain-soaked alley, noir lighting, cinematic grain
+        <p className="text-[10px] leading-relaxed text-[var(--text-secondary)]">
+          {clip?.prompt || 'No prompt on this clip.'}
         </p>
       </Section>
     </div>
@@ -87,77 +91,31 @@ function PropertiesTab() {
 }
 
 // ── Lighting tab ──────────────────────────────────────────────────
-interface ICLightConfig {
-  temperature: number
-  intensity:   number
-  direction?:  string
-  fill:        number
-  colorCast?:  string
-  flicker?:    boolean
-  wrap?:       number
-  scatter?:    number
-}
-
-const LIGHTING_PRESETS: Record<string, ICLightConfig> = {
-  'Natural day':  { temperature: 5600, intensity: 100, direction: 'top-front', fill: 0.6 },
-  'Golden hour':  { temperature: 3200, intensity: 120, direction: 'side',      fill: 0.3 },
-  'Night / neon': { temperature: 4000, intensity: 80,  colorCast: '#00e5ff',   fill: 0.1 },
-  'Overcast':     { temperature: 6500, intensity: 60,  wrap: 0.9,              fill: 0.8 },
-  'Studio':       { temperature: 5400, intensity: 100, direction: 'front',     fill: 0.7 },
-  'Candlelight':  { temperature: 1900, intensity: 70,  flicker: true,          fill: 0.05 },
-  'Underwater':   { temperature: 6000, intensity: 70, colorCast: '#0040ff', scatter: 0.8, fill: 0.5 },
-}
-
 function LightingTab() {
-  const { selectedClipId } = useStudioStore()
-  const [activePreset, setActivePreset] = useState<string | null>(null)
-  const [applying, setApplying] = useState(false)
+  const selectedClipId = useStudioStore((s) => s.selectedClipId)
+  const recipe = usePlaybackStore((s) => s.recipe)
+  const clip = recipe?.tracks.flatMap((track) => track.clips).find((row) => row.id === selectedClipId)
 
-  const applyPreset = async (name: string) => {
+  function write(patch: { shadows?: number; highlights?: number; temperature?: number; tint?: number }) {
     if (!selectedClipId) return
-    setActivePreset(name)
-    setApplying(true)
-    await fetch('/api/vfx/relight', {
-      method:      'POST',
-      credentials: 'include',
-      headers:     { 'Content-Type': 'application/json' },
-      body:        JSON.stringify({ clipId: selectedClipId, config: LIGHTING_PRESETS[name] }),
-    }).finally(() => setApplying(false))
+    patchTimelineClip(selectedClipId, {
+      colourGrade: {
+        ...clip?.colourGrade,
+        ...patch,
+        asc_cdl: clip?.colourGrade?.asc_cdl ?? { lift: [0, 0, 0], gamma: [1, 1, 1], gain: [1, 1, 1], saturation: 1 },
+      },
+    })
   }
 
   return (
     <div className="divide-y divide-[var(--border)]">
-      <Section label="Presets">
-        <div className="grid grid-cols-2 gap-1.5">
-          {Object.keys(LIGHTING_PRESETS).map(name => (
-            <button
-              key={name}
-              onClick={() => void applyPreset(name)}
-              disabled={applying}
-              className={cn(
-                'pill text-[9px] truncate transition',
-                activePreset === name ? 'bg-[var(--teal-bright)] text-black' : ''
-              )}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-      </Section>
-      <Section label="IC-Light">
-        <SliderRow label="Intensity" default={65} />
-        <SliderRow label="Angle" default={45} max={360} />
-        <SliderRow label="Spread" default={80} />
-      </Section>
       <Section label="Tone">
-        <SliderRow label="Exposure" default={50} />
-        <SliderRow label="Contrast" default={50} />
-        <SliderRow label="Shadows" default={50} />
-        <SliderRow label="Highlights" default={50} />
+        <GradeSlider label="Shadows" value={clip?.colourGrade?.shadows ?? 0} min={-100} max={100} onChange={(shadows) => write({ shadows })} />
+        <GradeSlider label="Highlights" value={clip?.colourGrade?.highlights ?? 0} min={-100} max={100} onChange={(highlights) => write({ highlights })} />
       </Section>
       <Section label="Colour Temp">
-        <SliderRow label="Temperature" default={50} />
-        <SliderRow label="Tint" default={50} />
+        <GradeSlider label="Temperature" value={clip?.colourGrade?.temperature ?? 6500} min={2000} max={10000} onChange={(temperature) => write({ temperature })} />
+        <GradeSlider label="Tint" value={clip?.colourGrade?.tint ?? 0} min={-50} max={50} onChange={(tint) => write({ tint })} />
       </Section>
     </div>
   )
@@ -165,17 +123,30 @@ function LightingTab() {
 
 // ── Colour tab ──────────────────────────────────────────────────
 function ColourTab() {
+  const selectedClipId = useStudioStore((s) => s.selectedClipId)
   return (
     <div className="divide-y divide-[var(--border)]">
-      <Section label="Grading">
-        <SliderRow label="Saturation" default={50} />
-        <SliderRow label="Vibrance" default={50} />
-        <SliderRow label="Hue Shift" default={50} max={360} />
-      </Section>
-      <Section label="Film Look">
+      <Section label="Film LUT">
         <div className="grid grid-cols-2 gap-1.5">
-          {['Bleach Bypass', 'Cross-Process', 'Kodak 5219', 'Fuji Eterna', 'Teal & Orange', 'Vintage 70s'].map((lut) => (
-            <button key={lut} className="pill text-[9px]">{lut}</button>
+          {Object.keys(FILM_EMULATION_LUTS).map((lut) => (
+            <button
+              key={lut}
+              type="button"
+              className="pill text-[9px]"
+              onClick={() => {
+                if (!selectedClipId) return
+                patchTimelineClip(selectedClipId, {
+                  colourGrade: {
+                    filmEmulation: lut as 'kodak_5219',
+                    lutUrl: FILM_EMULATION_LUTS[lut],
+                    lutIntensity: 1,
+                    asc_cdl: { lift: [0, 0, 0], gamma: [1, 1, 1], gain: [1, 1, 1], saturation: lut === 'bw_contrast' ? 0 : 1.1 },
+                  },
+                })
+              }}
+            >
+              {lut.replaceAll('_', ' ')}
+            </button>
           ))}
         </div>
       </Section>
@@ -187,21 +158,12 @@ function ColourTab() {
 interface EffectParam { name: string; min: number; max: number }
 
 const EFFECT_PARAMS: Record<string, EffectParam[]> = {
-  rain:                 [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Angle', min: -30, max: 30 }],
-  snow:                 [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Size', min: 0, max: 1 }],
-  fog:                  [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Height', min: 0, max: 1 }],
-  film_grain:           [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Size', min: 0, max: 1 }],
-  halation:             [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Radius', min: 10, max: 100 }],
-  vignette:             [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Feather', min: 0, max: 1 }],
-  lens_flare:           [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Pos X', min: 0, max: 1 }, { name: 'Pos Y', min: 0, max: 1 }],
-  bloom:                [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Radius', min: 1, max: 50 }],
+  film_grain:           [{ name: 'Intensity', min: 0, max: 1 }],
+  vignette:             [{ name: 'Intensity', min: 0, max: 1 }],
   chromatic_aberration: [{ name: 'Intensity', min: 0, max: 1 }],
-  motion_blur:          [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Angle', min: 0, max: 360 }],
-  glow:                 [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Threshold', min: 0, max: 1 }],
-  dust_particles:       [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Size', min: 0, max: 1 }],
-  lightning:            [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Branches', min: 1, max: 5 }],
-  fire:                 [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Height', min: 0, max: 1 }],
-  smoke:                [{ name: 'Intensity', min: 0, max: 1 }, { name: 'Density', min: 0, max: 1 }],
+  bloom:                [{ name: 'Intensity', min: 0, max: 1 }],
+  motion_blur:          [{ name: 'Intensity', min: 0, max: 1 }],
+  halation:             [{ name: 'Intensity', min: 0, max: 1 }],
 }
 
 function EffectRow({ effectKey, params }: { effectKey: string; params: EffectParam[] }) {
@@ -214,12 +176,10 @@ function EffectRow({ effectKey, params }: { effectKey: string; params: EffectPar
     if (!selectedClipId) return
     const paramObj: Record<string, number> = {}
     params.forEach((p, i) => { paramObj[p.name.toLowerCase().replace(/\s+/g, '_')] = nextValues[i] })
-    await fetch('/api/vfx/effect', {
-      method:      'POST',
-      credentials: 'include',
-      headers:     { 'Content-Type': 'application/json' },
-      body:        JSON.stringify({ clipId: selectedClipId, effect: effectKey, params: paramObj }),
+    patchTimelineClip(selectedClipId, {
+      effects: [{ type: effectKey as ClipEffectType, intensity: nextValues[0] ?? 0.5 }],
     })
+    void paramObj
   }
 
   const label = effectKey.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
@@ -276,19 +236,52 @@ function EffectsTab() {
   )
 }
 
+function VoiceTab() {
+  const selectedClipId = useStudioStore((s) => s.selectedClipId)
+  const clip = usePlaybackStore((s) => {
+    const tracks = s.recipe?.tracks ?? []
+    for (const track of tracks) {
+      const found = track.clips.find((row) => row.id === selectedClipId)
+      if (found) return found
+    }
+    return null
+  })
+  return <VoiceDialoguePanel clip={clip} />
+}
+
 // ── Audio tab ──────────────────────────────────────────────────
 function AudioTab() {
+  const selectedClipId = useStudioStore((s) => s.selectedClipId)
   return (
     <div className="divide-y divide-[var(--border)]">
       <Section label="Volume">
-        <SliderRow label="Volume" default={80} />
-        <SliderRow label="Pan" default={50} />
-        <Toggle label="Mute" />
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          defaultValue={1}
+          onChange={(event) => {
+            if (!selectedClipId) return
+            patchTimelineClip(selectedClipId, {
+              audioSettings: { volume: Number(event.target.value), pan: 0 },
+            })
+          }}
+        />
       </Section>
       <Section label="EQ">
-        <SliderRow label="Bass" default={50} />
-        <SliderRow label="Mid" default={50} />
-        <SliderRow label="Treble" default={50} />
+        <ParametricEQ
+          trackId={selectedClipId ?? 'none'}
+          onFilterChange={(bands) => {
+            if (!selectedClipId) return
+            const low = bands.find((band) => band.type === 'lowshelf')?.gain ?? 0
+            const high = bands.find((band) => band.type === 'highshelf')?.gain ?? 0
+            const mid = bands.find((band) => band.type === 'peak')?.gain ?? 0
+            patchTimelineClip(selectedClipId, {
+              audioSettings: { volume: 1, pan: 0, eq: { low, mid, high } },
+            })
+          }}
+        />
       </Section>
     </div>
   )
@@ -296,20 +289,32 @@ function AudioTab() {
 
 // ── Transform tab ──────────────────────────────────────────────────
 function TransformTab() {
+  const selectedClipId = useStudioStore((s) => s.selectedClipId)
+  const recipe = usePlaybackStore((s) => s.recipe)
+  const clip = recipe?.tracks.flatMap((track) => track.clips).find((row) => row.id === selectedClipId)
+  const current = clip?.transform ?? { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }
+  function write(patch: Partial<typeof current>) {
+    if (!selectedClipId) return
+    patchTimelineClip(selectedClipId, { transform: { ...current, ...patch } })
+  }
   return (
     <div className="divide-y divide-[var(--border)]">
       <Section label="Position & Scale">
-        <SliderRow label="X Position" default={50} />
-        <SliderRow label="Y Position" default={50} />
-        <SliderRow label="Scale" default={100} max={200} />
-        <SliderRow label="Rotation" default={0} max={360} />
+        <GradeSlider label="X" value={current.x} min={-200} max={200} onChange={(x) => write({ x })} />
+        <GradeSlider label="Y" value={current.y} min={-200} max={200} onChange={(y) => write({ y })} />
+        <GradeSlider label="Scale" value={current.scale} min={0.5} max={2} onChange={(scale) => write({ scale })} />
+        <GradeSlider label="Rotate" value={current.rotation} min={-180} max={180} onChange={(rotation) => write({ rotation })} />
       </Section>
-      <Section label="Crop">
-        <SliderRow label="Top" default={0} />
-        <SliderRow label="Bottom" default={0} />
-        <SliderRow label="Left" default={0} />
-        <SliderRow label="Right" default={0} />
-      </Section>
+    </div>
+  )
+}
+
+function GradeSlider({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-20 shrink-0 text-[10px] text-[var(--text-tertiary)]">{label}</span>
+      <input type="range" min={min} max={max} step={max > 20 ? 1 : 0.01} value={value} onChange={(event) => onChange(Number(event.target.value))} className="cinema-slider flex-1" />
+      <span className="w-10 text-right text-[9px] tabular-nums text-[var(--text-tertiary)]">{Math.round(value * 100) / 100}</span>
     </div>
   )
 }

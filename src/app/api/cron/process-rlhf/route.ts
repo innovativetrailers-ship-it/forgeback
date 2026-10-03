@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { denyUnlessCron } from '@/lib/cron-guard'
+import { consumeRewardSignals } from '@/lib/cognition/rewardConsumer'
 
 export const runtime = 'nodejs'
 
@@ -9,6 +10,8 @@ export async function GET(req: NextRequest) {
   if (denied) return denied
 
   try {
+    const applied = await consumeRewardSignals()
+
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
     // Group by selectedModel to compute win counts over the last week
@@ -38,6 +41,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
+      appliedRewards: applied,
       processed: totalLogs,
       topModels: winRates.slice(0, 5),
       timestamp: new Date().toISOString(),

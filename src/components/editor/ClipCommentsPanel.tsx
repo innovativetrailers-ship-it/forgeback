@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useEditorStore } from '@/store/editor'
+import { useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
 import { MessageSquare, CheckSquare, CornerDownRight } from 'lucide-react'
 
 interface CommentReply {
@@ -32,7 +33,7 @@ export function ClipCommentsPanel() {
   const myUserId = (session?.user as { id?: string } | null | undefined)?.id ?? ''
 
   const selectedClipId = useEditorStore((s) => s.selectedClipId)
-  const recipe = useEditorStore((s) => s.recipe)
+  const recipe = useEditorRecipeView()
 
   const projectId = recipe?.id ?? ''
 
@@ -54,7 +55,9 @@ export function ClipCommentsPanel() {
       if (!res.ok) return
       const data = (await res.json()) as { comments: Comment[] }
       setComments(data.comments ?? [])
-    } catch { /* ignore */ } finally {
+    } catch (err) {
+      console.warn("[caught] src/components/editor/ClipCommentsPanel.tsx:58", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore */ } finally {
       setLoading(false)
     }
   }, [projectId, selectedClipId, myUserId])
@@ -81,7 +84,9 @@ export function ClipCommentsPanel() {
       setDraftText('')
       setReplyTo(null)
       void loadComments()
-    } catch { /* ignore */ } finally {
+    } catch (err) {
+      console.warn("[caught] src/components/editor/ClipCommentsPanel.tsx:85", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore */ } finally {
       setSubmitting(false)
     }
   }, [draftText, selectedClipId, projectId, myUserId, replyTo, loadComments])

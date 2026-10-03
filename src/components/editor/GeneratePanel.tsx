@@ -68,7 +68,6 @@ const EFFECT_PARAMS = [
   { id: 'snow',       label: 'Snow',           prompt: 'falling snow, winter atmosphere' },
   { id: 'smoke',      label: 'Smoke',          prompt: 'drifting smoke, hazy air' },
   { id: 'dust',       label: 'Dust',           prompt: 'dust particles floating in air' },
-  { id: 'lens_flare', label: 'Lens Flare',     prompt: 'anamorphic lens flare from light source' },
   { id: 'bokeh',      label: 'Bokeh',          prompt: 'heavy bokeh, shallow depth of field' },
   { id: 'vignette',   label: 'Vignette',       prompt: 'strong vignette, dark edges' },
   { id: 'film_grain', label: 'Film Grain',     prompt: 'heavy film grain, analog texture' },
@@ -141,6 +140,7 @@ export function GeneratePanel({ projectId, characters, locations, onJobCreated, 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'GENERATE',
+          projectId,
           payload: {
             prompt: fullPrompt,
             model,

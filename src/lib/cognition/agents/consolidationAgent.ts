@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 // Consolidation Agent — distil patterns across episodes into durable semantic
 // insights (episodic → semantic memory consolidation).
 
@@ -33,7 +34,9 @@ Return JSON array:
 [{ "category": "user_taste|craft_rule|genre_pattern", "insight": "durable generalisation", "confidence": 0.0-1.0 }]`,
     })
     insights = parseAgentJSON<DistilledInsight[]>(text, [])
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/cognition/agents/consolidationAgent.ts:37", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return
   }
 
@@ -43,6 +46,6 @@ Return JSON array:
       INSERT INTO "SemanticMemory" (id, "userId", category, insight, confidence, embedding, "reinforceCount", "createdAt", "updatedAt")
       VALUES (gen_random_uuid()::text, ${userId}, ${ins.category}, ${ins.insight}, ${ins.confidence},
               ${toVector(vec)}::vector, 1, now(), now())
-    `.catch(() => {})
+    `.catch((err) => logCaught('lib/cognition/agents/consolidationAgent', err))
   }
 }

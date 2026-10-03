@@ -52,7 +52,9 @@ export function GenerationProgress({ jobId, onComplete, onError }: Props) {
           sse.close()
           onError?.(event.error ?? 'Generation failed')
         }
-      } catch { /* ignore malformed events */ }
+      } catch (err) {
+        console.warn("[caught] src/components/simple/GenerationProgress.tsx:55", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore malformed events */ }
     }
 
     // Transient disconnects (e.g. serverless function recycle) are not fatal —

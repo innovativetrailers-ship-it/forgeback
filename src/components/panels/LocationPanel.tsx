@@ -38,6 +38,8 @@ export function LocationPanel() {
       if (!res.ok) throw new Error(data.error ?? 'Search failed')
       setResult(data)
     } catch (err: unknown) {
+      console.warn("[caught] src/components/panels/LocationPanel.tsx:40", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError(err instanceof Error ? err.message : 'Search failed')
     } finally {
       setLoading(false)
@@ -53,7 +55,9 @@ export function LocationPanel() {
         body: JSON.stringify({ imageUrl, type, location: result?.location }),
       })
       setSelected(imageUrl)
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/panels/LocationPanel.tsx:56", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // silent — tile saved indicator will not activate
     }
   }
@@ -168,7 +172,7 @@ export function LocationPanel() {
             ) : (
               <>
                 <p className="text-[10px] text-gray-600 mb-2 px-1">
-                  {result.meta.streetViewCount} street photos · tap to save to vault
+                  {result.meta.streetViewCount} street photos · tap to save as a location
                 </p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {result.streetView.map(img => (

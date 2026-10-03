@@ -1,0 +1,11 @@
+---
+description: SPEC-TRAINING-MODEL-CATALOG. Read before wiring FAL trainers, /lora inference, SAM 3 prep, or Stable Audio / ElevenLabs-on-FAL training.
+globs: ["src/lib/fal/training.ts", "src/lib/queue/workers/training.worker.ts", "src/workers/training-pipeline.ts"]
+alwaysApply: false
+---
+
+# Training model catalog
+
+Contract: `docs/spec-references/SPEC-TRAINING-MODEL-CATALOG.md`. Inherits TR-00. Do not wire from it until the user feeds TR-01 (registry) or TR-02 (pipeline).
+
+Pattern: zip + captions + trigger → gated trainer → `.safetensors` + config → matching `/lora` inference. Verify OpenAPI + `llms.txt` before any endpoint id. Primary cast trainer is MiniMax H3 ref2va. Style uses H3 t2v / LTX-2 / FLUX.2. Music/SFX uses Stable Audio 3. SAM 3 is dataset prep, not a generator. Orchestrator selects the trainer and assembles that trainer's dataset shape; it does not guess ids.

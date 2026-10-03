@@ -7,7 +7,6 @@ export async function register() {
     'AUTH_SECRET',
     'DATABASE_URL',
     'REDIS_URL',
-    'ANTHROPIC_API_KEY',  // orchestration stays direct
     'R2_ACCOUNT_ID',
     'R2_ACCESS_KEY_ID',
     'R2_SECRET_ACCESS_KEY',
@@ -41,4 +40,7 @@ export async function register() {
   }
 
   console.log('[CINEMA] Environment validated ✓')
+
+  const { installNodeCodeGuards } = await import('@/lib/diagnostics/codeGuards')
+  installNodeCodeGuards('next.instrumentation')
 }

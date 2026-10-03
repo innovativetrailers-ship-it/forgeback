@@ -9,7 +9,10 @@ interface CameraAngle {
   offset:  number
 }
 
-export function MultiCamPanel({ projectId }: { projectId: string }) {
+/** v1: multicam is off. Do not mount this. */
+export const MULTICAM_ENABLED = false
+
+function MultiCamPanelLive({ projectId }: { projectId: string }) {
   const [angles, setAngles] = useState<CameraAngle[]>([])
   const [active, setActive] = useState<string | null>(null)
 
@@ -58,11 +61,16 @@ export function MultiCamPanel({ projectId }: { projectId: string }) {
         ))}
       </div>
 
-      {angles.length === 0 && (
+      {angles.length === 0 && projectId && (
         <div className="flex-1 flex items-center justify-center text-gray-500 text-xs text-center">
           Import clips shot simultaneously,<br />then click &quot;Sync angles&quot;
         </div>
       )}
     </div>
   )
+}
+
+export function MultiCamPanel({ projectId }: { projectId: string }) {
+  if (!MULTICAM_ENABLED) return null
+  return <MultiCamPanelLive projectId={projectId} />
 }

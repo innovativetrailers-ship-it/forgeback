@@ -3,20 +3,14 @@
 import { useState, useEffect } from 'react'
 
 const MODEL_COLOURS: Record<string, string> = {
+  'gemini-omni':          '#f59e0b',
   'veo-3.1':              '#ff4444',
   'kling-3.0':            '#ff8800',
   'seedance-2.0':         '#ffcc00',
-  'skyreels-v3':          '#ff66cc',
-  'pixverse-c1':          '#aa44ff',
-  'pixverse-v6':          '#8844ff',
+  'wan-2.7':              '#44ffcc',
   'runway-gen4':          '#4488ff',
-  'luma-ray3':            '#44aaff',
-  'hunyuan-video-1.5':    '#44ffcc',
-  'minimax-2.3':          '#44ff88',
-  'wan-2.2':              '#ccff44',
-  'ltx-2.3':              '#ffff44',
   'ltx-2.3-fast':         '#888844',
-  'pika-2.5':             '#ff4488',
+  'grok-imagine-video':   '#e879f9',
 }
 
 interface Props {

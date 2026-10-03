@@ -98,11 +98,11 @@ export async function falWithTimeout<T = unknown>(
         timeoutMs,
         pollIntervalMs,
         jobHeartbeat: options?.onPoll,
-        onProgress: (pct, log, queuePosition) => {
+        onProgress: (pct, log, queuePosition, falStatus) => {
           const pos = typeof queuePosition === 'number' ? queuePosition : undefined
-          if (pct >= 100) {
+          if (falStatus === 'COMPLETED' || pct >= 100) {
             options?.onProgress?.({ status: 'COMPLETED', position: pos })
-          } else if (pct > 0) {
+          } else if (falStatus === 'IN_PROGRESS' || pct > 0) {
             options?.onProgress?.({ status: 'IN_PROGRESS', message: log ?? 'Processing…', position: pos })
           } else {
             options?.onProgress?.({ status: 'IN_QUEUE', position: pos })

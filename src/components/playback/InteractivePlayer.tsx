@@ -118,21 +118,32 @@ export function InteractivePlayer(props: Props) {
 
   useEffect(() => { toolState.current.activeTool = activeTool }, [activeTool])
 
-  // WebGL grade overlay — re-renders the current frame through the shader each tick.
+  const gradeLive = useRef(grade)
+  gradeLive.current = grade
+
+  // One WebGL context for the grade overlay. Recreated only when edit mode toggles.
   useEffect(() => {
     if (!editMode || !gradeRef.current) return
     const v = getVideo()
     if (!v) return
-    glRef.current = initGradeGL(gradeRef.current, v)
-    if (!glRef.current) return
+    const renderer = initGradeGL(gradeRef.current, v)
+    glRef.current = renderer
+    if (!renderer) return
     let raf = 0
+    let running = true
     const loop = () => {
-      glRef.current?.render(grade)
+      if (!running) return
+      renderer.render(gradeLive.current)
       raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
-  }, [editMode, grade, getVideo])
+    return () => {
+      running = false
+      cancelAnimationFrame(raf)
+      renderer.dispose()
+      glRef.current = null
+    }
+  }, [editMode, getVideo])
 
   // Selection / brush / relight-drag interaction.
   useEffect(() => {

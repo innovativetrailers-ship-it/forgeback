@@ -108,7 +108,9 @@ export function SwarmProgressPanel({ projectId, shots }: SwarmProgressPanelProps
             [event.shot_id!]: { ...prev[event.shot_id!], status: 'complete' },
           }))
         }
-      } catch { /* ignore parse errors */ }
+      } catch (err) {
+        console.warn("[caught] src/components/swarm/SwarmProgressPanel.tsx:111", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore parse errors */ }
     }
     es.onerror = () => es.close()
     return () => es.close()

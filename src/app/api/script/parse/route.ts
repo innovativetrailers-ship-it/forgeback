@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
+import { hasFalKey } from '@/lib/config/keys'
 import { callLLM } from '@/lib/engines/llm'
 
 function extractJsonArray(text: string): unknown[] | null {
@@ -9,7 +10,9 @@ function extractJsonArray(text: string): unknown[] | null {
   try {
     const parsed = JSON.parse(match[0]) as unknown
     return Array.isArray(parsed) ? parsed : null
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/script/parse/route.ts:12", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return null
   }
 }
@@ -30,8 +33,8 @@ Return JSON array:
     maxTokens: 2000,
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY required for script parsing')
+  if (!hasFalKey()) {
+    throw new Error('FAL_KEY required for script parsing')
   }
 
   const { content } = await callLLM({ model: 'claude-opus', source: 'api:script-parse', ...request })
@@ -52,7 +55,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as { script?: string }
     script = body.script
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/script/parse/route.ts:55", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -60,7 +65,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ scenes: [], error: 'Empty script' }, { status: 400 })
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!hasFalKey()) {
     return NextResponse.json({ scenes: [], error: 'Script parser unavailable' }, { status: 503 })
   }
 

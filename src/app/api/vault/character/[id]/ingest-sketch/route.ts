@@ -37,6 +37,8 @@ export async function POST(
     const view = await getFCCCharacter(id, userId)
     return NextResponse.json(view)
   } catch (e) {
+    console.warn("[caught] src/app/api/vault/character/[id]/ingest-sketch/route.ts:39", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     const message = e instanceof Error ? e.message : 'Sketch ingest failed'
     return NextResponse.json({ error: message }, { status: 500 })
   }

@@ -1,3 +1,4 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { relightImage } from '@/lib/fal/lighting'
@@ -41,7 +42,9 @@ export async function POST(req: NextRequest) {
   let body: AiEditBody
   try {
     body = (await req.json()) as AiEditBody
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/clips/ai-edit/route.ts:44", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -86,7 +89,7 @@ export async function POST(req: NextRequest) {
         ? `${prompt?.trim() || OP_PROMPTS[operation]}, ${OP_PROMPTS.fill_ai}`
         : OP_PROMPTS[operation]
 
-    const result = await runFal<FluxFillResult>('fal-ai/flux-pro/v1/fill', {
+    const result = await runFal<FluxFillResult>(falEndpoint('flux-pro/v1/fill'), {
       image_url: frameUrl,
       mask_url: maskUrl,
       prompt: finalPrompt,
@@ -97,6 +100,8 @@ export async function POST(req: NextRequest) {
     if (!url) return NextResponse.json({ error: 'Edit produced no image' }, { status: 502 })
     return NextResponse.json({ url })
   } catch (err) {
+    console.warn("[caught] src/app/api/clips/ai-edit/route.ts:99", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const message = err instanceof Error ? err.message : 'AI edit failed'
     return NextResponse.json({ error: message }, { status: 500 })
   }

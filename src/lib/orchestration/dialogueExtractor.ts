@@ -31,10 +31,31 @@ export async function extractDialogueForShots(
 
   for (const shot of shots) {
     if (!shot.hasDialogue) continue
-    const speaker = shot.charactersPresent[0]
+    const speaker = shot.charactersPresent?.[0]
     if (!speaker) continue
     const char = byName.get(speaker.toLowerCase())
-    if (!char?.voiceId) continue
+    if (!char) continue
+    let voiceId = char.voiceId
+    if (!voiceId && projectId) {
+      const project = await db.project.findUnique({ where: { id: projectId }, select: { userId: true } })
+      if (project) {
+        const playbook = await (await import('@/lib/playbook')).loadActivePlaybook(project.userId, projectId).catch((err) => {
+          console.warn("[caught] src/lib/orchestration/dialogueExtractor.ts:42", err instanceof Error ? { name: err.name, message: err.message } : err)
+          return (null)
+        })
+        voiceId = playbook?.language?.voiceDefaults ?? voiceId
+      }
+    }
+    if (!voiceId) {
+      try {
+        const { assignVoice } = await import('@/lib/vault/character')
+        voiceId = await assignVoice(char.id)
+        char.voiceId = voiceId
+      } catch (err) {
+        console.warn('[dialogue] voice assign skipped:', err instanceof Error ? err.message : String(err))
+        continue
+      }
+    }
 
     const quoted = shot.visualPrompt.match(/"([^"]{3,})"/)
     const text = quoted?.[1] ?? shot.visualPrompt.slice(0, 240)
@@ -44,7 +65,7 @@ export async function extractDialogueForShots(
       shotId: shot.shotIndex,
       clipId,
       characterId: char.id,
-      voiceId: char.voiceId,
+      voiceId,
       text,
       durationHint: shot.duration,
     })
@@ -63,7 +84,7 @@ export async function extractDialogueForShots(
           where: { id: existing.id },
           data: {
             prompt: text,
-            voiceId: char.voiceId,
+            voiceId,
             status: existing.status === 'READY' ? 'PENDING' : existing.status,
           },
         })
@@ -76,7 +97,7 @@ export async function extractDialogueForShots(
           provider: 'ELEVENLABS',
           status: 'PENDING',
           prompt: text,
-          voiceId: char.voiceId,
+          voiceId,
           shotPlanId: clipId,
           sceneNumber: shot.sceneNumber,
         },

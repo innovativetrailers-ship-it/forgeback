@@ -3,6 +3,7 @@
  */
 
 import { db } from '@/lib/db'
+import { MissingPriceError } from '@/lib/credits'
 import { getHold } from '@/lib/credits/escrow'
 
 export const TIER_BUDGET_CAPS: Record<string, number> = {
@@ -36,6 +37,9 @@ export async function assertBudgetForSegment(
   jobId: string,
   segmentCost: number,
 ): Promise<void> {
+  if (!Number.isFinite(segmentCost) || segmentCost <= 0) {
+    throw new MissingPriceError('Cost estimate was not a finite credit number')
+  }
   const hold = await getHold(jobId)
   if (!hold?.budgetCap) return
   if (hold.amountUsed + segmentCost > hold.budgetCap) {

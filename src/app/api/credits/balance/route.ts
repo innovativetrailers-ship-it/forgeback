@@ -38,7 +38,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const { getStripeBalance } = await import('@/lib/payments/stripeCustomer')
     const stripeData = await getStripeBalance(userId)
     stripeBalanceUSD = stripeData?.balanceCents ? stripeData.balanceCents / 100 : null
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/credits/balance/route.ts:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     // Stripe optional
   }
 

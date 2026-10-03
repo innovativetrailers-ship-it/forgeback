@@ -1,18 +1,29 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 export type LipSyncTier = 'draft' | 'standard' | 'studio' | 'blockbuster'
+
+export interface AlignmentWord {
+  text: string
+  start: number
+  end: number
+}
 
 export interface LipSyncInput {
   videoUrl: string
   audioUrl: string
   syncMode?: 'cut_off' | 'loop' | 'bounce' | 'silence' | 'remap'
+  alignmentWords?: AlignmentWord[]
 }
 
 export const LIP_SYNC_ENGINES = {
   latentsync: {
-    endpoint: 'fal-ai/latentsync',
-    payload: (i: LipSyncInput) => ({ video_url: i.videoUrl, audio_url: i.audioUrl }),
+    endpoint: falEndpoint('latentsync'),
+    payload: (i: LipSyncInput) => ({
+      video_url: i.videoUrl,
+      audio_url: i.audioUrl,
+    }),
   },
   'sync-lipsync': {
-    endpoint: 'fal-ai/sync-lipsync',
+    endpoint: falEndpoint('sync-lipsync'),
     payload: (i: LipSyncInput) => ({
       video_url: i.videoUrl,
       audio_url: i.audioUrl,
@@ -20,7 +31,7 @@ export const LIP_SYNC_ENGINES = {
     }),
   },
   'sync-lipsync-2-pro': {
-    endpoint: 'fal-ai/sync-lipsync/v2/pro',
+    endpoint: falEndpoint('sync-lipsync/v2/pro'),
     payload: (i: LipSyncInput) => ({
       video_url: i.videoUrl,
       audio_url: i.audioUrl,

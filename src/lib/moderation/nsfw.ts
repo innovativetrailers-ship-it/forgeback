@@ -1,3 +1,4 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { runFal } from '../fal/client'
 
 export interface ModerationResult {
@@ -13,7 +14,7 @@ interface NSFWFalResult {
 }
 
 async function checkImage(imageUrl: string): Promise<ModerationResult> {
-  const result = await runFal('fal-ai/nsfw-detector', { image_url: imageUrl }) as NSFWFalResult
+  const result = await runFal(falEndpoint('nsfw-detector'), { image_url: imageUrl }) as NSFWFalResult
 
   const score = result.nsfw_probability ?? 0
   return {
@@ -49,7 +50,9 @@ export async function checkNSFW(
       score: maxScore,
       categories: allCategories,
     }
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/moderation/nsfw.ts:52", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     // If frame extraction fails, check the first frame as image
     return checkImage(mediaUrl)
   }

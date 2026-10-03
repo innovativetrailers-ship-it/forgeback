@@ -63,6 +63,15 @@ export function keyFromUrl(url: string): string {
   return url.replace(`${PUBLIC_URL}/`, '')
 }
 
+/** Object key stored on a media row, or the renders/videos/clips path inside a URL. Never invent a key from an id. */
+export function objectKeyFromStored(value: string | null | undefined): string | null {
+  const bare = value?.trim().split('?')[0]
+  if (!bare) return null
+  if (/^(renders|videos|clips|uploads)\//.test(bare)) return bare
+  const match = bare.match(/(?:^|\/)((?:renders|videos|clips|uploads)\/[^?#]+)$/)
+  return match?.[1] ?? null
+}
+
 export function renderVideoKey(userId: string, jobId: string): string {
   return `renders/${userId}/${jobId}.mp4`
 }
@@ -80,7 +89,9 @@ export async function objectExists(key: string): Promise<boolean> {
   try {
     await r2.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }))
     return true
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/storage/r2.ts:83", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return false
   }
 }

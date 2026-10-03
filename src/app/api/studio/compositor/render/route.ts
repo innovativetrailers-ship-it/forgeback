@@ -28,6 +28,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
+  const nodes = parsed.data.graph.nodes as Array<{ params?: { aiMatte?: boolean } }>
+  const wantsMatte = nodes.some((node) => node.params?.aiMatte === true)
+  const confirmed = (body as { confirm?: boolean }).confirm === true
+  if (wantsMatte && !confirmed) {
+    return NextResponse.json({ estimateCredits: 8, metered: true, note: 'AI matte is priced. The manual roto still renders.' })
+  }
+
   try {
     const png = await executeCompositorGraphToPng(
       parsed.data.graph as CompositorGraph,
@@ -39,6 +46,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url, key, size: png.length })
   } catch (err) {
+    console.warn("[caught] src/app/api/studio/compositor/render/route.ts:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }

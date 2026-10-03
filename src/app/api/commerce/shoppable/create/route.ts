@@ -8,7 +8,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let raw: unknown
-  try { raw = await req.json() } catch {
+  try { raw = await req.json() } catch (err) {
+    console.warn("[caught] src/app/api/commerce/shoppable/create/route.ts:11", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 

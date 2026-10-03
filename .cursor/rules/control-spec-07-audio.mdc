@@ -1,0 +1,11 @@
+---
+description: SPEC-07 audio. Read before changing voice, lip-sync, SFX, music, ducking, the mixer, EQ, or the master bus.
+globs: ["src/lib/audio/**", "src/lib/elevenlabs/**", "cinematic-forge-v3/src/renderer/components/mixer/**"]
+alwaysApply: false
+---
+
+# SPEC-07 — Audio
+
+Contract: `docs/spec-references/SPEC-07-audio.md`. Inherits SPEC-00. Do not build from it until the user feeds this spec.
+
+Voice id, clone, alignment, the lip-sync checkbox, ElevenLabs SFX, and Suno music are the wired path. TTS model, stability, and style are fixed in code. New ElevenLabs or Suno calls go through the pause-aware chokepoint. Music stays Suno. SFX stays ElevenLabs.

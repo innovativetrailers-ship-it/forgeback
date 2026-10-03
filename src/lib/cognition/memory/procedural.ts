@@ -11,7 +11,10 @@ export async function updateRoutingPolicy(
 ): Promise<void> {
   const existing = await db.routingPolicy
     .findUnique({ where: { contentType_model: { contentType, model } } })
-    .catch(() => null)
+    .catch((err) => {
+      console.warn("[caught] src/lib/cognition/memory/procedural.ts:14", err instanceof Error ? { name: err.name, message: err.message } : err)
+      return (null)
+    })
 
   if (existing) {
     const n = existing.sampleCount
@@ -26,6 +29,24 @@ export async function updateRoutingPolicy(
       data: { contentType, model, successRate: qualityScore, sampleCount: 1, avgGenSeconds: genSeconds },
     })
   }
+}
+
+export interface LearnedPolicy {
+  contentType: string
+  modelId: string
+  winRate: number
+  sampleCount: number
+}
+
+/** Past win-rates per content type. Empty table → no personalization. */
+export async function learnPolicy(_userId?: string): Promise<LearnedPolicy[]> {
+  const rows = await db.routingPolicy.findMany()
+  return rows.map((row) => ({
+    contentType: row.contentType,
+    modelId: row.model,
+    winRate: row.successRate,
+    sampleCount: row.sampleCount,
+  }))
 }
 
 // The model that has actually performed best for a content type, once there is

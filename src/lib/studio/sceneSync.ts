@@ -1,11 +1,11 @@
 import { db } from '@/lib/db'
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 import { buildChainForScene, groupIntoScenes } from '@/lib/orchestration/chainBuilder'
 import type { DAGNode, StructuredShot } from '@/lib/orchestration/types'
-import { MODEL_COSTS } from '@/lib/routing/engineRegistry'
+import { calculateGenerationCost } from '@/lib/credits'
 
 function estimateShotCost(model: string, durationSec: number): number {
-  const rate = MODEL_COSTS[model] ?? 5
-  return Math.max(1, Math.ceil((durationSec / 5) * rate))
+  return calculateGenerationCost(model, durationSec)
 }
 
 /** Upsert StudioScene + StudioClip rows from a breakdown shot list. */
@@ -45,7 +45,7 @@ export async function syncScenesFromShots(
     const chain = buildChainForScene(
       scene,
       selectedModels,
-      new Map(scene.shots.map((s) => [s.shotIndex, dagByShot.get(s.shotIndex)?.assignedModel ?? 'wan-2.6'])),
+      new Map(scene.shots.map((s) => [s.shotIndex, dagByShot.get(s.shotIndex)?.assignedModel ?? refuseSilentModelSwap(`shot ${s.shotIndex}`, 'wan-2.7')])),
       undefined,
       scene.sceneNumber === 1,
     )
@@ -59,10 +59,12 @@ export async function syncScenesFromShots(
         where: { sceneId_clipNumber: { sceneId: row.id, clipNumber: i + 1 } },
         select: {
           modelOverride: true,
+          cameraSource: true,
           status: true,
           videoUrl: true,
           lastFrame: true,
           manualVideo: true,
+          moneyShot: true,
         },
       })
 
@@ -70,9 +72,24 @@ export async function syncScenesFromShots(
         existing?.modelOverride ??
         clipMeta?.assignedModel ??
         node?.assignedModel ??
-        'wan-2.6'
+        'wan-2.7'
       const estimatedCost = node?.estimatedCost ?? estimateShotCost(assignedModel, shot.duration)
+      const purpose = shot.purpose ?? null
+      const delegationReason = node?.reason ?? shot.delegationReason ?? null
+      const delegatedMode = shot.delegatedMode ?? null
+      const moneyShot = existing?.moneyShot || shot.moneyShot || false
 
+      const cameraLocked = existing?.cameraSource === 'manual' || existing?.cameraSource === 'ai_then_manual'
+      const camera = {
+        cameraAngle: shot.cameraAngle ?? null,
+        cameraMove: shot.cameraMove || null,
+        shotSize: shot.shotSize ?? null,
+        lensFeel: shot.lensFeel ?? null,
+        cameraSpeed: shot.cameraSpeed ?? null,
+        cameraPrecision: shot.cameraPrecision ?? false,
+        cameraSource: 'ai',
+      }
+      const boundary = (shot.transition ?? { kind: 'cut' }) as unknown as import('@/generated/prisma/client').Prisma.InputJsonValue
       const isLocked =
         existing?.status === 'COMPLETED' ||
         existing?.status === 'MANUAL' ||
@@ -89,9 +106,15 @@ export async function syncScenesFromShots(
           keyframeUrl: shot.storyboardUrl,
           scriptBeatId: shot.scriptBeatId,
           assignedModel,
+          purpose,
+          delegationReason,
+          delegatedMode,
+          moneyShot,
           anchorPolicy: clipMeta?.anchorPolicy ?? 'previous-frame',
+          boundary,
           estimatedCost,
           status: 'PENDING',
+          ...camera,
         },
         update: {
           prompt: shot.visualPrompt,
@@ -100,8 +123,14 @@ export async function syncScenesFromShots(
           keyframeUrl: shot.storyboardUrl,
           scriptBeatId: shot.scriptBeatId,
           assignedModel,
+          purpose,
+          delegationReason,
+          delegatedMode,
+          moneyShot,
           anchorPolicy: clipMeta?.anchorPolicy ?? 'previous-frame',
+          boundary,
           estimatedCost,
+          ...(cameraLocked ? {} : camera),
           ...(isLocked
             ? {
                 videoUrl: existing?.videoUrl ?? null,

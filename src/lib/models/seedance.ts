@@ -1,4 +1,5 @@
-import { runFal, extractVideoUrl, fal } from '@/lib/fal/client'
+import { runFal, extractVideoUrl, fal, falQueueBound} from '@/lib/fal/client'
+const falQueueOps = falQueueBound('lib.models.seedance')
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
 const FAL_MODEL = 'bytedance/seedance-2.0/text-to-video'
@@ -37,17 +38,19 @@ export async function generateVideo(
 
 export async function pollStatus(requestId: string): Promise<GenerateVideoOutput> {
   try {
-    const status = await fal.queue.status(FAL_MODEL, { requestId, logs: false }) as { status: string }
+    const status = await falQueueOps.status(FAL_MODEL, { requestId, logs: false }) as { status: string }
     if (status.status !== 'COMPLETED') {
       if (status.status === 'FAILED') {
         return { jobId: requestId, status: 'failed', error: 'Seedance generation failed' }
       }
       return { jobId: requestId, status: 'processing' }
     }
-    const result = await fal.queue.result(FAL_MODEL, { requestId }) as { data: unknown }
+    const result = await falQueueOps.result(FAL_MODEL, { requestId }) as { data: unknown }
     const videoUrl = extractVideoUrl(result.data)
     return { jobId: requestId, status: 'complete', videoUrl }
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/models/seedance.ts:51", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return { jobId: requestId, status: 'processing' }
   }
 }

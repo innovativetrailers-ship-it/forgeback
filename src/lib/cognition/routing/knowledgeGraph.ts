@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 // Relational craft rules — multi-hop creative reasoning that complements the
 // vector semantic memory ("noir → low-key lighting → high-contrast grade").
 
@@ -22,7 +23,7 @@ export async function seedKnowledgeGraph(): Promise<void> {
       where: { subject_relation_object: { subject: r.subject, relation: r.relation, object: r.object } },
       update: {},
       create: { ...r, confidence: 0.8, source: 'seeded' },
-    }).catch(() => {})
+    }).catch((err) => logCaught('lib/cognition/routing/knowledgeGraph', err))
   }
 }
 
@@ -57,5 +58,5 @@ export async function reinforceRule(subject: string, object: string): Promise<vo
     where: { subject_relation_object: { subject, relation: 'pairs_with', object } },
     update: { reinforceCount: { increment: 1 }, confidence: { increment: 0.05 } },
     create: { subject, relation: 'pairs_with', object, confidence: 0.6, source: 'learned' },
-  }).catch(() => {})
+  }).catch((err) => logCaught('lib/cognition/routing/knowledgeGraph', err))
 }

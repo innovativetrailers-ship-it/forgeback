@@ -1,4 +1,7 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falQueueBound} from '../fal/client'
+import { buildPayload } from '@/lib/fal/videoPayloads'
+const falQueueOps = falQueueBound('lib.models.svd')
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
 export async function generateVideo(
@@ -12,14 +15,18 @@ export async function generateVideo(
     request_id: string
   }
 
-  const result = await fal.queue.submit('fal-ai/stable-video-diffusion', {
-    input: {
+  const built = await buildPayload(falEndpoint('stable-video-diffusion'), 'svd', {
+    prompt: input.prompt || 'image to video',
+    duration: input.duration,
+    imageUrl: input.startFrameUrl,
+    seed: input.seed,
+    extraFields: {
       image_url: input.startFrameUrl,
       motion_bucket_id: Math.round((input.motionStrength ?? 0.5) * 255),
       fps: 7,
-      ...(input.seed !== undefined && { seed: input.seed }),
     },
-  }) as FalResult
+  })
+  const result = await falQueueOps.submit(falEndpoint('stable-video-diffusion'), { input: built }) as FalResult
 
   return { jobId: result.request_id, status: 'pending' }
 }
@@ -31,7 +38,7 @@ export async function pollStatus(
     status: string
   }
 
-  const status = await fal.queue.status('fal-ai/stable-video-diffusion', {
+  const status = await falQueueOps.status(falEndpoint('stable-video-diffusion'), {
     requestId: externalJobId,
     logs: false,
   }) as FalQueueStatus
@@ -40,7 +47,7 @@ export async function pollStatus(
     interface FalQueueResult {
       video?: { url: string }
     }
-    const result = await fal.queue.result('fal-ai/stable-video-diffusion', {
+    const result = await falQueueOps.result(falEndpoint('stable-video-diffusion'), {
       requestId: externalJobId,
     }) as FalQueueResult
 

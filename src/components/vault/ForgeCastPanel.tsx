@@ -59,7 +59,9 @@ export const ForgeCastPanel = ({
       const data = (await res.json()) as FCCCharacterView
       setCharacter(data)
       setBehavioral(data.behavioralPrompt ?? '')
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/vault/ForgeCastPanel.tsx:62", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       toast.error('Could not load character DNA')
     } finally {
       setLoading(false)
@@ -82,6 +84,8 @@ export const ForgeCastPanel = ({
       if (!res.ok) throw new Error(data.error ?? 'Update failed')
       setCharacter(data)
     } catch (e) {
+      console.warn("[caught] src/components/vault/ForgeCastPanel.tsx:84", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       toast.error(e instanceof Error ? e.message : 'Appearance update failed')
     } finally {
       setBusy(false)
@@ -96,6 +100,8 @@ export const ForgeCastPanel = ({
       setCharacter((await res.json()) as FCCCharacterView)
       toast.success('Character DNA ingested')
     } catch (e) {
+      console.warn("[caught] src/components/vault/ForgeCastPanel.tsx:98", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       toast.error(e instanceof Error ? e.message : 'Ingest failed')
     } finally {
       setBusy(false)
@@ -110,6 +116,8 @@ export const ForgeCastPanel = ({
       setCharacter((await res.json()) as FCCCharacterView)
       toast.success('Appearance baked to reference')
     } catch (e) {
+      console.warn("[caught] src/components/vault/ForgeCastPanel.tsx:112", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       toast.error(e instanceof Error ? e.message : 'Bake failed')
     } finally {
       setBusy(false)
@@ -128,6 +136,8 @@ export const ForgeCastPanel = ({
       setCharacter((await res.json()) as FCCCharacterView)
       toast.success('Persona saved')
     } catch (e) {
+      console.warn("[caught] src/components/vault/ForgeCastPanel.tsx:130", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       toast.error(e instanceof Error ? e.message : 'Save failed')
     } finally {
       setBusy(false)
@@ -146,6 +156,8 @@ export const ForgeCastPanel = ({
       if (!res.ok) throw new Error(data.error ?? 'Plan failed')
       setPlan(data)
     } catch (e) {
+      console.warn("[caught] src/components/vault/ForgeCastPanel.tsx:148", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       toast.error(e instanceof Error ? e.message : 'Choreography failed')
     } finally {
       setBusy(false)
@@ -166,6 +178,8 @@ export const ForgeCastPanel = ({
       setOutputUrl(data.videoUrl ?? null)
       toast.success('Mocap complete')
     } catch (e) {
+      console.warn("[caught] src/components/vault/ForgeCastPanel.tsx:168", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       toast.error(e instanceof Error ? e.message : 'Mocap failed')
     } finally {
       setBusy(false)
@@ -186,6 +200,8 @@ export const ForgeCastPanel = ({
       setOutputUrl(data.videoUrl ?? null)
       toast.success('Anime transform complete')
     } catch (e) {
+      console.warn("[caught] src/components/vault/ForgeCastPanel.tsx:188", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       toast.error(e instanceof Error ? e.message : 'Anime failed')
     } finally {
       setBusy(false)
@@ -206,6 +222,8 @@ export const ForgeCastPanel = ({
       setOutputUrl(data.videoUrl ?? null)
       toast.success('Roto composite complete')
     } catch (e) {
+      console.warn("[caught] src/components/vault/ForgeCastPanel.tsx:208", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       toast.error(e instanceof Error ? e.message : 'Roto failed')
     } finally {
       setBusy(false)
@@ -226,6 +244,8 @@ export const ForgeCastPanel = ({
       setWardrobePrompt('')
       toast.success('Wardrobe applied')
     } catch (e) {
+      console.warn("[caught] src/components/vault/ForgeCastPanel.tsx:228", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       toast.error(e instanceof Error ? e.message : 'Wardrobe failed')
     } finally {
       setBusy(false)
@@ -310,7 +330,10 @@ export const ForgeCastPanel = ({
                         setCharacter(data)
                         toast.success('Video ingested')
                       })
-                      .catch((e) => toast.error(e instanceof Error ? e.message : 'Video ingest failed'))
+                      .catch((e) => {
+                        console.warn("[caught] src/components/vault/ForgeCastPanel.tsx:333", e instanceof Error ? { name: e.name, message: e.message } : e)
+                        return (toast.error(e instanceof Error ? e.message : 'Video ingest failed'))
+                      })
                       .finally(() => setBusy(false))
                   }}
                   className="w-full rounded border border-[var(--border-subtle)] py-1.5 text-[11px] disabled:opacity-40"
@@ -346,7 +369,10 @@ export const ForgeCastPanel = ({
                         setCharacter(data)
                         toast.success('Sketch ingested')
                       })
-                      .catch((e) => toast.error(e instanceof Error ? e.message : 'Sketch ingest failed'))
+                      .catch((e) => {
+                        console.warn("[caught] src/components/vault/ForgeCastPanel.tsx:369", e instanceof Error ? { name: e.name, message: e.message } : e)
+                        return (toast.error(e instanceof Error ? e.message : 'Sketch ingest failed'))
+                      })
                       .finally(() => setBusy(false))
                   }}
                   className="w-full rounded border border-[var(--border-subtle)] py-1.5 text-[11px] disabled:opacity-40"

@@ -28,6 +28,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'series_bible_generation')
   } catch (err) {
+    console.warn("[caught] src/app/api/series/create/route.ts:30", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -69,6 +71,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ series, bible, committed: true }, { status: 201 })
   } catch (err) {
+    console.warn("[caught] src/app/api/series/create/route.ts:71", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     await refundOperationCredits(userId, 'series_bible_generation')
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Generation failed' }, { status: 500 })
   }

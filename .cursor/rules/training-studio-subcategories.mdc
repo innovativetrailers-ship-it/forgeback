@@ -1,0 +1,11 @@
+---
+description: SPEC-TRAINING-STUDIO-SUBCATEGORIES. Read before changing Training Studio tabs, genre presets, domain import, or rights consent gates.
+globs: ["src/lib/vault/**", "src/components/simple/CharacterPanel.tsx"]
+alwaysApply: false
+---
+
+# Training Studio subcategories
+
+Contract: `docs/spec-references/SPEC-TRAINING-STUDIO-SUBCATEGORIES.md`. Inherits TR-00. Do not build import/presets until the user feeds TR-05.
+
+Four tabs: Characters (lead/supporting/creature/ensemble), Assets (vehicle/prop/product/set piece — separate from people), Styles (instant genre presets + optional StyleLora), Voices, plus Music/SFX. Instant presets cover movie/TV/anime/documentary/sport/racing. Import is domain-aware and requires own/licensed consent on movie/TV/anime. Genre names are style descriptors, not brand replicas. Deletion removes dataset + trained asset.

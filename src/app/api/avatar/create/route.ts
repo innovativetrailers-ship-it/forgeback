@@ -1,7 +1,9 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { checkAndDeductCredits } from '@/lib/credits'
-import { fal } from '@/lib/fal/client'
+import { fal, falSubscribeBound} from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('app.api.avatar.create.route')
 import { db } from '@/lib/db'
 
 export async function POST(req: NextRequest) {
@@ -22,7 +24,7 @@ export async function POST(req: NextRequest) {
   await checkAndDeductCredits(userId, 'avatar_create')
 
   try {
-    const result = await fal.subscribe('fal-ai/instant-character', {
+    const result = await falSubscribe(falEndpoint('instant-character'), {
       input: {
         image_url: imageUrl,
         prompt: `professional avatar portrait, ${style ?? 'realistic'} style, clean background`,

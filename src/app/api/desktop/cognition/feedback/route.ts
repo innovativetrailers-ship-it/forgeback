@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import { type NextRequest, NextResponse } from 'next/server'
 import { updateRoutingPolicy } from '@/lib/cognition/memory/procedural'
 import { validateDesktopCloudRequest } from '@/lib/desktop/cloudAuth'
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (reward == null) return NextResponse.json({ error: 'Unknown signal' }, { status: 400 })
 
   if (body.model && body.contentType) {
-    await updateRoutingPolicy(body.contentType, body.model, reward > 0 ? 0.8 : 0.3, 30).catch(() => {})
+    await updateRoutingPolicy(body.contentType, body.model, reward > 0 ? 0.8 : 0.3, 30).catch((err) => logCaught('app/api/desktop/cognition/feedback/route', err))
   }
 
   return NextResponse.json({ ok: true, reward })

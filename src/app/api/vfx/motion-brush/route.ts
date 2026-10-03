@@ -1,8 +1,10 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth }                       from '@/lib/auth'
 import { checkAndDeductCredits,
          refundCredits }              from '@/lib/credits'
-import { fal }                        from '@/lib/fal/client'
+import { fal, falSubscribeBound } from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('app.api.vfx.motion-brush.route')
 
 interface StrokeRegion {
   x:          number   // normalised 0-1
@@ -36,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // Use Kling image-to-video with motion control
-    const result = await fal.subscribe('fal-ai/kling-video/v1.6/pro/image-to-video', {
+    const result = await falSubscribe(falEndpoint('kling-video/v1.6/pro/image-to-video'), {
       input: {
         image_url: imageUrl,
         prompt:    prompt || 'cinematic motion, subtle camera movement',

@@ -39,6 +39,8 @@ export function CreditPurchaseModal() {
       if (!res.ok || !data.url) throw new Error(data.error ?? 'Payment failed')
       window.location.href = data.url
     } catch (err) {
+      console.warn("[caught] src/components/layout/CreditPurchaseModal.tsx:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError((err as Error).message)
     } finally {
       setLoading(null)

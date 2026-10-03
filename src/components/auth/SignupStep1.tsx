@@ -39,7 +39,9 @@ export function SignupStep1() {
       if (!res.ok) { setError(typeof data.error === 'string' ? data.error : 'Registration failed'); return }
       setUserId(data.user?.id ?? data.userId)
       setStep(2)
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/auth/SignupStep1.tsx:42", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError('Network error, please try again')
     } finally {
       setLoading(false)

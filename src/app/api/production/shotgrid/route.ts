@@ -33,7 +33,9 @@ export async function POST(req: NextRequest) {
   let body: ShotGridBody
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/production/shotgrid/route.ts:36", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -97,6 +99,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 })
     }
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/production/shotgrid/route.ts:99", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'ShotGrid operation failed'
     if (msg.includes('ECONNREFUSED') || msg.includes('fetch')) {
       return NextResponse.json(

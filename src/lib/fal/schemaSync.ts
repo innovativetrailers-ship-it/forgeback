@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 /**
  * Schema-sync engine — payloads self-correct from FAL OpenAPI constraints.
  */
@@ -8,10 +9,10 @@ import { getFalKey } from '@/lib/config/keys'
 import { db } from '@/lib/db'
 import { falLog } from '@/lib/fal/falQueue'
 import { probeEndpointExistence } from '@/lib/fal/registryProbe'
+import { AUDIO_TOGGLE_FIELDS, buildPayload as buildPayloadFromConstraints, durationEnumFromConstraint, familyDurationConstraint, logPayloadClamp, maxPromptCharsForEndpoint } from '@cinema/core'
 import { VIDEO_MODEL_REGISTRY } from '@/lib/models/registry'
 
 const CONSTRAINT_TTL_MS = 24 * 3600_000
-const RESOLUTION_RANK = ['480p', '580p', '720p', '1080p', '1440p', '2160p'] as const
 
 const CANDIDATE_FORBIDDEN = [
   'duration',
@@ -44,6 +45,7 @@ export interface ModelConstraints {
   enums: Record<string, (string | number)[]>
   types: Record<string, 'string' | 'number' | 'boolean'>
   properties: string[]
+  maxLengths?: Record<string, number>
   fetchedAt: number
   schemaHash: string
 }
@@ -58,6 +60,10 @@ export interface SchemaShotIntent {
   negativePrompt?: string
   quality?: string
   seed?: number
+  shotIndex?: number
+  characterLora?: import('@cinema/core').LoraAssetRef
+  styleLora?: import('@cinema/core').LoraAssetRef
+  audioLora?: import('@cinema/core').LoraAssetRef
 }
 
 type JsonSchema = {
@@ -65,18 +71,22 @@ type JsonSchema = {
   enum?: (string | number)[]
   properties?: Record<string, JsonSchema>
   required?: string[]
+  maxLength?: number
   $ref?: string
+}
+
+/** Schema maxLength wins. Kling and Wan fall back when a cached row has none. */
+export function promptCharLimit(
+  constraints: { maxLengths?: Record<string, number> } | null | undefined,
+  endpoint: string,
+): number | undefined {
+  const lengths = constraints?.maxLengths
+  const fromSchema = lengths?.prompt ?? lengths?.text ?? lengths?.prompt_text
+  return maxPromptCharsForEndpoint(endpoint, fromSchema)
 }
 
 function sha1(text: string): string {
   return createHash('sha1').update(text).digest('hex')
-}
-
-function normalizeResolution(value: string): string {
-  const v = value.trim().toLowerCase()
-  if (/^\d+p$/i.test(v)) return v
-  if (/^\d+k$/i.test(v)) return v.replace(/k$/i, 'p')
-  return v
 }
 
 function inputSchemaOf(openapi: Record<string, unknown>): JsonSchema {
@@ -120,12 +130,14 @@ export async function fetchConstraints(endpoint: string): Promise<ModelConstrain
   const props = input.properties ?? {}
   const enums: ModelConstraints['enums'] = {}
   const types: ModelConstraints['types'] = {}
+  const maxLengths: Record<string, number> = {}
 
   for (const [k, v] of Object.entries(props)) {
     if (v.enum?.length) enums[k] = v.enum
     if (v.type) {
       types[k] = v.type === 'integer' ? 'number' : (v.type as 'string' | 'boolean')
     }
+    if (typeof v.maxLength === 'number' && v.maxLength > 0) maxLengths[k] = v.maxLength
   }
 
   const known = new Set(Object.keys(props))
@@ -138,6 +150,7 @@ export async function fetchConstraints(endpoint: string): Promise<ModelConstrain
     enums,
     types,
     properties: [...known],
+    maxLengths,
     fetchedAt: Date.now(),
     schemaHash: sha1(JSON.stringify(input)),
   }
@@ -167,139 +180,74 @@ export async function upsertConstraints(constraints: ModelConstraints): Promise<
   })
 }
 
+function reconcileDuration(endpoint: string, constraints: ModelConstraints): ModelConstraints {
+  const constraint = familyDurationConstraint(endpoint)
+  if (!constraint) return constraints
+  return {
+    ...constraints,
+    enums: { ...constraints.enums, duration: durationEnumFromConstraint(constraint) },
+  }
+}
+
 export async function getConstraints(endpoint: string): Promise<ModelConstraints> {
   const row = await readStoredConstraints(endpoint)
-  if (row && Date.now() - row.fetchedAt < CONSTRAINT_TTL_MS) return row
+  if (row && Date.now() - row.fetchedAt < CONSTRAINT_TTL_MS) return reconcileDuration(endpoint, row)
 
-  const fresh = await fetchConstraints(endpoint).catch(() => row)
+  const fresh = await fetchConstraints(endpoint).catch((err) => {
+    console.warn("[caught] src/lib/fal/schemaSync.ts:196", err instanceof Error ? { name: err.name, message: err.message } : err)
+    return (row)
+  })
   if (fresh) await upsertConstraints(fresh)
   if (!fresh) throw new NoSchemaError(endpoint)
-  return fresh
+  return reconcileDuration(endpoint, fresh)
 }
 
 /** Bypass TTL — used after 422 validation or nightly drift refresh. */
 export async function forceRefreshConstraints(endpoint: string): Promise<ModelConstraints> {
   const fresh = await fetchConstraints(endpoint)
   await upsertConstraints(fresh)
-  return fresh
+  return reconcileDuration(endpoint, fresh)
 }
 
-function logClamp(field: string, want: unknown, picked: unknown, endpoint: string): void {
-  falLog('info', 'schema_clamp', { endpoint, field, want, picked })
-}
-
-function snapEnum(
-  field: string,
-  want: unknown,
-  allowed: (string | number)[],
-  endpoint: string,
-): string | number {
-  if (allowed.includes(want as string | number)) return want as string | number
-
-  if (typeof allowed[0] === 'number') {
-    const target = Number(want)
-    const picked = allowed.reduce((a, b) =>
-      Math.abs(Number(b) - target) < Math.abs(Number(a) - target) ? b : a,
-    )
-    logClamp(field, want, picked, endpoint)
-    return picked
-  }
-
-  const wi = RESOLUTION_RANK.indexOf(normalizeResolution(String(want)) as typeof RESOLUTION_RANK[number])
-  const allowedStr = allowed as string[]
-  const picked =
-    (wi >= 0
-      ? allowedStr
-          .filter((r) => {
-            const ri = RESOLUTION_RANK.indexOf(normalizeResolution(r) as typeof RESOLUTION_RANK[number])
-            return ri >= 0 && ri <= wi
-          })
-          .sort(
-            (a, b) =>
-              RESOLUTION_RANK.indexOf(normalizeResolution(b) as typeof RESOLUTION_RANK[number]) -
-              RESOLUTION_RANK.indexOf(normalizeResolution(a) as typeof RESOLUTION_RANK[number]),
-          )[0]
-      : undefined) ?? allowedStr[0]
-
-  logClamp(field, want, picked, endpoint)
-  return picked
-}
-
-function coerce(value: unknown, type: 'string' | 'number' | 'boolean'): unknown {
-  if (type === 'string') return String(value)
-  if (type === 'number') return Number(value)
-  if (type === 'boolean') return Boolean(value)
-  return value
-}
-
-function pickProperty(
-  candidates: string[],
-  properties: Set<string>,
-): string | undefined {
-  return candidates.find((k) => properties.has(k))
-}
-
-function mapQualityToResolution(quality?: string): string {
-  if (!quality) return '720p'
-  const q = quality.toLowerCase()
-  if (q === 'film' || q === 'film_grade' || q === 'cinematic' || q === '1080p') return '1080p'
-  return '720p'
-}
-
-export async function buildPayload(
+export async function assemblePayload(
   endpoint: string,
   shot: SchemaShotIntent,
 ): Promise<Record<string, unknown>> {
-  const C = await getConstraints(endpoint)
-  const props = new Set(C.properties)
-
-  const p: Record<string, unknown> = {}
-
-  const promptKey = pickProperty(['prompt', 'text', 'prompt_text'], props) ?? 'prompt'
-  p[promptKey] = shot.prompt.trim()
-
-  const durationKey = pickProperty(['duration', 'seconds', 'video_length'], props)
-  if (durationKey) p[durationKey] = shot.duration
-
-  const aspectKey = pickProperty(['aspect_ratio', 'ratio'], props)
-  if (aspectKey && shot.aspectRatio) p[aspectKey] = shot.aspectRatio
-
-  const resolutionKey = pickProperty(['resolution'], props)
-  if (resolutionKey) {
-    p[resolutionKey] = shot.resolution ?? mapQualityToResolution(shot.quality)
-  }
-
-  const imageUrl = shot.anchorUrl ?? shot.imageUrl
-  if (imageUrl) {
-    const imageKey = pickProperty(
-      ['image_url', 'image', 'init_image', 'start_image', 'start_image_url'],
-      props,
-    )
-    if (imageKey) p[imageKey] = imageUrl
-  }
-
-  if (shot.negativePrompt && props.has('negative_prompt')) {
-    p.negative_prompt = shot.negativePrompt
-  }
-  if (shot.seed !== undefined && props.has('seed')) {
-    p.seed = shot.seed
-  }
-
-  for (const [f, allowed] of Object.entries(C.enums)) {
-    if (f in p) p[f] = snapEnum(f, p[f], allowed, endpoint)
-  }
-
-  for (const [f, t] of Object.entries(C.types)) {
-    if (f in p && p[f] != null) p[f] = coerce(p[f], t)
-  }
-
-  for (const k of C.forbidden) delete p[k]
-
-  for (const k of C.required) {
-    if (p[k] == null) throw new PayloadError(`${endpoint} requires ${k}`)
-  }
-
-  return p
+  const stored = await getConstraints(endpoint)
+  const durationConstraint = familyDurationConstraint(endpoint) ?? undefined
+  const enums = { ...stored.enums }
+  if (durationConstraint) delete enums.duration
+  const audioField = AUDIO_TOGGLE_FIELDS.find((field) => stored.properties?.includes(field)) ?? null
+  const maxPromptChars = promptCharLimit(stored, endpoint)
+  return buildPayloadFromConstraints(endpoint, shot, {
+    endpoint: stored.endpoint,
+    required: stored.required,
+    forbidden: stored.forbidden,
+    enums,
+    types: stored.types,
+    audioField,
+    schemaHash: stored.schemaHash,
+    fetchedAt: stored.fetchedAt,
+    properties: stored.properties,
+    maxPromptChars,
+  }, {
+    onClamp: (field, want, picked, clampedEndpoint) => {
+      if (field === 'prompt') {
+        falLog('info', 'prompt_truncated', { endpoint, original: want, final: picked })
+        return
+      }
+      if (field === 'duration') {
+        logPayloadClamp(field, want, picked, clampedEndpoint || endpoint, shot.shotIndex)
+        return
+      }
+      falLog('info', 'schema_clamp', { endpoint, field, want, picked })
+    },
+    onAudioDisabled: (field) => {
+      falLog('info', 'audio_disabled', { endpoint, field, model: endpoint })
+    },
+    nativeAudio: endpoint.includes('grok-imagine-video'),
+    durationConstraint,
+  })
 }
 
 export interface DriftRow {
@@ -320,7 +268,7 @@ export async function endpointDrift(falKey?: string): Promise<DriftRow[]> {
 
   for (const entry of Object.values(VIDEO_MODEL_REGISTRY)) {
     if (entry.isExternal) continue
-    const endpoints = [entry.falEndpoint, entry.i2vEndpoint].filter(
+    const endpoints = [entry.falEndpoint, entry.i2vEndpoint, entry.referenceEndpoint].filter(
       (e): e is string => Boolean(e),
     )
     const seen = new Set<string>()
@@ -336,7 +284,9 @@ export async function endpointDrift(falKey?: string): Promise<DriftRow[]> {
       try {
         fresh = await fetchConstraints(endpoint)
         await upsertConstraints(fresh)
-      } catch {
+      } catch (err) {
+        console.warn("[caught] src/lib/fal/schemaSync.ts:284", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         fresh = null
       }
 
@@ -377,6 +327,6 @@ export async function refreshStaleConstraints(endpoints: string[]): Promise<void
   for (const endpoint of stale.filter((e): e is string => Boolean(e))) {
     fetchConstraints(endpoint)
       .then((c) => upsertConstraints(c))
-      .catch(() => {})
+      .catch((err) => logCaught('lib/fal/schemaSync', err))
   }
 }

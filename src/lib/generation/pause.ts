@@ -2,6 +2,8 @@
  * Global generation kill-switch — paused unless GENERATION_PAUSED=false.
  * Set GENERATION_PAUSED=false to allow shot/film generation.
  */
+
+import { generationPausedFromEnv } from '@cinema/core'
 export class GenerationPausedError extends Error {
   readonly code = 'GENERATION_PAUSED' as const
 
@@ -12,9 +14,7 @@ export class GenerationPausedError extends Error {
 }
 
 export function isGenerationPaused(): boolean {
-  const v = process.env.GENERATION_PAUSED
-  if (v === 'false' || v === '0' || v?.toLowerCase() === 'off') return false
-  return true
+  return generationPausedFromEnv(process.env.GENERATION_PAUSED)
 }
 
 /** Throws before any billable provider submit — single chokepoint helper. */

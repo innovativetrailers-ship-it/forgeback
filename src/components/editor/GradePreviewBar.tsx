@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { useEditorStore } from '@/store/editor'
+import { useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
 import type { ClipColourGrade } from '@/lib/timeline/schema'
 
 const W = 180
@@ -52,7 +53,7 @@ interface Props {
 }
 
 export function GradePreviewBar({ clipId }: Props) {
-  const recipe = useEditorStore((s) => s.recipe)
+  const recipe = useEditorRecipeView()
   const selectedClipId = useEditorStore((s) => s.selectedClipId)
 
   const effectiveClipId = clipId ?? selectedClipId

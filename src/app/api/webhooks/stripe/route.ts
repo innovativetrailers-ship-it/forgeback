@@ -5,6 +5,7 @@ import {
   STRIPE_PRICE_TO_TIER,
   SUBSCRIPTION_PLAN_CREDITS,
 } from '@/lib/payments/stripePrices'
+import { upsertSubscription } from '@/lib/entitlement/resolve'
 import type { SubscriptionTier } from '@/lib/access/tiers'
 
 export const runtime = 'nodejs'
@@ -209,6 +210,17 @@ export async function POST(req: Request) {
           },
         })
       }
+      if (stripeRecord && typeof sub.id === 'string') {
+        const plan = sub.metadata?.plan === 'desktop' ? 'desktop' : (tier ?? 'free')
+        await upsertSubscription({
+          userId: stripeRecord.userId,
+          providerSubId: sub.id,
+          providerCustomerId: customerId,
+          plan,
+          status: typeof sub.status === 'string' ? sub.status : 'expired',
+          currentPeriodEnd: typeof sub.current_period_end === 'number' ? new Date(sub.current_period_end * 1000) : null,
+        })
+      }
       break
     }
 
@@ -219,7 +231,14 @@ export async function POST(req: Request) {
       const stripeRecord = await db.stripeCustomer.findUnique({
         where: { stripeCustomerId: customerId },
       })
-      if (stripeRecord) {
+      if (stripeRecord && typeof sub.id === 'string') {
+        await upsertSubscription({
+          userId: stripeRecord.userId,
+          providerSubId: sub.id,
+          plan: 'free',
+          status: 'canceled',
+          currentPeriodEnd: null,
+        })
         await db.user.update({
           where: { id: stripeRecord.userId },
           data:  { subscriptionStatus: 'canceled' },

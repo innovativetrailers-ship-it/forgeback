@@ -6,6 +6,26 @@ import bcrypt from 'bcryptjs'
 import { db } from './db'
 import { authSecret, requiredEnv } from './auth/requiredEnv'
 
+async function refreshGoogleAccessToken(refreshToken: string): Promise<{ accessToken: string; expiresAt: number } | null> {
+  const clientId = process.env.GOOGLE_CLIENT_ID
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+  if (!clientId || !clientSecret) return null
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    }),
+  })
+  if (!res.ok) return null
+  const data = await res.json() as { access_token?: string; expires_in?: number }
+  if (!data.access_token) return null
+  return { accessToken: data.access_token, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 }
+}
+
 const isBuildTime =
   process.env.NEXT_PHASE === 'phase-production-build' ||
   process.env.NEXT_PHASE === 'phase-export'
@@ -28,6 +48,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         : {
             clientId:     requiredEnv('GOOGLE_CLIENT_ID'),
             clientSecret: requiredEnv('GOOGLE_CLIENT_SECRET'),
+            authorization: {
+              params: {
+                access_type: 'offline',
+                prompt: 'consent',
+              },
+            },
           },
     ),
     Credentials({
@@ -78,6 +104,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user, account, profile }) {
       console.log('[auth] jwt callback:', { hasUser: !!user, hasAccount: !!account })
       try {
+        if (account?.refresh_token) token.refreshToken = account.refresh_token
+        if (account?.access_token) token.accessToken = account.access_token
+        if (account?.expires_at) token.accessExpires = account.expires_at * 1000
+        const refreshToken = typeof token.refreshToken === 'string' ? token.refreshToken : ''
+        const accessExpires = typeof token.accessExpires === 'number' ? token.accessExpires : 0
+        if (refreshToken && accessExpires && Date.now() > accessExpires - 60_000) {
+          const refreshed = await refreshGoogleAccessToken(refreshToken)
+          if (refreshed) {
+            token.accessToken = refreshed.accessToken
+            token.accessExpires = refreshed.expiresAt
+          } else {
+            console.warn('[auth] Google access token was not refreshed. The session stays.')
+          }
+        }
         if (user) {
           token.id                 = user.id
           token.role               = (user as any).role

@@ -19,6 +19,8 @@ export async function POST(request: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'foley_generate')
   } catch (err) {
+    console.warn("[caught] src/app/api/audio/foley/route.ts:21", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 

@@ -24,7 +24,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   try {
     body = (await req.json()) as typeof body
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/llm/route.ts:27", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -42,7 +44,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     await deductCredits(db, userId, cost, `LLM: ${model}`)
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/llm/route.ts:45", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json(
       { error: `Insufficient credits. ${model} costs ${cost} credits.` },
       { status: 402 },

@@ -2,6 +2,7 @@
  * fal.ai account health — zero-cost queue probes before paid orchestration.
  */
 
+import { falEndpoint } from '@cinema/core/endpoints'
 import { getFalKey } from '@/lib/config/keys'
 import { isFalLockDetail, probeEndpoint, type ProbeResult } from '@/lib/fal/probeEndpoint'
 
@@ -20,9 +21,9 @@ const LOCK_RE = /user is locked|exhausted balance/i
 
 /** Endpoints exercised by AI Director defaults + storyboard keyframes. */
 export const FAL_HEALTH_PROBE_ENDPOINTS = [
-  'fal-ai/gemini-25-flash-image',
-  'fal-ai/veo3',
-  'fal-ai/kling-video/v3/pro/text-to-video',
+  falEndpoint('gemini-25-flash-image'),
+  falEndpoint('veo3'),
+  falEndpoint('kling-video/v3/pro/text-to-video'),
   'bytedance/seedance-2.0/text-to-video',
 ] as const
 

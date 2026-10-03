@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { signedPlaybackUrl } from '@/lib/storage/persistMedia'
+import { mediaMissMessage, resolveOwnedMedia, signedUrlForStoredKey } from '@/lib/media/resolveStoredMedia'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,13 +31,14 @@ export async function GET(
     return NextResponse.json({ error: 'Video not ready' }, { status: 404 })
   }
 
-  const playbackUrl = await signedPlaybackUrl(jobId, userId, job.outputUrl)
-  if (!playbackUrl) {
+  const resolved = await resolveOwnedMedia(jobId, userId)
+  const key = resolved.reason === 'ok' ? resolved.key : null
+  const playbackUrl = key ? await signedUrlForStoredKey(key) : null
+  if (!playbackUrl || !key) {
+    const reason = key ? 'object_missing' : resolved.reason
+    console.warn('[media_resolve_miss]', JSON.stringify({ id: jobId, key, reason }))
     return NextResponse.json(
-      {
-        error: 'Video unavailable',
-        hint: 'The provider link expired before it was archived. Regenerate this clip.',
-      },
+      { error: mediaMissMessage(jobId, { ...resolved, key, reason }) },
       { status: 404 },
     )
   }

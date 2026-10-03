@@ -1,4 +1,5 @@
-import { getOpenRouterClient } from '../brain/openai-client'
+import { llmCall } from '@/lib/llm/anthropicClient'
+import { isGenerationPausedError } from '@/lib/generation/pause'
 
 export interface QualityReport {
   score: number
@@ -16,9 +17,10 @@ export async function inspectGeneratedClip(params: {
   const frameUrl = await extractMiddleFrame(params.videoUrl)
 
   try {
-    const response = await getOpenRouterClient().chat.completions.create({
+    const response = await llmCall({
       model: 'google/gemini-1.5-pro',
-      max_tokens: 500,
+      maxTokens: 500,
+      source: 'quality.inspect',
       messages: [
         {
           role: 'user',
@@ -33,7 +35,7 @@ export async function inspectGeneratedClip(params: {
       ],
     })
 
-    const raw = response.choices[0]?.message?.content ?? ''
+    const raw = response.content
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
     if (!jsonMatch) throw new Error('No JSON in response')
 
@@ -51,8 +53,9 @@ export async function inspectGeneratedClip(params: {
       repaintRecommended: result.repaintRecommended ?? false,
       repaintRegions: [],
     }
-  } catch {
-    return { score: 7, passed: true, issues: [], repaintRecommended: false, repaintRegions: [] }
+  } catch (err) {
+    if (isGenerationPausedError(err)) throw err
+    return { score: 0, passed: false, issues: ['Quality inspection missed'], repaintRecommended: false, repaintRegions: [] }
   }
 }
 

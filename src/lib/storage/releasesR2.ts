@@ -37,7 +37,9 @@ export async function releaseObjectExists(key: string): Promise<boolean> {
   try {
     await releasesR2.send(new HeadObjectCommand({ Bucket: RELEASES_BUCKET, Key: key }))
     return true
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/storage/releasesR2.ts:40", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return false
   }
 }

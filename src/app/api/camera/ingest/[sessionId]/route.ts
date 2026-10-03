@@ -24,7 +24,9 @@ export async function POST(
     const ab = await req.arrayBuffer()
     if (ab.byteLength === 0) return NextResponse.json({ error: 'Empty chunk' }, { status: 400 })
     bodyBuffer = Buffer.from(ab)
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/camera/ingest/[sessionId]/route.ts:27", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Failed to read body' }, { status: 400 })
   }
 

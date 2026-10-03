@@ -25,6 +25,8 @@ export async function POST(request: NextRequest) {
   try {
     await checkAndDeductCredits(userId, costKey)
   } catch (err) {
+    console.warn("[caught] src/app/api/timeline/render/route.ts:27", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 

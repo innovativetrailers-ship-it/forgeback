@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import Redis, { type RedisOptions } from 'ioredis'
 
 export const CINEMA_KEY_PREFIX = 'cinema:'
@@ -170,9 +171,9 @@ export const bullMQPrefix = CINEMA_KEY_PREFIX
 if (!isBuildTime) {
   const shutdown = async () => {
     await Promise.all([
-      globalForRedis.redis?.quit().catch(() => {}),
-      globalForRedis.bullmqRedis?.quit().catch(() => {}),
-      globalForRedis.queueConnection?.quit().catch(() => {}),
+      globalForRedis.redis?.quit().catch((err) => logCaught('lib/redis', err)),
+      globalForRedis.bullmqRedis?.quit().catch((err) => logCaught('lib/redis', err)),
+      globalForRedis.queueConnection?.quit().catch((err) => logCaught('lib/redis', err)),
     ])
     globalForRedis.redis = undefined
     globalForRedis.bullmqRedis = undefined

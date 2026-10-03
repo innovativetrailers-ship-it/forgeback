@@ -36,6 +36,8 @@ export function SpatialVideoPanel() {
       setClipData(data.clipData as SpatialClipData)
       setPhase('detected')
     } catch (e: unknown) {
+      console.warn("[caught] src/components/editor/SpatialVideoPanel.tsx:38", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       setError(e instanceof Error ? e.message : 'Network error')
       setPhase('error')
     }
@@ -56,6 +58,8 @@ export function SpatialVideoPanel() {
       setExportUrl(data.mvhevcUrl as string)
       setPhase('done')
     } catch (e: unknown) {
+      console.warn("[caught] src/components/editor/SpatialVideoPanel.tsx:58", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       setError(e instanceof Error ? e.message : 'Network error')
       setPhase('error')
     }

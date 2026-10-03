@@ -1,0 +1,42 @@
+---
+description: Cinematic Forge target architecture — spine, state ownership, chokepoints, model pool, V3 flagship. Overlay corrections apply when this disagrees with the repo.
+alwaysApply: true
+---
+
+# Forge architecture (target)
+
+Full text: `docs/spec-references/cinematic-forge-architecture.md`. Reality deltas: `docs/spec-references/spec-reconciliation-overlay.md`. Layer contracts: `spec-1` through `spec-6` in that same folder, called by the names in `INDEX-and-feed-list.md`.
+
+## One rule
+
+Every seam has a typed interface, one writer, and one chokepoint for paid or external I/O. No seam ships without that.
+
+## State ownership
+
+- Shot status, `videoUrl`, `lastFrame`: worker only. `videoUrl` is the R2/origin URL. Raw CDN URL is `sourceProviderUrl` / `rawVideoUrl`.
+- `selectedModelId`: director UI only. Dispatch reads it and never substitutes. `assertModelIntegrity` at submit.
+- Timeline clips: ONE store. Target is `usePlaybackStore.recipe`. Today Simple still uses `useTimelineStore` — that split is unmet (build-1). Do not add a third store.
+- `reconcileTimeline(shots)` on load and on shots refetch. DB is truth; events are an optimization.
+- Model constraints: schema-sync writes, `buildPayload` reads.
+
+## Pipeline
+
+Stages 0–7 each keep their interface when the implementation is thin. v1 is a thin slice of the full spine, not a wide feature pass. Video models stay silent (`generate_audio: false`, including Veo). ElevenLabs + Suno are the sound path.
+
+## v1 model pool (truthful ids only)
+
+Gemini Omni Flash 1.1 (primary quality t2v), Veo 3.1 (4K / long takes), Kling 3.0, Seedance 2.0, Runway Gen-4.5, Grok Imagine, PixVerse C1, LTX-2.3-Fast. Do not route `skyreels-v3`, `pixverse-v6`, or shared Hunyuan aliases as if they were distinct models.
+
+## Six chokepoints (sole path)
+
+`providerSubmit` / `submitToFal`, `claudeCall`, `mirrorToR2`, schema-sync `buildPayload`, single timeline store, `reconcileTimeline`. Bypasses (`models/runway.ts`, `models/grokVideo.ts`, `MediaRouter`, raw `queue.fal.run`, direct `messages.create`) are defects, not alternate APIs.
+
+## Hosts
+
+V3 desktop (`cinematic-forge-v3`) is the flagship. V2 web is the same spine with `heavy` / `desktop-only` capabilities unmounted. No capability is implemented twice. Spine calls a host adapter (`saveShot`, `enqueue`, `mediaUrl`); it does not branch on web vs desktop.
+
+Today there is NO `@cinema/core` package — web Postgres/`StudioClip` and desktop SQLite `clips`/`characters` differ. That extraction is unmet target work (build-2), not current structure.
+
+## Intelligence
+
+Cognitive Director, memory tables, and `performance.ts` already exist. Finish and connect them. Do not rebuild spec-3 from zero. `performance.ts` becomes the router only when `modelOverride` is false. The probe battery (`probe-battery.ts`, `intelligence-cron`) stays triple-gated and off unless the user explicitly runs an eval.

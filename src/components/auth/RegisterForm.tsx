@@ -79,7 +79,9 @@ export function RegisterForm() {
         router.push('/simple')
         router.refresh()
       }
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/auth/RegisterForm.tsx:82", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       toast.error('Something went wrong. Please try again.')
     } finally {
       setLoading(false)

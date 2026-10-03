@@ -68,7 +68,9 @@ export function ADRRecorder({ clipId, onTakeSelected }: Props) {
           setIsRecording(true)
         }
       }, 1000)
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/audio/ADRRecorder.tsx:71", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError('Microphone access denied. Please allow microphone access and try again.')
     }
   }, [clipId])

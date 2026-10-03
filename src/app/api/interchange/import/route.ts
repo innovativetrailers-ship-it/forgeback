@@ -10,7 +10,9 @@ export async function POST(req: NextRequest) {
   let formData: FormData
   try {
     formData = await req.formData()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/interchange/import/route.ts:13", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Expected multipart form data' }, { status: 400 })
   }
 
@@ -30,6 +32,8 @@ export async function POST(req: NextRequest) {
     const recipe = await importTimeline(file, file.name)
     return NextResponse.json(recipe)
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/interchange/import/route.ts:32", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Import failed'
     // If OTIO service is unavailable, surface a clear message
     if (msg.includes('fetch') || msg.includes('ECONNREFUSED')) {

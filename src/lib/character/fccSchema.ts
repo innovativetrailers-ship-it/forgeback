@@ -141,7 +141,9 @@ export function deserializeFCC(raw: string): FCCCharacter | null {
     const parsed = JSON.parse(raw) as StoredFCC
     if (parsed?.v === 1 && parsed.data?.id) return parsed.data
     return null
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/character/fccSchema.ts:144", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return null
   }
 }

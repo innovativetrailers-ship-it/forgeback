@@ -1,3 +1,4 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { runFal } from './client'
 
 export async function generateProxyDraft(
@@ -16,7 +17,7 @@ export async function generateProxyDraft(
     '21:9': 'landscape_16_9',
   }
 
-  const result = await runFal<FluxResult>('fal-ai/flux/schnell', {
+  const result = await runFal<FluxResult>(falEndpoint('flux/schnell'), {
     prompt,
     image_size: (sizeMap[aspectRatio] ?? 'landscape_16_9') as 'landscape_16_9' | 'portrait_16_9' | 'square' | 'landscape_4_3',
     num_inference_steps: 4,

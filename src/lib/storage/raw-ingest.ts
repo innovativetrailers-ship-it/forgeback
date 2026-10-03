@@ -92,7 +92,9 @@ export async function ingestRAWFile(filePath: string): Promise<{
         metadata.make = probe.format.tags['com.apple.quicktime.make']
         metadata.model = probe.format.tags['com.apple.quicktime.model']
       }
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/storage/raw-ingest.ts:95", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // Probe failed — use defaults
     }
 

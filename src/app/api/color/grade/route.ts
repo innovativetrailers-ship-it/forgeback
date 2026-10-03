@@ -28,7 +28,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let raw: unknown
-  try { raw = await req.json() } catch {
+  try { raw = await req.json() } catch (err) {
+    console.warn("[caught] src/app/api/color/grade/route.ts:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -37,7 +39,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     await checkAndDeductCredits(userId, CREDIT_OP, CREDIT_COST, 'AI Colour Grade suggestion')
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/color/grade/route.ts:40", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json(
       { error: `Insufficient credits. AI colour grading costs ${CREDIT_COST} credits.` },
       { status: 402 },
@@ -62,7 +66,9 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let raw: unknown
-  try { raw = await req.json() } catch {
+  try { raw = await req.json() } catch (err) {
+    console.warn("[caught] src/app/api/color/grade/route.ts:65", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 

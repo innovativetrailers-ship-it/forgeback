@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { nanoid } from 'nanoid'
+import { db } from '@/lib/db'
+import { ensureMainFolder, ensureSceneFolder } from '@/lib/library/folders'
+import { isLibraryKind } from '@/lib/library/model'
 
 const MAX_SIZE = 100 * 1024 * 1024 // 100MB
 
@@ -20,5 +23,28 @@ export async function POST(request: NextRequest) {
   const key = `uploads/${userId}/audio/${nanoid()}.${ext}`
 
   const url = await uploadToR2(buffer, key, file.type)
-  return NextResponse.json({ url })
+  const libraryKind = String(formData.get('library') ?? '')
+  const projectId = String(formData.get('projectId') ?? '')
+  if (!isLibraryKind(libraryKind) || !projectId) {
+    return NextResponse.json({ url })
+  }
+  const sceneId = String(formData.get('sceneId') ?? '')
+  const folder = sceneId
+    ? await ensureSceneFolder(projectId, sceneId, String(formData.get('sceneName') ?? 'Scene'))
+    : await ensureMainFolder(projectId)
+  const id = nanoid()
+  await db.asset.create({
+    data: {
+      id,
+      ownerId: userId,
+      kind: 'asset',
+      sourceRefs: [key],
+      mediaKind: libraryKind,
+      label: file.name,
+      folderId: folder.id,
+      contentType: file.type,
+      usableAsReference: false,
+    },
+  })
+  return NextResponse.json({ url, id, mediaPath: `/api/media/${id}`, folderId: folder.id, kind: libraryKind })
 }

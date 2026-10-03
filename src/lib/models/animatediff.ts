@@ -1,4 +1,7 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falQueueBound} from '../fal/client'
+import { buildPayload } from '@/lib/fal/videoPayloads'
+const falQueueOps = falQueueBound('lib.models.animatediff')
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
 export async function generateVideo(
@@ -8,17 +11,20 @@ export async function generateVideo(
     request_id: string
   }
 
-  const result = await fal.queue.submit('fal-ai/animatediff-v2v', {
-    input: {
-      prompt: input.prompt,
-      ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
-      ...(input.startFrameUrl && { video_url: input.startFrameUrl }),
+  const built = await buildPayload(falEndpoint('animatediff-v2v'), 'animatediff', {
+    prompt: input.prompt,
+    duration: input.duration,
+    negativePrompt: input.negativePrompt,
+    imageUrl: input.startFrameUrl,
+    seed: input.seed,
+    extraFields: {
       num_frames: Math.round(input.duration * 8),
       motion_bucket_id: Math.round((input.motionStrength ?? 0.5) * 127),
       fps: 8,
-      ...(input.seed !== undefined && { seed: input.seed }),
+      ...(input.startFrameUrl ? { video_url: input.startFrameUrl } : {}),
     },
-  }) as FalResult
+  })
+  const result = await falQueueOps.submit(falEndpoint('animatediff-v2v'), { input: built }) as FalResult
 
   return { jobId: result.request_id, status: 'pending' }
 }
@@ -30,7 +36,7 @@ export async function pollStatus(
     status: string
   }
 
-  const status = await fal.queue.status('fal-ai/animatediff-v2v', {
+  const status = await falQueueOps.status(falEndpoint('animatediff-v2v'), {
     requestId: externalJobId,
     logs: false,
   }) as FalQueueStatus
@@ -39,7 +45,7 @@ export async function pollStatus(
     interface FalResult {
       video?: { url: string }
     }
-    const result = await fal.queue.result('fal-ai/animatediff-v2v', {
+    const result = await falQueueOps.result(falEndpoint('animatediff-v2v'), {
       requestId: externalJobId,
     }) as FalResult
 

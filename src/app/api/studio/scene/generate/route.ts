@@ -75,7 +75,9 @@ export async function POST(req: NextRequest) {
       mode: body.mode,
       source: 'manual',
     })
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/studio/scene/generate/route.ts:78", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Render queue unavailable' }, { status: 503 })
   }
 

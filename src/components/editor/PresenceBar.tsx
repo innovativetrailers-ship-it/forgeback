@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
-import { useEditorStore } from '@/store/editor'
+import { usePlaybackStore } from '@/store/playbackStore'
 import { useCollabStore } from '@/store/collabStore'
 import type { PresenceState } from '@/lib/collab/presence'
 
@@ -11,7 +11,7 @@ const PUSH_INTERVAL_MS = 2000
 
 export function PresenceBar({ projectId }: { projectId: string }) {
   const { data: session } = useSession()
-  const playheadTime = useEditorStore((s) => s.playheadTime)
+  const playheadTime = usePlaybackStore((s) => s.playheadTime)
   const { peers, setPeers, ownPlayheadTime, setOwnPlayheadTime } = useCollabStore()
   const lastPushedTime = useRef<number>(-1)
   const pushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -23,7 +23,9 @@ export function PresenceBar({ projectId }: { projectId: string }) {
       const data = (await res.json()) as { presence: PresenceState[] }
       const myId = session?.user?.id
       setPeers(data.presence.filter((p) => p.userId !== myId))
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/editor/PresenceBar.tsx:26", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // silently ignore network errors for presence
     }
   }, [projectId, session?.user?.id, setPeers])
@@ -41,7 +43,9 @@ export function PresenceBar({ projectId }: { projectId: string }) {
           playheadTime: time,
         }),
       })
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/editor/PresenceBar.tsx:44", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // silently ignore
     }
   }, [projectId, session])

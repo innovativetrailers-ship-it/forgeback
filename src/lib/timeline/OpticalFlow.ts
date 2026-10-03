@@ -5,7 +5,9 @@
  * intermediate frames for smooth results.
  * Speed-up (speedFactor ≥ 1): FFmpeg PTS manipulation via BullMQ.
  */
-import { fal } from '@/lib/fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('lib.timeline.OpticalFlow')
 import { randomUUID } from 'crypto'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { renderQueue } from '@/lib/queue'
@@ -65,7 +67,7 @@ export async function retimeClip(params: RetimeParams): Promise<RetimeResult> {
   // Slow-motion path: fal.ai frame interpolation
   try {
     const multiplier = Math.round(1 / speedFactor)
-    const result: unknown = await fal.subscribe('fal-ai/film/interpolation', {
+    const result: unknown = await falSubscribe(falEndpoint('film/interpolation'), {
       input: { video_url: clipUrl, multiplier, output_fps: outputFramerate },
       pollInterval: 2000,
     })

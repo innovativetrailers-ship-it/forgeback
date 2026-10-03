@@ -81,6 +81,7 @@ export function TextToVideoTab({ onGenerated, creditBalance, userRole }: Props) 
           message?: string
           outputUrl?: string
           error?: string
+          userMessage?: string
         }
 
         if (data.status === 'complete' && data.outputUrl) {
@@ -95,7 +96,8 @@ export function TextToVideoTab({ onGenerated, creditBalance, userRole }: Props) 
           onGenerated({
             ...activeClip,
             status: 'failed',
-            error: data.error ?? 'Generation failed',
+            error: data.userMessage ?? data.error ?? 'Generation failed',
+            userMessage: data.userMessage,
           })
           sse.close()
         } else {
@@ -103,7 +105,8 @@ export function TextToVideoTab({ onGenerated, creditBalance, userRole }: Props) 
             ...activeClip,
             status: 'processing',
             progress: data.progress ?? 0,
-            progressMessage: data.message,
+            progressMessage: data.userMessage ?? data.message,
+            userMessage: data.userMessage,
           })
         }
       }
@@ -112,6 +115,8 @@ export function TextToVideoTab({ onGenerated, creditBalance, userRole }: Props) 
       // the DB-polling stream rather than marking the clip failed.
       sse.onerror = () => {}
     } catch (err) {
+      console.warn("[caught] src/components/simple/TextToVideoTab.tsx:114", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       onGenerated({ ...baseClip, status: 'failed', error: (err as Error).message })
     } finally {
       setIsLoading(false)

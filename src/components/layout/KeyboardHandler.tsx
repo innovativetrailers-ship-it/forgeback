@@ -2,10 +2,13 @@
 
 import { useEffect, useCallback } from 'react'
 import { useEditorStore } from '@/store/editor'
+import { toEditorTimelineRecipe, useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
+import { usePlaybackStore } from '@/store/playbackStore'
 import { useUIStore } from '@/store/ui'
 
 async function saveProject() {
-  const { recipe } = useEditorStore.getState()
+  const stored = usePlaybackStore.getState().recipe
+  const recipe = stored ? toEditorTimelineRecipe(stored) : null
   if (!recipe) return
   try {
     await fetch(`/api/projects/${recipe.projectId}/save`, {
@@ -14,7 +17,9 @@ async function saveProject() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ recipe }),
     })
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/components/layout/KeyboardHandler.tsx:20", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     // non-fatal
   }
 }
@@ -26,9 +31,10 @@ async function saveProject() {
 export function KeyboardHandler() {
   const { setActiveTool, togglePanel, activePanel } = useUIStore()
   const {
-    selectedClipId, playheadTime, recipe, isPlaying,
+    selectedClipId, playheadTime, isPlaying,
     setIsPlaying, setPlayheadTime, splitClip, removeClip, openRepaintModal,
   } = useEditorStore()
+  const recipe = useEditorRecipeView()
 
   const totalDuration = recipe?.totalDuration ?? 0
   const fps = recipe?.fps ?? 24

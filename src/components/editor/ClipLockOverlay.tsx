@@ -28,7 +28,9 @@ export function ClipLockOverlay({ clipId, projectId }: Props) {
       const holder = data.locks[clipId] ?? null
       setLockedBy(holder)
       setMyLock(holder === myUserId)
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn("[caught] src/components/editor/ClipLockOverlay.tsx:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore */ }
   }, [projectId, clipId, myUserId])
 
   useEffect(() => {

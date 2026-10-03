@@ -1,0 +1,13 @@
+---
+description: SPEC-01 generation and camera controls. Read before changing prompt, duration, frames, camera intent, native audio, or Draft/Studio/Blockbuster.
+globs: ["src/lib/models/**", "src/lib/jobs/processShotGenerateJob.ts", "src/components/ultimate/AwaitingDirectionCard.tsx", "src/components/ultimate/TopBar.tsx", "cinematic-forge-v3/src/renderer/components/generate/**"]
+alwaysApply: false
+---
+
+# SPEC-01 — Generation and camera
+
+Contract: `docs/spec-references/SPEC-01-generation-camera.md`. Inherits SPEC-00. Do not build from it until the user feeds this spec.
+
+Camera intent is a structured object, rendered into the prompt. Payload enums come from the live schema.
+
+Tier 1 lies, leave them until this spec is fed: the native-audio sentence does not change silence; Draft/Studio/Blockbuster is not read by generation.

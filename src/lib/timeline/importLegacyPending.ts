@@ -1,7 +1,7 @@
 import type { GeneratedClip } from '@/components/simple/types'
 import { jobPlaybackPath } from '@/lib/media/jobPlayback'
 import { probeDuration } from '@/lib/timeline/probeDuration'
-import { useTimelineStore } from '@/store/timeline'
+import { usePlaybackStore } from '@/store/playbackStore'
 
 const LEGACY_KEY = 'cinema:timeline:pending'
 
@@ -15,11 +15,13 @@ export async function importLegacyPendingClips(): Promise<number> {
   let pending: GeneratedClip[] = []
   try {
     pending = JSON.parse(raw) as GeneratedClip[]
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/timeline/importLegacyPending.ts:18", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return 0
   }
 
-  const addClip = useTimelineStore.getState().addClip
+  const addClip = usePlaybackStore.getState().addClip
   let count = 0
 
   for (const clip of pending) {

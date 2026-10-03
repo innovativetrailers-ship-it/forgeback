@@ -1,5 +1,7 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { createHash, randomUUID } from 'node:crypto'
-import { fal } from '@/lib/fal/client'
+import { fal, falSubscribeBound} from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('lib.character.apparel')
 import type { FCCCharacter, WardrobeItem, WardrobeRegion } from './fccSchema'
 
 function extractImageUrl(data: unknown): string | null {
@@ -29,7 +31,7 @@ export async function applyGarment(
 
   let garmentUrl = garmentImageUrl
   if (!garmentUrl) {
-    const gen = await fal.subscribe('fal-ai/flux/dev', {
+    const gen = await falSubscribe(falEndpoint('flux/dev'), {
       input: {
         prompt: `isolated ${region} garment on white background: ${prompt}`,
         image_size: 'square',
@@ -40,7 +42,7 @@ export async function applyGarment(
     if (!garmentUrl) throw new Error('Could not generate garment reference.')
   }
 
-  const tryOn = await fal.subscribe('fal-ai/catvton', {
+  const tryOn = await falSubscribe(falEndpoint('catvton'), {
     input: {
       human_image_url: character.refFront,
       garment_image_url: garmentUrl,

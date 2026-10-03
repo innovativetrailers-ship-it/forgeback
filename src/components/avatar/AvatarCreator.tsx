@@ -23,6 +23,8 @@ export function AvatarCreator({ onCreated }: AvatarCreatorProps) {
       if (!res.ok || !data.url) throw new Error(data.error ?? 'Upload failed')
       setPhotoUrl(data.url)
     } catch (err) {
+      console.warn("[caught] src/components/avatar/AvatarCreator.tsx:25", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
       setIsUploading(false)
@@ -45,6 +47,8 @@ export function AvatarCreator({ onCreated }: AvatarCreatorProps) {
       }
       onCreated()
     } catch (err) {
+      console.warn("[caught] src/components/avatar/AvatarCreator.tsx:47", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError(err instanceof Error ? err.message : 'Create failed')
     } finally {
       setIsCreating(false)

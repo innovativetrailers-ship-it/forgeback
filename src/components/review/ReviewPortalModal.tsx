@@ -23,7 +23,9 @@ export function ReviewPortalModal({ projectId, projectTitle }: ReviewPortalModal
   const open = activeModal === 'reviewPortal'
 
   const [title, setTitle] = useState(projectTitle ?? 'Client review')
-  const [expiresInDays, setExpiresInDays] = useState(14)
+  const [expiry, setExpiry] = useState<'24h' | '7d' | '30d' | 'never'>('7d')
+  const [pin, setPin] = useState('')
+  const [watermarkName, setWatermarkName] = useState('')
   const [allowDownload, setAllowDownload] = useState(false)
   const [links, setLinks] = useState<ReviewLinkRow[]>([])
   const [creating, setCreating] = useState(false)
@@ -34,7 +36,10 @@ export function ReviewPortalModal({ projectId, projectTitle }: ReviewPortalModal
     void fetch(`/api/review/create?projectId=${encodeURIComponent(projectId)}`)
       .then((r) => r.json())
       .then((data: { links?: ReviewLinkRow[] }) => setLinks(data.links ?? []))
-      .catch(() => setLinks([]))
+      .catch((err) => {
+        console.warn("[caught] src/components/review/ReviewPortalModal.tsx:37", err instanceof Error ? { name: err.name, message: err.message } : err)
+        return (setLinks([]))
+      })
   }, [open, projectId])
 
   async function createLink() {
@@ -43,7 +48,7 @@ export function ReviewPortalModal({ projectId, projectTitle }: ReviewPortalModal
       const res = await fetch('/api/review/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, title, expiresInDays, allowDownload }),
+        body: JSON.stringify({ projectId, title, expiry, pin, watermarkName, allowDownload }),
       })
       const data = (await res.json()) as { reviewUrl?: string; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Failed to create link')
@@ -53,6 +58,8 @@ export function ReviewPortalModal({ projectId, projectTitle }: ReviewPortalModal
       )
       setLinks((list as { links?: ReviewLinkRow[] }).links ?? [])
     } catch (err) {
+      console.warn("[caught] src/components/review/ReviewPortalModal.tsx:55", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       alert((err as Error).message)
     } finally {
       setCreating(false)
@@ -83,17 +90,35 @@ export function ReviewPortalModal({ projectId, projectTitle }: ReviewPortalModal
               className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-teal-400"
             />
           </div>
-          <div className="flex gap-4">
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Client name on the watermark</label>
+            <input
+              value={watermarkName}
+              onChange={(e) => setWatermarkName(e.target.value)}
+              className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">PIN</label>
+            <input
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm outline-none"
+              autoComplete="off"
+            />
+          </div>
             <div className="flex-1">
-              <label className="text-xs text-gray-400 block mb-1">Expires (days)</label>
-              <input
-                type="number"
-                min={1}
-                max={90}
-                value={expiresInDays}
-                onChange={(e) => setExpiresInDays(Number(e.target.value))}
-                className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-teal-400"
-              />
+              <label className="text-xs text-gray-400 block mb-1">Expires</label>
+              <select
+                value={expiry}
+                onChange={(e) => setExpiry(e.target.value as '24h' | '7d' | '30d' | 'never')}
+                className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm outline-none"
+              >
+                <option value="24h">24 hours</option>
+                <option value="7d">7 days</option>
+                <option value="30d">30 days</option>
+                <option value="never">Never</option>
+              </select>
             </div>
             <label className="flex items-end gap-2 text-sm pb-2 cursor-pointer">
               <input
@@ -103,7 +128,6 @@ export function ReviewPortalModal({ projectId, projectTitle }: ReviewPortalModal
               />
               Allow download
             </label>
-          </div>
 
           <button
             type="button"

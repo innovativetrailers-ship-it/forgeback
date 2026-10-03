@@ -1,3 +1,4 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { runFal } from './client'
 
 export interface FaceEmbedding {
@@ -13,7 +14,7 @@ export async function extractFaceEmbedding(imageUrl: string): Promise<FaceEmbedd
   }
 
   try {
-    const result = await runFal<FaceIdResult>('fal-ai/ip-adapter-face-id', {
+    const result = await runFal<FaceIdResult>(falEndpoint('ip-adapter-face-id'), {
       prompt: 'portrait photograph, neutral expression, studio lighting',
       face_image_url: imageUrl,
       num_samples: 1,
@@ -23,7 +24,9 @@ export async function extractFaceEmbedding(imageUrl: string): Promise<FaceEmbedd
       embedding: result.embedding ?? result.face_embedding ?? [],
       boundingBox: result.bbox,
     }
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/fal/character.ts:26", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return { embedding: [] }
   }
 }
@@ -34,7 +37,7 @@ export async function restoreFaceCharacter(imageUrl: string): Promise<string> {
     images?: Array<{ url: string }>
   }
 
-  const result = await runFal<CodeformerResult>('fal-ai/codeformer', {
+  const result = await runFal<CodeformerResult>(falEndpoint('codeformer'), {
     image_url: imageUrl,
     fidelity: 0.7,
   })
@@ -75,10 +78,9 @@ export async function extractCharacterFeatures(imageUrls: string[]): Promise<{
   skinTone: string
 }> {
   try {
-    const { default: Anthropic } = await import('@anthropic-ai/sdk')
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const { claudeCall, claudeText } = await import('@/lib/llm/anthropicClient')
 
-    const response = await client.messages.create({
+    const response = await claudeCall({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 500,
       messages: [
@@ -96,9 +98,9 @@ export async function extractCharacterFeatures(imageUrls: string[]): Promise<{
           ],
         },
       ],
-    })
+    }, { source: 'character.describe' })
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '{}'
+    const text = claudeText(response) || '{}'
     const parsed = JSON.parse(text) as { hairColor?: string; skinTone?: string }
 
     return {
@@ -107,7 +109,9 @@ export async function extractCharacterFeatures(imageUrls: string[]): Promise<{
       hairColor: parsed.hairColor ?? 'unknown',
       skinTone: parsed.skinTone ?? 'unknown',
     }
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/fal/character.ts:109", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return { faceEmbedding: [], dominantColors: [], hairColor: 'unknown', skinTone: 'unknown' }
   }
 }

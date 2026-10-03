@@ -63,7 +63,9 @@ Return JSON: { "approved": boolean, "reason": "string", "dataset": "routing|qual
             approved: true,
           },
         },
-      }).catch(() => { /* table may not exist yet */ })
+      }).catch((err) => {
+        console.warn("[caught] src/workers/quality-gate.ts:66", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* table may not exist yet */ })
 
       console.log(`[quality-gate] Signal ${signalId} APPROVED for ${parsed.dataset} dataset`)
     } else {

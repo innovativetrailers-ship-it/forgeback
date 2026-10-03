@@ -57,7 +57,9 @@ export async function POST(req: NextRequest) {
   let body: Record<string, unknown>
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/plugin/route.ts:60", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 

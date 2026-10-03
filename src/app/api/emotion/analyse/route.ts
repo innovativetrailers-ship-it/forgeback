@@ -18,7 +18,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let raw: unknown
-  try { raw = await req.json() } catch {
+  try { raw = await req.json() } catch (err) {
+    console.warn("[caught] src/app/api/emotion/analyse/route.ts:21", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -34,7 +36,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     await checkAndDeductCredits(userId, 'emotion_analysis_per_project', CREDIT_COST, 'Emotion Lattice analysis')
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/emotion/analyse/route.ts:37", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: `Insufficient credits. Analysis costs ${CREDIT_COST} credits.` }, { status: 402 })
   }
 

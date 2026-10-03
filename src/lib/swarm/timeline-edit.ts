@@ -1,3 +1,4 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { runModel1 } from '../brain/model1'
 import { EDIT_ANALYST_PROMPT, ART_DIRECTOR_PROMPT, QA_INSPECTOR_PROMPT } from './brain-prompts'
 import { SwarmRouter } from './SwarmRouter'
@@ -78,7 +79,7 @@ export async function executeTimelineEdit(req: TimelineEditRequest): Promise<{
   // 5. Optional CodeFormer face pass
   let finalRepaintedUrl = repaintedUrl
   if (analysis.requires_face_enhance) {
-    const enhanced = await runFal('fal-ai/codeformer', { image_url: repaintedUrl, fidelity: 0.75 }) as { image?: { url: string } }
+    const enhanced = await runFal(falEndpoint('codeformer'), { image_url: repaintedUrl, fidelity: 0.75 }) as { image?: { url: string } }
     finalRepaintedUrl = enhanced.image?.url ?? repaintedUrl
   }
 
@@ -174,7 +175,9 @@ async function extractFrame(videoUrl: string, timestamp: number): Promise<string
   const { extractVideoFrame } = await import('@/lib/fal/frameExtract')
   try {
     return await extractVideoFrame(videoUrl, { timestamp })
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/swarm/timeline-edit.ts:177", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return videoUrl
   }
 }

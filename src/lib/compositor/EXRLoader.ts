@@ -25,7 +25,10 @@ export async function loadEXRFromFile(file: File): Promise<EXRData> {
     body: formData,
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+    const err = await res.json().catch((err) => {
+      console.warn("[caught] src/lib/compositor/EXRLoader.ts:28", err instanceof Error ? { name: err.name, message: err.message } : err)
+      return (({ error: res.statusText }))
+    }) as { error?: string }
     throw new Error(`EXR parse failed: ${err.error ?? res.statusText}`)
   }
   return res.json() as Promise<EXRData>
@@ -38,7 +41,10 @@ export async function loadEXRFromURL(url: string): Promise<EXRData> {
     body: JSON.stringify({ url }),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+    const err = await res.json().catch((err) => {
+      console.warn("[caught] src/lib/compositor/EXRLoader.ts:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+      return (({ error: res.statusText }))
+    }) as { error?: string }
     throw new Error(`EXR parse failed: ${err.error ?? res.statusText}`)
   }
   return res.json() as Promise<EXRData>
@@ -77,7 +83,9 @@ export async function checkEXRHealth(): Promise<boolean> {
   try {
     const res = await fetch(`${EXR_SERVICE}/health`, { signal: AbortSignal.timeout(3000) })
     return res.ok
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/compositor/EXRLoader.ts:80", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return false
   }
 }

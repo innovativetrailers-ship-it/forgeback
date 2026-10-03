@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import dns from 'node:dns'
 import net from 'node:net'
 import { PrismaClient } from '../generated/prisma/client'
@@ -55,7 +56,7 @@ if (!isBuildTime && process.env.NODE_ENV !== 'production') {
 // Ensure clean shutdown to prevent "Connection is closed" on process exit.
 if (!isBuildTime) {
   const shutdown = async () => {
-    await db.$disconnect().catch(() => {})
+    await db.$disconnect().catch((err) => logCaught('lib/db', err))
   }
   process.on('beforeExit', shutdown)
   process.on('SIGINT', shutdown)

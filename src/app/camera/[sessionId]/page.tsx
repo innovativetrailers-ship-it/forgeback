@@ -59,7 +59,9 @@ export default function CameraPage() {
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setChunks((prev) => prev.map((c) => c.index === index ? { ...c, state: 'done' } : c))
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/app/camera/[sessionId]/page.tsx:62", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setChunks((prev) => prev.map((c) => c.index === index ? { ...c, state: 'error' } : c))
     }
   }, [sessionId, userId])
@@ -92,6 +94,8 @@ export default function CameraPage() {
       setChunks([])
       setRecordingState('recording')
     } catch (e: unknown) {
+      console.warn("[caught] src/app/camera/[sessionId]/page.tsx:94", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       if (e instanceof DOMException && e.name === 'NotAllowedError') {
         setPermissionDenied(true)
       } else {
@@ -113,7 +117,9 @@ export default function CameraPage() {
         method: 'POST',
         headers: { 'x-user-id': userId },
       })
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn("[caught] src/app/camera/[sessionId]/page.tsx:116", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore */ }
     setRecordingState('done')
   }, [userId, sessionId])
 

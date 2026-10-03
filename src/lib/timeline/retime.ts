@@ -1,4 +1,6 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '../fal/client'
+const falSubscribe = falSubscribeBound('lib.timeline.retime')
 import { uploadToR2 } from '../storage/r2'
 import { execSync } from 'child_process'
 import { existsSync, mkdirSync, rmSync } from 'fs'
@@ -33,7 +35,7 @@ export async function opticalFlowRetime(params: {
 
     if (quality === 'full') {
       // Use fal.ai FILM frame interpolation for high quality
-      const result = await fal.subscribe('fal-ai/film-video-frame-interpolation', {
+      const result = await falSubscribe(falEndpoint('film-video-frame-interpolation'), {
         input: { video_url: inputUrl, target_fps: targetFps },
       }) as unknown as { video: { url: string } }
       retimedUrl = result.video.url
@@ -78,7 +80,7 @@ export async function morphCut(params: {
     )
 
     // Use FILM interpolation across the overlap
-    const morphResult = await fal.subscribe('fal-ai/film-video-frame-interpolation', {
+    const morphResult = await falSubscribe(falEndpoint('film-video-frame-interpolation'), {
       input: {
         video_url: tailPath,
         reference_video_url: headPath,

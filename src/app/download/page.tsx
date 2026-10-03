@@ -25,7 +25,7 @@ const BLOG_FEATURES = [
   {
     icon: <Film className="w-5 h-5" />,
     title: 'Professional NLE — Replaces Adobe Premiere Pro',
-    desc: 'Full non-linear editor with unlimited tracks, multicam, proxy workflows, and frame-accurate cutting on ProRes, BRAW, RED, ARRI, MXF, HEVC, and AV1.',
+    desc: 'Full non-linear editor with unlimited tracks and proxy workflows. Import decodes MP4, MOV, WebM, MXF, HEVC, and AV1.',
   },
   {
     icon: <Palette className="w-5 h-5" />,
@@ -35,7 +35,7 @@ const BLOG_FEATURES = [
   {
     icon: <Layers className="w-5 h-5" />,
     title: 'Full VFX Compositing — Replaces After Effects',
-    desc: '28 blend modes, AI roto, planar tracking, 200+ pre-rendered ProRes 4444 effects, and AI text-to-VFX generation.',
+    desc: '28 blend modes, AI roto, planar tracking, 6 wired grade effects, and AI text-to-VFX generation.',
   },
   {
     icon: <Music className="w-5 h-5" />,

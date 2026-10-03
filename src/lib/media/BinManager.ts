@@ -6,7 +6,7 @@
  */
 
 import { db } from '../db'
-import Anthropic from '@anthropic-ai/sdk'
+import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
 
 export interface BinClip {
   id: string
@@ -148,13 +148,12 @@ export async function findClips(query: string, projectId: string): Promise<BinCl
   }
 
   // Fall back to AI semantic search
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
   const clipSummaries = allClips.map(c => ({
     id: c.id,
     summary: `name: ${c.name}, tags: ${(c.tags ?? []).join(',')}, model: ${c.modelUsed ?? 'unknown'}`,
   }))
 
-  const response = await client.messages.create({
+  const response = await claudeCall({
     model: 'claude-haiku-4-5',
     max_tokens: 512,
     messages: [
@@ -163,15 +162,17 @@ export async function findClips(query: string, projectId: string): Promise<BinCl
         content: `Find clips matching the query "${query}" from this list. Return ONLY a JSON array of matching IDs.\nClips:\n${clipSummaries.map(c => `${c.id}: ${c.summary}`).join('\n')}`,
       },
     ],
-  })
+  }, { source: 'media.bin' })
 
   try {
-    const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
+    const text = claudeText(response) || '[]'
     const jsonMatch = text.match(/\[[\s\S]*\]/)
     const matchedIds = jsonMatch ? (JSON.parse(jsonMatch[0]) as string[]) : []
     const matchedClips = allClips.filter(c => matchedIds.includes(c.id))
     return matchedClips.map(normaliseBinClip)
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/media/BinManager.ts:173", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return []
   }
 }
@@ -187,9 +188,7 @@ export async function autoOrganiseBins(projectId: string): Promise<{ created: nu
 
   if (allClips.length === 0) return { created: 0, moved: 0 }
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
-
-  const response = await client.messages.create({
+  const response = await claudeCall({
     model: 'claude-haiku-4-5',
     max_tokens: 2048,
     system: 'You are a film editor organising media bins. Analyse clips and group them into logical bins by scene, character, or camera angle. Return JSON only.',
@@ -202,9 +201,9 @@ Clips:
 ${allClips.map(c => `${c.id}: ${c.name} | tags: ${(c.tags ?? []).join(',')} | model: ${c.modelUsed ?? 'unknown'}`).join('\n')}`,
       },
     ],
-  })
+  }, { source: 'media.bin' })
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '{}'
+  const text = claudeText(response) || '{}'
   const jsonMatch = text.match(/\{[\s\S]*\}/)
   if (!jsonMatch) return { created: 0, moved: 0 }
 

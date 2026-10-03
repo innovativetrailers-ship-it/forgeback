@@ -1,0 +1,25 @@
+---
+description: Workflow-parity index WF-00. One WF per session. Phase 2 after MP + OR + moat demo. Do not start a WF until the user feeds that prompt.
+alwaysApply: true
+---
+
+# Workflow parity (WF-00)
+
+Full text: `docs/spec-references/WF-00-INDEX.md`. Contracts: `SPEC-A2-project-context-ingestion.md`, `SPEC-A3-playbooks.md`, `SPEC-A1-realtime-collaboration.md`. On-demand rules: `workflow-a2-project-context-ingestion`, `workflow-a3-playbooks`, `workflow-a1-realtime-collaboration`.
+
+A WF is the only permission to change ingestion, playbooks, or realtime collaboration. Feed one WF per session. WF-01 (ingestion) and WF-02 (playbooks) and WF-03 (collaboration) have been fed. `spec-reconciliation-overlay.md` still wins on conflict. This queue does not replace build-0 through build-6, BP-01 through BP-13, MP-01 through MP-15, TR-01 through TR-06, or OR-01 through OR-06, and it does not lift `GENERATION_PAUSED`.
+
+## Order
+
+Phase 2 (parity vs InVideo Agent Two), after the core generation pipeline (MP-01..12), the orchestrator (OR-01..06), and the moat-proof narrative demo. WF-01 context ingestion (A2) first — it feeds the orchestrator. WF-02 playbooks (A3). WF-03 realtime collaboration (A1) last — heaviest; needs the canonical store (FIX-K) and BP-02 idempotency.
+
+## Every WF inherits
+
+1. Paid understand/generate calls go through `providerSubmit` / `submitToFal` / `claudeCall`, pause-aware, with `source`. Uploaded content is the user's. Honour consent and deletion.
+2. The canonical store is the one timeline store (`playbackStore.recipe`). Collaboration syncs it. Ingestion links to it. Playbooks default into it. Do not add another copy.
+3. Additive `migrate deploy` only. Never `migrate dev`. Never reset.
+4. Wire into the named dependencies (orchestrator OR-01/02/03/06, RAG, VaultCharacter / Training Studio, ForgeReview, BP-02). Stop and report if the repo shape differs from the spec assumption.
+5. A playbook or collab role cannot disable safety, billing, pause, or honest flagging. Manual model choice is never silently replaced.
+6. Shared logic lives in `@cinema/core`. Note the other host.
+
+On a paid-API task, run `node scripts/check-chokepoints.mjs` and report it. Do not touch files outside the fed prompt.

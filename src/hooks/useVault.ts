@@ -9,7 +9,7 @@ export function useVault(projectId: string | null) {
   const { data: characters, isLoading } = useQuery<VaultCharacter[]>({
     queryKey: ['vault', 'characters', projectId],
     queryFn: async () => {
-      const res = await fetch(`/api/vault/character/list?projectId=${projectId}`)
+      const res = await fetch(`/api/vault/character/list?projectId=${projectId}`, { credentials: 'include' })
       if (!res.ok) throw new Error('Failed to fetch characters')
       return res.json() as Promise<VaultCharacter[]>
     },

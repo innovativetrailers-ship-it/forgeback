@@ -26,7 +26,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       take: 100,
     })
     return NextResponse.json({ assets })
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/sfx/assets/route.ts:29", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     // Graceful fallback — return built-in asset catalog
     const builtIn = BUILT_IN_ASSETS
       .filter((a) => !category || a.category === category)
@@ -50,6 +52,4 @@ const BUILT_IN_ASSETS = [
   { id: 'sfx-scifi-01',     name: 'Laser Beam',       category: 'sci-fi',   url: '', previewUrl: null, blendMode: 'add',     tags: ['laser', 'sci-fi'] },
   { id: 'sfx-scifi-02',     name: 'Energy Shield',    category: 'sci-fi',   url: '', previewUrl: null, blendMode: 'add',     tags: ['shield', 'sci-fi'] },
   { id: 'sfx-scifi-03',     name: 'Hologram Glitch',  category: 'sci-fi',   url: '', previewUrl: null, blendMode: 'screen',  tags: ['hologram', 'glitch'] },
-  { id: 'sfx-lens-01',      name: 'Lens Flare Anam',  category: 'lens',     url: '', previewUrl: null, blendMode: 'screen',  tags: ['lens', 'flare'] },
-  { id: 'sfx-lens-02',      name: 'Light Leak Film',  category: 'lens',     url: '', previewUrl: null, blendMode: 'screen',  tags: ['lens', 'leak'] },
 ]

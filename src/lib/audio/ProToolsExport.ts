@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 /**
  * Pro Tools & professional DAW audio delivery.
  * Handles BWF with SMPTE timecode, stem rendering, OMF, and Pro Tools session XML.
@@ -79,8 +80,8 @@ export async function exportBWF(params: BWFParams): Promise<string> {
   const key = `pro_tools/bwf_${nanoid()}.wav`
   const url = await uploadToR2(fileBuffer, key, 'audio/wav')
 
-  await fs.unlink(inputPath).catch(() => {})
-  await fs.unlink(outputPath).catch(() => {})
+  await fs.unlink(inputPath).catch((err) => logCaught('lib/audio/ProToolsExport', err))
+  await fs.unlink(outputPath).catch((err) => logCaught('lib/audio/ProToolsExport', err))
   return url
 }
 
@@ -134,7 +135,7 @@ export async function renderStemPackage(params: StemRenderParams): Promise<StemP
     const fileBuffer = await fs.readFile(outputPath)
     const key = `pro_tools/stems/${label}_${nanoid()}.wav`
     const url = await uploadToR2(fileBuffer, key, 'audio/wav')
-    await fs.unlink(outputPath).catch(() => {})
+    await fs.unlink(outputPath).catch((err) => logCaught('lib/audio/ProToolsExport', err))
     return url
   }
 
@@ -258,7 +259,7 @@ export async function exportOMF(params: {
   const fileBuffer = await fs.readFile(outputPath)
   const key = `pro_tools/omf_${nanoid()}.omf`
   const url = await uploadToR2(fileBuffer, key, 'application/octet-stream')
-  await fs.unlink(outputPath).catch(() => {})
+  await fs.unlink(outputPath).catch((err) => logCaught('lib/audio/ProToolsExport', err))
   return url
 }
 

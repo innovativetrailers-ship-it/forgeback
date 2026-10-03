@@ -1,12 +1,13 @@
 import { runFal, extractImageUrl, IMAGE_FAL_TIMEOUT_MS } from '@/lib/fal/client'
+import { buildImagePayload, IMAGE_MODELS, imageModelForUse, type ImageUse } from '@cinema/core'
 
 export { IMAGE_FAL_TIMEOUT_MS } from '@/lib/fal/client'
 
 export type ImageQuality = 'reference' | 'production'
 
-const MODEL_BY_QUALITY: Record<ImageQuality, string> = {
-  reference:  'fal-ai/gemini-25-flash-image',
-  production: 'fal-ai/gemini-3-pro-image-preview',
+export function imageModelForQuality(quality: ImageQuality, hasRefs = false): string {
+  const use: ImageUse = quality === 'production' ? 'location' : 'keyframe'
+  return IMAGE_MODELS[imageModelForUse(use, hasRefs)].endpoint
 }
 
 export async function generateImage(
@@ -14,29 +15,35 @@ export async function generateImage(
   options?: {
     quality?:      ImageQuality
     aspectRatio?:  string
+    resolution?:   string
     numImages?:    number
     refImageUrl?:  string
     referenceImageUrl?: string
+    imageUrls?:    string[]
+    seed?:         number
     onPoll?:       () => void | Promise<void>
     timeoutMs?:    number
   },
 ): Promise<string[]> {
-  const quality     = options?.quality     ?? 'reference'
-  const aspectRatio = options?.aspectRatio ?? '16:9'
-  const numImages   = options?.numImages   ?? 1
-  const refUrl      = options?.refImageUrl ?? options?.referenceImageUrl
-
-  const input: Record<string, unknown> = {
+  const quality = options?.quality ?? 'reference'
+  const use: ImageUse = quality === 'production' ? 'location' : 'keyframe'
+  const refs = [
+    ...(options?.imageUrls ?? []),
+    options?.refImageUrl,
+    options?.referenceImageUrl,
+  ].filter((url): url is string => Boolean(url?.trim()))
+  const { endpoint, input } = buildImagePayload({
+    model: imageModelForUse(use, refs.length > 0),
     prompt,
-    num_images:       numImages,
-    aspect_ratio:     aspectRatio,
-    output_format:    'png',
-    safety_tolerance: '4',
-  }
-  if (refUrl) input.image_url = refUrl
+    aspectRatio: options?.aspectRatio ?? '16:9',
+    resolution: options?.resolution,
+    imageUrls: refs,
+    numImages: options?.numImages,
+    seed: options?.seed,
+  })
 
   const result = await runFal(
-    MODEL_BY_QUALITY[quality],
+    endpoint,
     input,
     undefined,
     options?.timeoutMs ?? IMAGE_FAL_TIMEOUT_MS,
@@ -48,8 +55,4 @@ export async function generateImage(
   }
   const single = extractImageUrl(result)
   return single ? [single] : []
-}
-
-export function imageModelForQuality(quality: ImageQuality): string {
-  return MODEL_BY_QUALITY[quality]
 }

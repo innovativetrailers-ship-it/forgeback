@@ -1,4 +1,6 @@
-import { fal } from '@/lib/fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('lib.character.anime')
 import type { FCCCharacter } from './fccSchema'
 import { buildModificationPrompt } from './identityLock'
 import type { AnimeStyle } from './characterMotion'
@@ -24,7 +26,7 @@ export async function animeTransformVideo(
   character: FCCCharacter,
 ): Promise<string> {
   const mod = buildModificationPrompt(character.appearance)
-  const result = await fal.subscribe('fal-ai/pixverse/v5.5/video-to-video', {
+  const result = await falSubscribe(falEndpoint('pixverse/v5.5/video-to-video'), {
     input: {
       video_url: videoUrl,
       prompt: `${ANIME_STYLE_PROMPTS[style]}, ${mod}`,

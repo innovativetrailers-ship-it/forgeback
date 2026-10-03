@@ -1,0 +1,11 @@
+---
+description: SPEC-05 VFX and compositing. Read before changing blend, keying, roto, tracking, motion brush, or the effects rack.
+globs: ["cinematic-forge-v3/src/shared/blendMode.ts", "src/components/panels/GreenScreenPanel.tsx", "cinematic-forge-v3/src/shared/motionBrush.ts", "cinematic-forge-v3/src/main/media/motionBrush.ts", "cinematic-forge-v3/src/renderer/components/EffectsPanel.tsx"]
+alwaysApply: false
+---
+
+# SPEC-05 — VFX and compositing
+
+Contract: `docs/spec-references/SPEC-05-vfx-compositing.md`. Inherits SPEC-00. Do not build from it until the user feeds this spec.
+
+This is a timeline stack, not a node graph. Motion brush and the roto overlay call FAL outside the pause gate. Do not add another ungated submit. Web green-screen Apply does nothing. Do not claim an effect count the rack does not have.

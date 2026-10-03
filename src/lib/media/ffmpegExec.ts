@@ -29,7 +29,9 @@ export async function probeHasAudioStream(localPath: string): Promise<boolean> {
       localPath,
     ])
     return stdout.trim().includes('audio')
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/media/ffmpegExec.ts:32", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return false
   }
 }

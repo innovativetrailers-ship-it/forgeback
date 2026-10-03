@@ -1,18 +1,25 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 // Suppress expected teardown errors that fire when Redis/BullMQ connections
 // close in non-deterministic order during graceful shutdown.
 const TEARDOWN_MSGS = ['Connection is closed', "stream isn't writeable", 'ECONNRESET']
 process.on('uncaughtException', (err) => {
   if (TEARDOWN_MSGS.some((m) => err.message?.includes(m))) return
   console.error('[render-worker] Uncaught exception:', err)
+  void import('@/lib/diagnostics/captureCode').then(({ captureCodeError }) =>
+    captureCodeError({ err, source: 'worker.render.uncaughtException' }),
+  )
   process.exit(1)
 })
 process.on('unhandledRejection', (reason) => {
   const msg = (reason as Error)?.message ?? String(reason)
   if (TEARDOWN_MSGS.some((m) => msg.includes(m))) return
   console.error('[render-worker] Unhandled rejection:', reason)
+  void import('@/lib/diagnostics/captureCode').then(({ captureCodeError }) =>
+    captureCodeError({ err: reason, source: 'worker.render.unhandledRejection' }),
+  )
 })
 
-import { Worker } from 'bullmq'
+import { UnrecoverableError, Worker } from 'bullmq'
 import { Queue } from 'bullmq'
 import { redis, bullmqRedis, bullMQPrefix } from '../../redis'
 import { startHeartbeat } from '../heartbeat'
@@ -20,14 +27,25 @@ import { RENDER_QUEUE_NAME } from '../names'
 import { db } from '../../db'
 import { broadcastJobEvent } from '../events'
 import { refundCredits } from '../../credits'
+import { releaseHold } from '../../credits/escrow'
 import { checkNSFW } from '../../moderation/nsfw'
 import { logApiUsage, logRLHFSelection } from '../../telemetry/rlhf'
 import { captureGeneration } from '../../telemetry/delta'
-import { loraAutoTrigger, incrementRenderCount } from '../../vault/lora-trigger'
+import { incrementRenderCount } from '../../vault/lora-trigger'
+import { refuseSilentModelSwap } from '../../orchestration/costGuard'
 import type { GenerateVideoOutput } from '../../models/types'
 import { startShotWatchdog } from '../../studio/watchdog'
 import { drainRenderQueueIfPaused } from '../drainRenderQueue'
 import { isGenerationPaused, isGenerationPausedError } from '../../generation/pause'
+import { withGenContext } from '../../diagnostics/correlation'
+
+function isNonRetryableProviderError(err: unknown): boolean {
+  if (err instanceof Error && err.name === 'FalValidationError') return true
+  const status = typeof err === 'object' && err && 'status' in err ? Number((err as { status: number }).status) : NaN
+  if (Number.isFinite(status) && status >= 400 && status < 500) return true
+  const message = err instanceof Error ? err.message : String(err)
+  return /\b422\b|\b4\d\d\b|validation error|unprocessable/i.test(message)
+}
 
 const BILLABLE_JOB_NAMES = new Set([
   'orchestrate',
@@ -47,9 +65,16 @@ async function skipIfGenerationPaused(
     await db.renderJob.update({
       where: { id: jobId },
       data: { status: 'FAILED', errorMessage: 'Generation paused (GENERATION_PAUSED)' },
-    }).catch(() => {})
+    }).catch((err) => {
+      logCaught('pause_mark_failed', err, { jobId, stage: 'generation_paused' })
+      throw err
+    })
+    await releaseHold(jobId).catch((err) => {
+      logCaught('pause_release_hold', err, { jobId, stage: 'generation_paused' })
+      throw err
+    })
   }
-  return true
+  throw new UnrecoverableError('Generation paused (GENERATION_PAUSED)')
 }
 
 const POLL_INTERVAL_MS = 4000
@@ -143,13 +168,12 @@ async function dispatchToModel(
       const m = await import('../../models/sora')
       return m.generateVideo(validInput)
     }
-    const m = await import('../../models/runway')
+    const m = await import('../../providers/runway')
     return m.generateVideo(validInput)
   }
 
-  // All FAL + xAI models — single registry via MediaRouter (correct fal-ai/* endpoints).
-  const { callEngine } = await import('../../routing/MediaRouter')
-  const result = await callEngine({
+  const { submitEngineVideo } = await import('../../jobs/submitEngineVideo')
+  const result = await submitEngineVideo({
     model: engineModel,
     prompt,
     duration,
@@ -213,7 +237,7 @@ async function pollUntilComplete(
       }
       case 'runway':
       case 'runway-gen4': {
-        const runway = await import('../../models/runway')
+        const runway = await import('../../providers/runway')
         result = await runway.pollStatus(externalJobId)
         break
       }
@@ -278,7 +302,7 @@ async function pollUntilComplete(
       }
       case 'grok_video':
       case 'grok-imagine-video': {
-        const grok = await import('../../models/grokVideo')
+        const grok = await import('../../providers/grok')
         result = await grok.pollStatus(externalJobId)
         break
       }
@@ -331,7 +355,7 @@ async function pollUntilComplete(
 
 async function handleGenerateJob(data: RenderJobPayload): Promise<void> {
   const { jobId, userId, modelId, payload } = data
-  const modelName = modelId ?? 'wan'
+  const modelName = modelId?.trim() || refuseSilentModelSwap(jobId, 'wan')
   const startedAt = Date.now()
 
   // Dispatch to model
@@ -356,7 +380,9 @@ async function handleGenerateJob(data: RenderJobPayload): Promise<void> {
 
   await broadcastJobEvent({ jobId, status: 'processing', progress: 75, message: 'Saving to vault…' })
   const { persistVideoToR2 } = await import('../../storage/persistMedia')
+  const { renderVideoKey, objectKeyFromStored } = await import('../../storage/r2')
   const videoUrl = await persistVideoToR2(providerUrl, jobId, userId)
+  const storageKey = objectKeyFromStored(videoUrl) ?? renderVideoKey(userId, jobId)
 
   // Content moderation check
   await broadcastJobEvent({ jobId, status: 'processing', progress: 85, message: 'Running safety check…' })
@@ -378,6 +404,7 @@ async function handleGenerateJob(data: RenderJobPayload): Promise<void> {
     data: {
       status: 'COMPLETE',
       outputUrl: videoUrl,
+      storageKey,
       progressPct: 100,
       processingMs: latencyMs,
       completedAt: new Date(),
@@ -408,7 +435,6 @@ async function handleGenerateJob(data: RenderJobPayload): Promise<void> {
   const characterId = payload.characterId as string | undefined
   if (characterId) {
     await incrementRenderCount(characterId)
-    await loraAutoTrigger(characterId, userId)
   }
 
   await broadcastJobEvent({
@@ -456,7 +482,9 @@ function maskUrl(url: string | undefined): string {
   try {
     const u = new URL(url)
     return `${u.protocol}//${u.hostname}:${u.port || 'default'}`
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/queue/workers/render.worker.ts:476", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return 'invalid'
   }
 }
@@ -476,6 +504,8 @@ async function withBootTimeout<T>(
     ])
     results[name] = 'ok'
   } catch (err) {
+    console.warn("[caught] src/lib/queue/workers/render.worker.ts:495", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     results[name] = err instanceof Error ? err.message : String(err)
   }
 }
@@ -539,7 +569,9 @@ function startEndpointProbeBanner(): void {
             { signal: AbortSignal.timeout(15_000) },
           )
           rows.push({ id: entry.endpoint, ok: res.ok })
-        } catch {
+        } catch (err) {
+          console.warn("[caught] src/lib/queue/workers/render.worker.ts:559", err instanceof Error ? { name: err.name, message: err.message } : err)
+
           rows.push({ id: entry.endpoint, ok: false })
         }
         await new Promise((r) => setTimeout(r, 80))
@@ -566,12 +598,13 @@ const workerProcessor = async (job: { name: string; data: RenderJobPayload; id?:
     if (job.name === 'orchestrate') {
       const {
         jobId, userId, duration, selectedModels, creditCost, useCognition,
-        fccCognitionContext, projectId, generationMode, source,
+        fccCognitionContext, projectId, generationMode, source, qualityTier,
       } = data as unknown as {
         jobId: string; userId: string; prompt?: string; script?: string
         duration: number; selectedModels?: string[]; creditCost?: number; useCognition?: boolean
         fccCognitionContext?: { name: string; behavioralPrompt?: string; wardrobeSummary?: string; appearanceSummary?: string }
         projectId?: string; generationMode?: 'draft' | 'production'; source?: string
+        qualityTier?: string
       }
       if (await skipIfGenerationPaused('orchestrate', jobId)) return
       const { resolveOrchestrationScript } = await import('@/lib/jobs/resolveOrchestrationScript')
@@ -593,8 +626,17 @@ const workerProcessor = async (job: { name: string; data: RenderJobPayload; id?:
       const { processOrchestrateJobWithRefund } = await import('@/lib/jobs/processOrchestrateJob')
       await processOrchestrateJobWithRefund({
         jobId, userId, prompt, duration, selectedModels: councilModels, creditCost,
-        useCognition, fccCognitionContext, projectId, generationMode, source,
+        useCognition, fccCognitionContext, projectId, generationMode, source, qualityTier,
       })
+      return
+    }
+
+    if (job.name === 'library-copy') {
+      const { userId, projectId } = data as unknown as { userId?: string; projectId?: string }
+      if (!userId) return
+      const { retryPendingLibraryCopies } = await import('@/lib/studio/batchClipSync')
+      const left = await retryPendingLibraryCopies(userId, projectId)
+      if (left > 0) throw new Error(`pending library copies remain: ${left}`)
       return
     }
 
@@ -605,20 +647,47 @@ const workerProcessor = async (job: { name: string; data: RenderJobPayload; id?:
       return
     }
 
+    if (job.name === 'multi-engine') {
+      const segments = data.payload.segments
+      if (!Array.isArray(segments) || segments.length === 0) {
+        throw new Error('Multi-engine job is missing segments')
+      }
+      if (await skipIfGenerationPaused('multi-engine', data.jobId)) return
+      const { processMultiEngineJob } = await import('@/lib/jobs/processMultiEngineJob')
+      const studioClipId = typeof data.payload.studioClipId === 'string' ? data.payload.studioClipId : undefined
+      await processMultiEngineJob({
+        jobId: data.jobId,
+        segments: segments as import('@/lib/routing/types').SceneSegment[],
+        studioClipId,
+      })
+      return
+    }
+
     if (job.name === 'shot-generate') {
-      const { jobId, userId, projectId, clipId, prompt, anchorFrameUrl, modelOverride, mode } = data as unknown as {
+      const { jobId, userId, projectId, clipId, prompt, anchorFrameUrl, modelOverride, mode, qualityTier } = data as unknown as {
         jobId: string; userId: string; projectId: string; clipId: string
-        prompt?: string; anchorFrameUrl?: string; modelOverride?: string; mode?: 'draft' | 'production'
+        prompt?: string; anchorFrameUrl?: string; modelOverride?: string | null; mode?: 'draft' | 'production'
+        qualityTier?: string
       }
       if (await skipIfGenerationPaused('shot-generate', jobId)) {
         await db.studioClip.update({
           where: { id: clipId },
           data: { status: 'AWAITING_DIRECTION', generatingAt: null },
-        }).catch(() => {})
+        }).catch((err) => {
+          logCaught('clip_reset_failed', err, { jobId, stage: 'shot-generate' })
+          throw err
+        })
         return
       }
       const { processShotGenerateJob } = await import('@/lib/jobs/processShotGenerateJob')
-      await processShotGenerateJob({ jobId, userId, projectId, clipId, prompt, anchorFrameUrl, modelOverride, mode })
+      try {
+        await processShotGenerateJob({ jobId, userId, projectId, clipId, prompt, anchorFrameUrl, modelOverride, mode, qualityTier })
+      } catch (err) {
+        if (isNonRetryableProviderError(err)) {
+          throw new UnrecoverableError(err instanceof Error ? err.message : String(err))
+        }
+        throw err
+      }
       return
     }
 
@@ -667,7 +736,10 @@ const workerProcessor = async (job: { name: string; data: RenderJobPayload; id?:
             await db.renderJob.update({
               where: { id: jobId },
               data: { progressPct: pct, statusMessage: message, ...(etaSeconds !== null ? { etaSeconds } : {}) },
-            }).catch(() => {})
+            }).catch((err) => {
+              // Progress text is optional. Music generation continues.
+              logCaught('progress', err, { jobId, stage: 'music' })
+            })
           }
         )
         const { uploadToR2 } = await import('@/lib/storage/r2')
@@ -702,7 +774,10 @@ const workerProcessor = async (job: { name: string; data: RenderJobPayload; id?:
           await db.renderJob.update({
             where: { id: jobId },
             data: { progressPct: pct, statusMessage: `Synthesising voice ${i + 1}/${total}` },
-          }).catch(() => {})
+          }).catch((err) => {
+            // Progress text is optional. Voice synthesis continues.
+            logCaught('progress', err, { jobId, stage: 'voice' })
+          })
         }
         const combined = Buffer.concat(parts)
         const { uploadToR2 } = await import('@/lib/storage/r2')
@@ -741,13 +816,25 @@ const workerProcessor = async (job: { name: string; data: RenderJobPayload; id?:
       switch (data.type) {
         case 'GENERATE':
         case 'REPAINT':
-          await handleGenerateJob(data)
+          console.log('[simple-generate] worker picked up', {
+            jobId: data.jobId,
+            model: data.modelId ?? null,
+            shotId: typeof data.payload.studioClipId === 'string' ? data.payload.studioClipId : null,
+          })
+          await withGenContext({
+            jobId: data.jobId,
+            userId: data.userId,
+            model: data.modelId,
+            shotId: typeof data.payload.studioClipId === 'string' ? data.payload.studioClipId : undefined,
+            source: 'simple.generate',
+            stage: 'submit',
+          }, () => handleGenerateJob(data))
           break
         case 'TRANSCRIBE':
           await handleTranscribeJob(data)
           break
         default:
-          await handleGenerateJob(data)
+          throw new UnrecoverableError(`No handler for render job ${job.name || data.type || 'unknown'}`)
       }
     } catch (err) {
       if (isGenerationPausedError(err)) {
@@ -755,8 +842,12 @@ const workerProcessor = async (job: { name: string; data: RenderJobPayload; id?:
         await db.renderJob.update({
           where: { id: data.jobId },
           data: { status: 'FAILED', errorMessage: 'Generation paused (GENERATION_PAUSED)' },
-        }).catch(() => {})
-        return
+        }).catch((writeErr) => {
+          logCaught('pause_mark_failed', writeErr, { jobId: data.jobId, stage: 'generation_paused' })
+          throw writeErr
+        })
+        await releaseHold(data.jobId)
+        throw new UnrecoverableError('Generation paused (GENERATION_PAUSED)')
       }
       const message = describeProviderError(err)
 
@@ -773,6 +864,7 @@ const workerProcessor = async (job: { name: string; data: RenderJobPayload; id?:
           `Refund for failed job ${data.jobId}: ${message}`
         )
       }
+      await releaseHold(data.jobId)
 
       await db.renderJob.update({
         where: { id: data.jobId },
@@ -799,7 +891,20 @@ const workerProcessor = async (job: { name: string; data: RenderJobPayload; id?:
         success: false,
       })
 
-      // Re-throw so BullMQ can handle retries
+      const { captureGenerationError } = await import('@/lib/diagnostics/capture')
+      await captureGenerationError({
+        err,
+        rawError: message,
+        userId: data.userId,
+        jobId: data.jobId,
+        stage: 'submit',
+        endpoint: 'render-worker',
+        model: data.modelId ?? 'unknown',
+      })
+
+      if (isNonRetryableProviderError(err)) {
+        throw new UnrecoverableError(message)
+      }
       throw err
     }
 }

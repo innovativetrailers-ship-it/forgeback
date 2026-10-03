@@ -1,0 +1,11 @@
+---
+description: SPEC-06 CGI and overlays. Read before changing text-to-3D, image-to-3D, CGI insert, charts, or MoGRT.
+globs: ["cinematic-forge-v3/src/renderer/components/generate/ThreeDSection.tsx", "src/components/ultimate/CGIInsertTool.tsx", "src/components/panels/MoGRTPanel.tsx", "cinematic-forge-v3/src/renderer/components/mogrt/**", "cinematic-forge-v3/src/shared/mogrt.ts", "src/app/api/cgi/**", "src/app/api/mogrt/**"]
+alwaysApply: false
+---
+
+# SPEC-06 — CGI and overlays
+
+Contract: `docs/spec-references/SPEC-06-cgi-overlays.md`. Inherits SPEC-00. Do not build from it until the user feeds this spec.
+
+Text-to-3D (TripoSG) and the CGI splice’s Kling call are outside the pause gate. Do not add another ungated submit. The splice client must use the URL the route actually returns. Web “describe a template” must match the route contract. Do not claim a 200-asset library.

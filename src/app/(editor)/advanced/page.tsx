@@ -10,6 +10,8 @@ import { LeftPanel } from '@/components/layout/LeftPanel'
 import { RightPanel } from '@/components/layout/RightPanel'
 import { InteractivePlayer } from '@/components/playback/InteractivePlayer'
 import { Timeline } from '@/components/editor/Timeline'
+import { ImportClipButton } from '@/components/editor/ImportClipButton'
+import { PreProductionBoard } from '@/components/editor/PreProductionBoard'
 import { RepaintModal } from '@/components/editor/RepaintModal'
 import { ReviewPortalModal } from '@/components/review/ReviewPortalModal'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
@@ -24,9 +26,12 @@ import type { TimelineRecipe, Clip, Track } from '@/lib/timeline/schema'
 import { usePlaybackStore } from '@/store/playbackStore'
 import { importLegacyPendingClips } from '@/lib/timeline/importLegacyPending'
 import { useJobStore } from '@/store/jobStore'
+import { jobPlaybackPath } from '@/lib/media/jobPlayback'
 import { subscribeJobStream } from '@/lib/jobs/subscribeJobStream'
 import { computeTimelineDuration, isVideoMediaUrl } from '@/lib/timeline/playback'
-import { hydrateTimelineFromShots } from '@/lib/projects/loadProject'
+import { adoptEditorRecipe, ensureEditorProject, hydrateTimelineFromShots } from '@/lib/projects/loadProject'
+import { moveClipInRecipe, recipeForTimeline, reconcileTimeline } from '@/lib/timeline/reconcileTimeline'
+import { splitTimelineClip } from '@/lib/timeline/syncToPlayback'
 import type { ProjectLoadedDetail } from '@/lib/projects/loadProject'
 import { useProjectLoadListener } from '@/hooks/useProjectLoadListener'
 
@@ -68,16 +73,19 @@ interface Location { id: string; name: string }
 export default function AdvancedPage() {
   const { data: session } = useSession()
   const { balance: creditBalance } = useCredits()
-  const storedProjectId = usePlaybackStore((s) => s.projectId)
+  const playbackProjectId = usePlaybackStore((s) => s.projectId)
   const storedRecipe = usePlaybackStore((s) => s.recipe)
   const storedPlayhead = usePlaybackStore((s) => s.playheadTime)
   const persistRecipe = usePlaybackStore((s) => s.setRecipe)
+  const commitRecipe = usePlaybackStore((s) => s.commitRecipe)
+  const canonicalRecipe = usePlaybackStore((s) => s.recipe)
   const persistPlayhead = usePlaybackStore((s) => s.setPlayhead)
 
-  const projectId = useRef(storedProjectId ?? nanoid())
+  const projectId = useRef('')
   const { activeModal, modalPayload, closeModal } = useUIStore()
+  const activeTool = useUIStore((s) => s.activeTool)
 
-  const [recipe, setRecipe] = useState<TimelineRecipe>(() => storedRecipe ?? buildDefaultRecipe(projectId.current))
+  const [recipe, setRecipe] = useState<TimelineRecipe>(() => storedRecipe ?? buildDefaultRecipe('pending'))
   const [playheadTime, setPlayheadTime] = useState(storedPlayhead)
   const [isPlaying, setIsPlaying] = useState(false)
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null)
@@ -90,64 +98,55 @@ export default function AdvancedPage() {
   const [locations, setLocations] = useState<Location[]>([])
   const [isExporting, setIsExporting] = useState(false)
 
-  // History stack for undo/redo
-  const historyRef = useRef<TimelineRecipe[]>([])
-  const historyIndexRef = useRef(-1)
-
   const commitHistory = useCallback((newRecipe: TimelineRecipe) => {
-    const stack = historyRef.current.slice(0, historyIndexRef.current + 1)
-    stack.push(newRecipe)
-    historyRef.current = stack.slice(-50)
-    historyIndexRef.current = historyRef.current.length - 1
     setRecipe(newRecipe)
-    persistRecipe(newRecipe)
-  }, [persistRecipe])
-
-  useEffect(() => {
-    usePlaybackStore.getState().setProjectId(projectId.current)
-    void importLegacyPendingClips().then((count) => {
-      if (count > 0) {
-        const fresh = usePlaybackStore.getState().recipe
-        if (fresh) setRecipe(fresh)
-      }
-    })
-  }, [])
+    commitRecipe(newRecipe)
+  }, [commitRecipe])
 
   useEffect(() => {
     if (!session) return
     let cancelled = false
-    const current = usePlaybackStore.getState().recipe ?? buildDefaultRecipe(projectId.current)
-    void hydrateTimelineFromShots(projectId.current, current)
-      .then((next) => {
-        if (cancelled) return
-        if (next !== current) commitHistory(next)
+    void ensureEditorProject().then(({ projectId: id, shots }) => {
+      if (cancelled) return
+      projectId.current = id
+      const state = usePlaybackStore.getState()
+      const base = adoptEditorRecipe(state.recipe, id, buildDefaultRecipe(id))
+      console.log('[timeline_mount]', JSON.stringify({
+        before: state.recipe?.projectId ?? null,
+        editor: id,
+        after: base.projectId,
+        clips: base.tracks.find((track) => track.id === 't-v1')?.clips.length ?? 0,
+      }))
+      const { recipe: next } = reconcileTimeline(shots, base)
+      usePlaybackStore.getState().setRecipe(next)
+      setRecipe(next)
+      void importLegacyPendingClips().then((count) => {
+        if (cancelled || count <= 0) return
+        const fresh = usePlaybackStore.getState().recipe
+        if (fresh) setRecipe(fresh)
       })
-      .catch(console.error)
+    }).catch((err) => {
+      console.warn("[caught] src/app/(editor)/advanced/page.tsx:118", err instanceof Error ? { name: err.name, message: err.message } : err)
+      console.error(err)
+    })
     return () => { cancelled = true }
-  }, [session, commitHistory])
+  }, [session])
 
   useProjectLoadListener(useCallback((detail: ProjectLoadedDetail) => {
     projectId.current = detail.projectId
-    historyRef.current = []
-    historyIndexRef.current = -1
-    commitHistory(detail.recipe)
-  }, [commitHistory]))
+    usePlaybackStore.setState({ past: [], future: [] })
+    setRecipe(detail.recipe)
+    persistRecipe(detail.recipe)
+  }, [persistRecipe]))
 
   useEffect(() => {
     persistPlayhead(playheadTime)
   }, [playheadTime, persistPlayhead])
 
-  const undo = useCallback(() => {
-    if (historyIndexRef.current <= 0) return
-    historyIndexRef.current -= 1
-    setRecipe(historyRef.current[historyIndexRef.current])
-  }, [])
-
-  const redo = useCallback(() => {
-    if (historyIndexRef.current >= historyRef.current.length - 1) return
-    historyIndexRef.current += 1
-    setRecipe(historyRef.current[historyIndexRef.current])
-  }, [])
+  useEffect(() => {
+    if (!canonicalRecipe || canonicalRecipe === recipe) return
+    setRecipe(canonicalRecipe)
+  }, [canonicalRecipe, recipe])
 
   // Load characters + locations
   useEffect(() => {
@@ -158,25 +157,27 @@ export default function AdvancedPage() {
     ]).then(([chars, locs]) => {
       setCharacters(chars.characters ?? [])
       setLocations(locs.locations ?? [])
-    }).catch(console.error)
+    }).catch((err) => {
+      console.warn("[caught] src/app/(editor)/advanced/page.tsx:146", err instanceof Error ? { name: err.name, message: err.message } : err)
+      console.error(err)
+    })
   }, [session])
 
-  const allClips = recipe.tracks.flatMap((t) => t.clips)
-  const timelineDuration = computeTimelineDuration(recipe.tracks, recipe.durationSeconds)
+  const timelineRecipe = recipeForTimeline(canonicalRecipe, recipe) ?? recipe
+  const allClips = timelineRecipe.tracks.flatMap((t) => t.clips)
+  const timelineDuration = computeTimelineDuration(timelineRecipe.tracks, timelineRecipe.durationSeconds)
 
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return
       if (e.code === 'Space') { e.preventDefault(); setIsPlaying((p) => !p) }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo() }
       if (e.key === 'Home') setPlayheadTime(0)
       if (e.key === 'End') setPlayheadTime(timelineDuration)
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [undo, redo, timelineDuration])
+  }, [timelineDuration])
 
   const selectedClip = selectedClipId ? allClips.find((c) => c.id === selectedClipId) ?? null : null
 
@@ -202,18 +203,8 @@ export default function AdvancedPage() {
 
   // Timeline mutations
   const handleClipMove = useCallback((clipId: string, newStart: number, targetTrackId: string) => {
-    const updated = { ...recipe }
-    updated.tracks = recipe.tracks.map((track) => {
-      const clip = track.clips.find((c) => c.id === clipId)
-      if (!clip) return track
-      if (track.id === targetTrackId) {
-        const dur = clip.endTime - clip.startTime
-        return { ...track, clips: track.clips.map((c) => c.id === clipId ? { ...c, startTime: newStart, endTime: newStart + dur } : c) }
-      }
-      return { ...track, clips: track.clips.filter((c) => c.id !== clipId) }
-    })
-    setRecipe(updated)
-  }, [recipe])
+    commitHistory(moveClipInRecipe(recipe, clipId, newStart, targetTrackId))
+  }, [recipe, commitHistory])
 
   const handleClipTrim = useCallback((clipId: string, edge: 'start' | 'end', newTime: number) => {
     const updated = { ...recipe }
@@ -297,15 +288,21 @@ export default function AdvancedPage() {
         ))
       },
       onComplete: (outputUrl) => {
+        const sourceUrl = jobPlaybackPath(jobId) ?? (outputUrl.startsWith('/') ? outputUrl : '')
         setRecipe((current) => {
           const updated = {
             ...current,
             tracks: current.tracks.map((t) => ({
               ...t,
-              clips: t.clips.map((c) => c.id === clipId ? { ...c, sourceUrl: outputUrl } : c),
+              clips: t.clips.map((c) => c.id === clipId ? { ...c, sourceUrl: sourceUrl || c.sourceUrl } : c),
             })),
           }
           persistRecipe(updated)
+          const projectId = usePlaybackStore.getState().projectId
+          if (projectId) void hydrateTimelineFromShots(projectId, updated).catch((err) => {
+            console.warn("[caught] src/app/(editor)/advanced/page.tsx:284", err instanceof Error ? { name: err.name, message: err.message } : err)
+            console.error(err)
+          })
           return updated
         })
         setActiveJobs((jobs) => jobs.filter((j) => j.jobId !== jobId))
@@ -348,15 +345,21 @@ export default function AdvancedPage() {
           ))
         },
         onComplete: (outputUrl) => {
+          const sourceUrl = jobPlaybackPath(job.jobId) ?? (outputUrl.startsWith('/') ? outputUrl : '')
           setRecipe((current) => {
             const updated = {
               ...current,
               tracks: current.tracks.map((t) => ({
                 ...t,
-                clips: t.clips.map((c) => c.id === job.clipId ? { ...c, sourceUrl: outputUrl } : c),
+                clips: t.clips.map((c) => c.id === job.clipId ? { ...c, sourceUrl: sourceUrl || c.sourceUrl } : c),
               })),
             }
             persistRecipe(updated)
+            const projectId = usePlaybackStore.getState().projectId
+            if (projectId) void hydrateTimelineFromShots(projectId, updated).catch((err) => {
+              console.warn("[caught] src/app/(editor)/advanced/page.tsx:338", err instanceof Error ? { name: err.name, message: err.message } : err)
+              console.error(err)
+            })
             return updated
           })
           setActiveJobs((jobs) => jobs.filter((j) => j.jobId !== job.jobId))
@@ -400,7 +403,9 @@ export default function AdvancedPage() {
           sse.close()
         }
       }
-    } catch { setIsExporting(false) }
+    } catch (err) {
+      console.warn("[caught] src/app/(editor)/advanced/page.tsx:382", err instanceof Error ? { name: err.name, message: err.message } : err)
+ setIsExporting(false) }
   }
 
   return (
@@ -416,7 +421,7 @@ export default function AdvancedPage() {
         <div className="flex flex-col flex-1 overflow-hidden">
           <InteractivePlayer
             clips={allClips}
-            tracks={recipe.tracks}
+            tracks={timelineRecipe.tracks}
             playheadTime={playheadTime}
             isPlaying={isPlaying}
             duration={timelineDuration}
@@ -429,9 +434,10 @@ export default function AdvancedPage() {
             onClipEdited={(clipId, url) => handleClipUpdate(clipId, { sourceUrl: url })}
           />
 
+          <ImportClipButton />
           <ErrorBoundary>
             <Timeline
-              recipe={recipe}
+              recipe={timelineRecipe}
               playheadTime={playheadTime}
               selectedClipId={selectedClipId}
               zoomLevel={zoomLevel}
@@ -441,6 +447,8 @@ export default function AdvancedPage() {
               onClipSelect={(id) => { setSelectedClipId(id); useStudioStore.getState().selectClip(id) }}
               onClipMove={handleClipMove}
               onClipTrim={handleClipTrim}
+              razor={activeTool === 'razor'}
+              onClipSplit={(clipId, atTime) => splitTimelineClip(clipId, atTime)}
               onTrackToggleMute={handleTrackToggleMute}
               onZoomChange={setZoomLevel}
               onScrollChange={setScrollOffset}
@@ -463,7 +471,8 @@ export default function AdvancedPage() {
         />
       )}
 
-      <ReviewPortalModal projectId={projectId.current} />
+      <ReviewPortalModal projectId={playbackProjectId ?? ''} />
+      <PreProductionBoard projectId={playbackProjectId ?? ''} />
     </div>
   )
 }

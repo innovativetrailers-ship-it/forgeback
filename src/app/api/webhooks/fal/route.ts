@@ -7,6 +7,8 @@ interface FalWebhookPayload {
   status: 'OK' | 'ERROR'
   payload?: {
     diffusers_lora_file?: { url: string }
+    lora_file?: { url: string }
+    config_file?: { url: string }
     video?: { url: string }
     images?: Array<{ url: string }>
     error?: string
@@ -21,6 +23,21 @@ export async function POST(request: NextRequest) {
 
   if (!requestId) {
     return NextResponse.json({ error: 'Missing request_id' }, { status: 400 })
+  }
+
+  const { onTrainingComplete } = await import('@/lib/training/complete')
+  const trainingRun = await db.trainingRun.findFirst({
+    where: { falRequestId: requestId },
+    select: { id: true },
+  })
+  const trainingPayload = (payload ?? body) as Record<string, unknown>
+  await onTrainingComplete({
+    falRequestId: requestId,
+    data: status === 'OK' ? trainingPayload : undefined,
+    error: status === 'ERROR' ? (error ?? payload?.error ?? 'Training failed') : undefined,
+  })
+  if (trainingRun) {
+    return NextResponse.json({ received: true })
   }
 
   // Find the job linked to this fal request

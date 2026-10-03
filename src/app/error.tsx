@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { reportBrowserCodeError } from '@/components/diagnostics/CodeErrorBridge'
 
 interface ErrorProps {
   error: Error & { digest?: string }
@@ -8,10 +9,20 @@ interface ErrorProps {
 }
 
 export default function GlobalError({ error, reset }: ErrorProps) {
+  const [reported, setReported] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const detail = [error.message, error.digest ? `digest: ${error.digest}` : ''].filter(Boolean).join('\n')
   useEffect(() => {
-    // Log to monitoring (e.g. Sentry) when available
     console.error('[GlobalError]', error)
+    const raw = error.stack || error.message
+    void reportBrowserCodeError(raw, 'app.error').then(setReported)
   }, [error])
+
+  const copyDetails = () => {
+    void navigator.clipboard.writeText(detail).then(() => {
+      setCopied(true)
+    })
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center text-center px-6">
@@ -29,17 +40,28 @@ export default function GlobalError({ error, reset }: ErrorProps) {
         Take 2.
       </h1>
 
-      <p className="text-zinc-400 text-lg max-w-md mb-4">
-        Something unexpected happened on set. Our crew has been notified.
+      <p className="text-zinc-200 text-lg max-w-lg mb-3 break-words">
+        {error.message || 'Something unexpected happened on set.'}
       </p>
 
       {error.digest && (
-        <p className="text-zinc-600 text-xs font-mono mb-8">
-          Error ID: {error.digest}
+        <p className="text-zinc-500 text-xs font-mono mb-3">
+          digest: {error.digest}
         </p>
       )}
 
+      <p className="text-zinc-500 text-sm max-w-md mb-6">
+        {reported ? 'The crew has this report.' : 'Please try again.'}
+      </p>
+
       <div className="flex gap-4">
+        <button
+          type="button"
+          onClick={copyDetails}
+          className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg font-medium transition-colors"
+        >
+          {copied ? 'Copied' : 'Copy details'}
+        </button>
         <button
           onClick={reset}
           className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors"

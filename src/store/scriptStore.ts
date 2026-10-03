@@ -11,7 +11,8 @@ interface ScriptStore {
   isParsing:     boolean
   lastParsedAt:  number | null
   hasHydrated:   boolean
-  setScript:     (content: string) => void
+  lastScriptOrigin: 'local' | 'collab'
+  setScript:     (content: string, origin?: 'local' | 'collab') => void
   setScriptProjectId: (projectId: string) => void
   invalidateBreakdown: () => void
   setParsed:     (scenes: ScriptScene[], shots?: StoryboardShot[]) => void
@@ -31,16 +32,18 @@ export const useScriptStore = create<ScriptStore>()(
       isParsing:     false,
       lastParsedAt:  null,
       hasHydrated:   false,
-      setScript: (scriptContent) =>
+      lastScriptOrigin: 'local',
+      setScript: (scriptContent, origin = 'local') =>
         set((state) => {
           if (state.scriptContent === scriptContent) {
-            return { scriptContent }
+            return { scriptContent, lastScriptOrigin: origin }
           }
           return {
             scriptContent,
-            parsedScenes: [],
-            parsedShots: [],
-            lastParsedAt: null,
+            lastScriptOrigin: origin,
+            parsedScenes: origin === 'collab' ? state.parsedScenes : [],
+            parsedShots: origin === 'collab' ? state.parsedShots : [],
+            lastParsedAt: origin === 'collab' ? state.lastParsedAt : null,
           }
         }),
       setScriptProjectId: (scriptProjectId) => set({ scriptProjectId }),

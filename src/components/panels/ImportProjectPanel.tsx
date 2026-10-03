@@ -93,7 +93,9 @@ export function ImportProjectPanel({ onClose }: ImportProjectPanelProps) {
       const { format } = await res.json() as { format: ImportSourceApp }
       setDetectedApp(format)
       setStep('options')
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/panels/ImportProjectPanel.tsx:96", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setDetectedApp('unknown')
       setStep('options')
     }
@@ -130,6 +132,8 @@ export function ImportProjectPanel({ onClose }: ImportProjectPanelProps) {
         setStep('done')
       }
     } catch (err) {
+      console.warn("[caught] src/components/panels/ImportProjectPanel.tsx:132", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError(err instanceof Error ? err.message : 'Import failed')
       setStep('options')
     }

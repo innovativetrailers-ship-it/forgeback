@@ -8,7 +8,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: { prompt?: string; style?: string; duration?: number; instrumental?: boolean; title?: string }
-  try { body = await req.json() } catch {
+  try { body = await req.json() } catch (err) {
+    console.warn("[caught] src/app/api/audio/music/route.ts:11", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -23,7 +25,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     await deductCredits(db, userId, cost, `Music: ${prompt.slice(0, 40)}`)
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/audio/music/route.ts:26", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: `Insufficient credits. Music generation costs ${cost} credits.` }, { status: 402 })
   }
 

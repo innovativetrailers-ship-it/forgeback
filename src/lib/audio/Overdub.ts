@@ -31,6 +31,7 @@ export async function overdubClip(params: OverdubParams): Promise<OverdubResult>
     modelId,
     stability: 0.5,
     similarityBoost: 0.75,
+    source: 'audio.voice',
   })
 
   // 2. Upload synthesis to R2 (temporary)
@@ -71,7 +72,10 @@ export async function overdubClip(params: OverdubParams): Promise<OverdubResult>
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify(jobConfig),
-  }).catch(() => null)
+  }).catch((err) => {
+    console.warn("[caught] src/lib/audio/Overdub.ts:75", err instanceof Error ? { name: err.name, message: err.message } : err)
+    return (null)
+  })
 
   if (ffmpegRes?.ok) {
     const { outputUrl: processedUrl } = await ffmpegRes.json() as { outputUrl: string }

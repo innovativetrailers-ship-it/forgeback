@@ -17,6 +17,8 @@ import {
 import { JobProgressBadge } from '@/components/ui/JobProgressBadge'
 import { BrandLogo } from '@/components/brand/BrandLogo'
 import { cn } from '@/lib/utils'
+import { TIER_POLICY } from '@/lib/orchestration/tierPolicy'
+import { usePlaybackStore } from '@/store/playbackStore'
 import {
   Hexagon, LogOut, Settings, CreditCard, Loader2, Share2,
   Download, Undo2, Redo2, ZoomIn, ZoomOut, Maximize2,
@@ -151,12 +153,12 @@ export function TopBar() {
     // ── Undo / Redo ─────────────────────────────────────────────
     if (meta && key === 'z' && !e.shiftKey) {
       e.preventDefault()
-      window.dispatchEvent(new CustomEvent('editor:undo'))
+      usePlaybackStore.getState().undo()
       return
     }
     if (meta && (key === 'y' || (key === 'z' && e.shiftKey))) {
       e.preventDefault()
-      window.dispatchEvent(new CustomEvent('editor:redo'))
+      usePlaybackStore.getState().redo()
       return
     }
 
@@ -253,6 +255,7 @@ export function TopBar() {
                 <button
                   key={t.value}
                   onClick={() => setTier(t.value)}
+                  title={TIER_POLICY[t.value].label}
                   className={cn(
                     'px-3 py-1 rounded-md text-xs font-medium transition-all',
                     activeTier === t.value
@@ -263,6 +266,9 @@ export function TopBar() {
                   {t.label}
                 </button>
               ))}
+              <span className="ml-2 max-w-[16rem] truncate text-[10px] text-[var(--text-tertiary)]" title={TIER_POLICY[activeTier].label}>
+                {TIER_POLICY[activeTier].label}
+              </span>
             </div>
           )}
         </nav>
@@ -404,10 +410,10 @@ export function TopBar() {
           <div className="w-px h-4 bg-[var(--border)] mx-1.5" />
 
           {/* Undo/Redo */}
-          <button title="Undo (Cmd+Z)" className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
+          <button type="button" title="Undo (Cmd+Z)" onClick={() => usePlaybackStore.getState().undo()} className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
             <Undo2 size={12} />
           </button>
-          <button title="Redo (Cmd+Shift+Z)" className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
+          <button type="button" title="Redo (Cmd+Shift+Z)" onClick={() => usePlaybackStore.getState().redo()} className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
             <Redo2 size={12} />
           </button>
 

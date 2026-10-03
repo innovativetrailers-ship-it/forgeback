@@ -61,6 +61,8 @@ export function AvatarCreator({ onCreated }: Props) {
       setCreated(data.avatarUrl ?? '')
       onCreated?.(data.avatar?.id ?? '', data.avatarUrl ?? '')
     } catch (err) {
+      console.warn("[caught] src/components/panels/AvatarCreator.tsx:63", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError(err instanceof Error ? err.message : 'Failed')
     } finally {
       setLoading(false)

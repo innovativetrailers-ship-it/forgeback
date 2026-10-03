@@ -1,0 +1,11 @@
+---
+description: SPEC-04 editing and NLE. Read before changing blade, trim, slip, slide, ripple, roll, JKL, multicam, speed, or ingest.
+globs: ["cinematic-forge-v3/src/renderer/store/timeline.ts", "cinematic-forge-v3/src/renderer/components/editor/**", "src/store/editor.ts"]
+alwaysApply: false
+---
+
+# SPEC-04 — Editing / NLE
+
+Contract: `docs/spec-references/SPEC-04-editing-nle.md`. Inherits SPEC-00. Do not build from it until the user feeds this spec.
+
+Desktop timeline mutations are the real edit spine. Web split must not zero trim in and out. JKL currently only starts and stops. Multicam and camera-RAW paths that are never called must not be advertised as working.

@@ -1,3 +1,4 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { runFal } from './client'
 
 async function upscaleRaw(
@@ -11,10 +12,10 @@ async function upscaleRaw(
   }
 
   const modelMap: Record<string, string> = {
-    aura: 'fal-ai/aura-sr',
-    esrgan: 'fal-ai/real-esrgan',
-    clarity: 'fal-ai/clarity-upscaler',
-    codeformer: 'fal-ai/codeformer',
+    aura: falEndpoint('aura-sr'),
+    esrgan: falEndpoint('real-esrgan'),
+    clarity: falEndpoint('clarity-upscaler'),
+    codeformer: falEndpoint('codeformer'),
   }
 
   const result = await runFal<UpscaleResult>(modelMap[model] ?? modelMap.aura, {
@@ -32,7 +33,7 @@ async function removeBackgroundRaw(imageUrl: string): Promise<string> {
     image?: { url: string }
   }
 
-  const result = await runFal<RembgResult>('fal-ai/birefnet', {
+  const result = await runFal<RembgResult>(falEndpoint('birefnet'), {
     image_url: imageUrl,
   })
 
@@ -44,7 +45,7 @@ export async function restoreFace(imageUrl: string): Promise<string> {
     image?: { url: string }
   }
 
-  const result = await runFal<CodeformerResult>('fal-ai/codeformer', {
+  const result = await runFal<CodeformerResult>(falEndpoint('codeformer'), {
     image_url: imageUrl,
     fidelity: 0.7,
   })
@@ -57,7 +58,7 @@ export async function generateProxyFrame(prompt: string): Promise<string> {
     images?: Array<{ url: string }>
   }
 
-  const result = await runFal<FluxResult>('fal-ai/flux/schnell', {
+  const result = await runFal<FluxResult>(falEndpoint('flux/schnell'), {
     prompt,
     image_size: 'landscape_16_9' as const,
     num_inference_steps: 4,
@@ -85,7 +86,7 @@ export async function extractDepthMap(imageUrl: string): Promise<{ depthUrl: str
     image?: { url: string }
   }
 
-  const result = await runFal<DepthResult>('fal-ai/imageutils/depth', {
+  const result = await runFal<DepthResult>(falEndpoint('imageutils/depth'), {
     image_url: imageUrl,
   })
 
@@ -103,14 +104,16 @@ export async function checkNSFWImage(imageUrl: string): Promise<{ safe: boolean;
   }
 
   try {
-    const result = await runFal<NSFWResult>('fal-ai/nsfw-detector', {
+    const result = await runFal<NSFWResult>(falEndpoint('nsfw-detector'), {
       image_url: imageUrl,
     })
 
     const isNsfw = result.has_nsfw_concept?.[0] ?? false
     const score = result.safety_checker_result?.[0]?.score ?? (isNsfw ? 0.9 : 0.05)
     return { safe: !isNsfw, score }
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/fal/enhancement.ts:113", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return { safe: true, score: 0 }
   }
 }

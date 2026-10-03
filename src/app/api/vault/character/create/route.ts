@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createCharacter, queueCharacterLoraTraining } from '@/lib/vault/character'
 import { CharacterIngestionError } from '@/lib/character/ingestion'
+import { ensureOwnedProject } from '@/lib/projects/ensureOwnedProject'
 
 export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id')
@@ -19,6 +20,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'name and projectId required' }, { status: 400 })
     }
 
+    try {
+      await ensureOwnedProject(userId, projectId)
+    } catch (err) {
+      console.warn("[caught] src/app/api/vault/character/create/route.ts:25", err instanceof Error ? { name: err.name, message: err.message } : err)
+
+      const message = err instanceof Error ? err.message : 'A saved project is required'
+      const status = message === 'Forbidden' ? 403 : 400
+      return NextResponse.json({ error: message }, { status })
+    }
+
     const imageFiles = formData.getAll('images').filter(
       (f): f is File => f instanceof File && f.size > 0,
     )
@@ -31,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     const imageBuffers = await Promise.all(
-      imageFiles.slice(0, 5).map(async (file) => ({
+      imageFiles.slice(0, 20).map(async (file) => ({
         buffer: Buffer.from(await file.arrayBuffer()),
         filename: file.name,
         contentType: file.type || 'image/jpeg',
@@ -39,6 +50,7 @@ export async function POST(request: NextRequest) {
     )
 
     const character = await createCharacter({
+      userId,
       projectId,
       name: name.trim(),
       description: description || undefined,
@@ -50,12 +62,16 @@ export async function POST(request: NextRequest) {
     let jobId: string | undefined
     if (trainLora && character.referenceUrls.length > 0) {
       const word = triggerWord || name.toLowerCase().replace(/\s+/g, '_')
+      const confirmedRaw = formData.get('confirmedCostUsd')
+      const confirmedCostUsd = typeof confirmedRaw === 'string' ? Number(confirmedRaw) : Number.NaN
       jobId = await queueCharacterLoraTraining({
         userId,
         projectId,
         characterId: character.id,
         imageUrls: character.referenceUrls,
         triggerWord: word,
+        confirmedCostUsd,
+        subjectConsent: formData.get('subjectConsent') === 'true',
       })
     }
 

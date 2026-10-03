@@ -32,7 +32,10 @@ export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id')
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await request.json().catch(() => ({}))
+  const body = await request.json().catch((err) => {
+    console.warn("[caught] src/app/api/projects/route.ts:35", err instanceof Error ? { name: err.name, message: err.message } : err)
+    return (({}))
+  })
   const { title = 'Untitled Project', description, fps, resolution } = body
 
   const project = await db.project.create({

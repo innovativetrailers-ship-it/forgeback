@@ -1,11 +1,11 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth }                       from '@/lib/auth'
 import { checkAndDeductCredits,
          refundCredits }              from '@/lib/credits'
-import Anthropic                      from '@anthropic-ai/sdk'
-import { fal }                        from '@/lib/fal/client'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
+import { fal, falSubscribeBound } from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('app.api.storyboard.route')
 
 interface StoryboardScene {
   sceneNumber:    number
@@ -62,17 +62,17 @@ export async function POST(req: NextRequest) {
 
   try {
     // Step 1: Claude generates visual descriptions for each scene
-    const descriptionsMsg = await anthropic.messages.create({
+    const descriptionsMsg = await claudeCall({
       model:      'claude-sonnet-4-5',
       max_tokens: 4096,
       messages: [{
         role:    'user',
         content: `You are a professional storyboard artist. For each scene below, write a concise visual description (1-2 sentences) for a ${style} style storyboard image. Include key visual elements, lighting, camera angle, and mood. Also write a short video generation prompt (max 20 words).\n\nScenes:\n${rawScenes.map((s, i) => `Scene ${i + 1}: ${s.heading}\n${s.body.slice(0, 300)}`).join('\n\n')}\n\nRespond as JSON array: [{"sceneNumber": 1, "description": "...", "dialogue": "...", "videoPrompt": "..."}]`,
       }],
-    })
+    }, { source: 'storyboard' })
 
-    const content = descriptionsMsg.content[0]
-    if (content.type !== 'text') throw new Error('Unexpected Claude response type')
+    const contentText = claudeText(descriptionsMsg)
+    if (!contentText) throw new Error('Unexpected Claude response type')
 
     let sceneDescs: Array<{
       sceneNumber: number
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     }> = []
 
     try {
-      const jsonMatch = content.text.match(/\[[\s\S]*\]/)
+      const jsonMatch = contentText.match(/\[[\s\S]*\]/)
       if (jsonMatch) sceneDescs = JSON.parse(jsonMatch[0]) as typeof sceneDescs
     } catch {
       throw new Error('Failed to parse Claude storyboard response')
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
       const images = await Promise.all(batch.map(async (desc) => {
         const raw = rawScenes[desc.sceneNumber - 1]
         try {
-          const result = await fal.subscribe('fal-ai/flux/schnell', {
+          const result = await falSubscribe(falEndpoint('flux/schnell'), {
             input: {
               prompt:           `${style} film storyboard: ${desc.description}`,
               image_size:       'landscape_16_9',
@@ -115,7 +115,9 @@ export async function POST(req: NextRequest) {
             imageUrl:    data.images?.[0]?.url ?? '',
             videoPrompt: desc.videoPrompt,
           }
-        } catch {
+        } catch (err) {
+          console.warn("[caught] src/app/api/storyboard/route.ts:117", err instanceof Error ? { name: err.name, message: err.message } : err)
+
           return {
             sceneNumber: desc.sceneNumber,
             heading:     raw?.heading ?? `Scene ${desc.sceneNumber}`,

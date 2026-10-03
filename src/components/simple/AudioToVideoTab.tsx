@@ -54,7 +54,9 @@ export function AudioToVideoTab({ onGenerated, creditBalance }: Props) {
       })
       const beatData = await beatsRes.json() as BeatAnalysis
       setBeats(beatData)
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/simple/AudioToVideoTab.tsx:57", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // Beat analysis is non-fatal
     } finally {
       setIsAnalysing(false)
@@ -128,15 +130,15 @@ export function AudioToVideoTab({ onGenerated, creditBalance }: Props) {
 
           const sse = new EventSource(`/api/jobs/${jobId}/stream`)
           sse.onmessage = (e) => {
-            const data = JSON.parse(e.data) as { status: string; progress?: number; outputUrl?: string; error?: string; message?: string }
+            const data = JSON.parse(e.data) as { status: string; progress?: number; outputUrl?: string; error?: string; message?: string; userMessage?: string }
             if (data.status === 'complete' && data.outputUrl) {
               onGenerated({ ...activeClip, status: 'complete', videoUrl: data.outputUrl, progress: 100 })
               sse.close()
             } else if (data.status === 'failed') {
-              onGenerated({ ...activeClip, status: 'failed', error: data.error ?? 'Failed' })
+              onGenerated({ ...activeClip, status: 'failed', error: data.userMessage ?? data.error ?? 'Failed', userMessage: data.userMessage })
               sse.close()
             } else {
-              onGenerated({ ...activeClip, status: 'processing', progress: data.progress, progressMessage: data.message })
+              onGenerated({ ...activeClip, status: 'processing', progress: data.progress, progressMessage: data.userMessage ?? data.message, userMessage: data.userMessage })
             }
           }
           sse.onerror = () => {} // transient — allow EventSource auto-reconnect

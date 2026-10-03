@@ -3,6 +3,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { subscribeJobStream } from '@/lib/jobs/subscribeJobStream'
+import { jobPlaybackPath } from '@/lib/media/jobPlayback'
+import { ensureEditorProject, hydrateTimelineFromShots } from '@/lib/projects/loadProject'
+import { buildDefaultRecipe } from '@/lib/timeline/defaultRecipe'
+import { usePlaybackStore } from '@/store/playbackStore'
 import { useSimpleClipsStore } from '@/store/simpleClipsStore'
 import { useJobStore } from '@/store/jobStore'
 import { useSession } from 'next-auth/react'
@@ -15,7 +19,17 @@ import { TopBar } from '@/components/layout/TopBar'
 import { useCredits } from '@/hooks/useCredits'
 import type { GeneratedClip, SimpleTab } from '@/components/simple/types'
 import { fireRewardSignal } from '@/lib/feedback/signal'
+import { placeFinishedClip } from '@/lib/library/placeFinishedClip'
 import { nanoid } from 'nanoid'
+
+async function placeInLibrary(clip: GeneratedClip) {
+  if (!jobPlaybackPath(clip.jobId) && !clip.videoUrl) return
+  try {
+    await placeFinishedClip(clip)
+  } catch (err) {
+    console.warn('[library] placeInLibrary', err instanceof Error ? err.message : err)
+  }
+}
 
 const TABS: Array<{ id: SimpleTab; label: string; icon: string }> = [
   { id: 'text', label: 'Text to Video', icon: '✦' },
@@ -39,6 +53,16 @@ export default function SimplePage() {
   const resumedJobsRef = useRef(new Set<string>())
 
   useEffect(() => {
+    const { projectId, recipe } = usePlaybackStore.getState()
+    if (!projectId) return
+    const base = recipe ?? buildDefaultRecipe(projectId)
+    void hydrateTimelineFromShots(projectId, base).catch((err) => {
+      console.warn("[caught] src/app/(editor)/simple/page.tsx:66", err instanceof Error ? { name: err.name, message: err.message } : err)
+      console.error(err)
+    })
+  }, [])
+
+  useEffect(() => {
     const staleMs = 30 * 60 * 1000
     const { activeJobs, removeJob } = useJobStore.getState()
 
@@ -59,15 +83,18 @@ export default function SimplePage() {
             ...clip,
             status: 'processing',
             progress: data.progress ?? clip.progress,
-            progressMessage: data.message,
+            progressMessage: data.userMessage ?? data.message,
+            userMessage: data.userMessage,
           })
         },
         onComplete: (outputUrl) => {
-          upsertClip({ ...clip, status: 'complete', videoUrl: outputUrl, progress: 100 })
+          const done = { ...clip, status: 'complete' as const, videoUrl: outputUrl, progress: 100 }
+          upsertClip(done)
+          void placeInLibrary(done)
           removeJob(job.jobId)
         },
-        onFailed: (error) => {
-          upsertClip({ ...clip, status: 'failed', error })
+        onFailed: (error, data) => {
+          upsertClip({ ...clip, status: 'failed', error: data.userMessage ?? error, userMessage: data.userMessage })
           removeJob(job.jobId)
         },
       })
@@ -76,6 +103,7 @@ export default function SimplePage() {
 
   const handleGenerated = useCallback((clip: GeneratedClip) => {
     upsertClip(clip)
+    if (clip.status === 'complete') void placeInLibrary(clip)
     // Only track real server jobs — never phantom client nanoids from optimistic UI.
     if (clip.status === 'processing' && clip.jobId.length >= 20) {
       useJobStore.getState().addJob({
@@ -119,20 +147,22 @@ export default function SimplePage() {
         handleGenerated({ ...newClip, id: jobId, jobId, status: 'processing' })
         const sse = new EventSource(`/api/jobs/${jobId}/stream`)
         sse.onmessage = (e) => {
-          const data = JSON.parse(e.data) as { status: string; progress?: number; outputUrl?: string; error?: string; message?: string }
+          const data = JSON.parse(e.data) as { status: string; progress?: number; outputUrl?: string; error?: string; message?: string; userMessage?: string }
           if (data.status === 'complete' && data.outputUrl) {
             handleGenerated({ ...newClip, id: jobId, jobId, status: 'complete', videoUrl: data.outputUrl, progress: 100 })
             sse.close()
           } else if (data.status === 'failed') {
-            handleGenerated({ ...newClip, id: jobId, jobId, status: 'failed', error: data.error ?? 'Failed' })
+            handleGenerated({ ...newClip, id: jobId, jobId, status: 'failed', error: data.userMessage ?? data.error ?? 'Failed', userMessage: data.userMessage })
             sse.close()
           } else {
-            handleGenerated({ ...newClip, id: jobId, jobId, status: 'processing', progress: data.progress, progressMessage: data.message })
+            handleGenerated({ ...newClip, id: jobId, jobId, status: 'processing', progress: data.progress, progressMessage: data.userMessage ?? data.message, userMessage: data.userMessage })
           }
         }
         sse.onerror = () => sse.close()
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn("[caught] src/app/(editor)/simple/page.tsx:166", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         handleGenerated({ ...newClip, status: 'failed', error: 'Failed to create job' })
       })
   }, [handleGenerated])

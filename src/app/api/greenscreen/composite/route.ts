@@ -23,12 +23,16 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, extractionCreditKey)
   } catch (err) {
+    console.warn("[caught] src/app/api/greenscreen/composite/route.ts:25", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
   try {
     await checkAndDeductCredits(userId, backdropCreditKey)
   } catch (err) {
+    console.warn("[caught] src/app/api/greenscreen/composite/route.ts:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     await refundOperationCredits(userId, extractionCreditKey)
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
@@ -38,6 +42,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ composited_url: compositedUrl, preview_frame: compositedUrl })
   } catch (err) {
+    console.warn("[caught] src/app/api/greenscreen/composite/route.ts:40", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     await refundOperationCredits(userId, extractionCreditKey)
     await refundOperationCredits(userId, backdropCreditKey)
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Compositing failed' }, { status: 500 })

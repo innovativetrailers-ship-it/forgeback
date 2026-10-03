@@ -14,7 +14,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const body = await req.json() as { email?: unknown }
     email = typeof body.email === 'string' ? body.email : undefined
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/admin/promote/route.ts:17", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
@@ -28,7 +30,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     console.log(`[admin] ${callerId} promoted ${email} to ADMIN`)
     return NextResponse.json({ promoted: true, userId: user.id })
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/admin/promote/route.ts:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: `User not found: ${email}` }, { status: 404 })
   }
 }

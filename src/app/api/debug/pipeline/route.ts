@@ -62,7 +62,10 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  const redis = await pingRedis().then(() => 'ok').catch((e: unknown) => `FAIL: ${e}`)
+  const redis = await pingRedis().then(() => 'ok').catch((e: unknown) => {
+    console.warn("[caught] src/app/api/debug/pipeline/route.ts:65", e instanceof Error ? { name: e.name, message: e.message } : e)
+    return (`FAIL: ${e}`)
+  })
   const counts = await renderQueue.getJobCounts('waiting', 'active', 'failed', 'delayed')
   const models = Object.fromEntries(
     shots.map((s) => {
@@ -70,6 +73,8 @@ export async function GET(req: NextRequest) {
       try {
         return [modelId, resolveModel(modelId).falEndpoint]
       } catch (e) {
+        console.warn("[caught] src/app/api/debug/pipeline/route.ts:72", e instanceof Error ? { name: e.name, message: e.message } : e)
+
         return [modelId, `RESOLVE FAIL: ${e}`]
       }
     }),

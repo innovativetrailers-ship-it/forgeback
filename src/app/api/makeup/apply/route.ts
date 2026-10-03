@@ -33,6 +33,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, creditKey)
   } catch (err) {
+    console.warn("[caught] src/app/api/makeup/apply/route.ts:35", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -71,6 +73,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ videoUrl, appliedEffects })
   } catch (err) {
+    console.warn("[caught] src/app/api/makeup/apply/route.ts:73", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     await refundOperationCredits(userId, creditKey)
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Makeup application failed' }, { status: 500 })
   }

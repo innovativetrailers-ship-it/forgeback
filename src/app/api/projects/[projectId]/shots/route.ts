@@ -16,6 +16,6 @@ export async function GET(
   })
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
-  const result = await listShotPlan(projectId)
+  const result = await listShotPlan(projectId, userId)
   return NextResponse.json(result)
 }

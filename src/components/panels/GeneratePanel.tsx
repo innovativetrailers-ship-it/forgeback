@@ -6,6 +6,9 @@ import { useEditorStore } from '@/store/editor'
 import { useCredits } from '@/hooks/useCredits'
 import { useVault } from '@/hooks/useVault'
 import { nanoid } from 'nanoid'
+import { usePlaybackStore } from '@/store/playbackStore'
+import { useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
+import { ensureEditorProject } from '@/lib/projects/loadProject'
 import { toast } from 'sonner'
 
 interface CameraControl {
@@ -56,9 +59,11 @@ export function GeneratePanel() {
   const [camera, setCamera]                     = useState<CameraControl>(DEFAULT_CAMERA)
 
   const queryClient    = useQueryClient()
-  const { addClipToTrack, timeline }  = useEditorStore()
+  const addClipToTrack = useEditorStore((s) => s.addClipToTrack)
+  const timeline = useEditorRecipeView()
   const { balance }    = useCredits()
-  const { characters } = useVault(null)
+  const editorProjectId = usePlaybackStore((s) => s.projectId)
+  const { characters } = useVault(editorProjectId)
   const eventSourceRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
@@ -78,11 +83,14 @@ export function GeneratePanel() {
     setProgress(0)
 
     try {
+      const projectId = editorProjectId || (await ensureEditorProject()).projectId
       const res = await fetch('/api/jobs/create', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'GENERATE',
+          projectId,
           quality: tier,
           payload: {
             prompt,
@@ -167,7 +175,9 @@ export function GeneratePanel() {
             setProgress(null)
             toast.error(event.error ?? 'Generation failed')
           }
-        } catch {
+        } catch (err) {
+          console.warn("[caught] src/components/panels/GeneratePanel.tsx:178", err instanceof Error ? { name: err.name, message: err.message } : err)
+
           // ignore malformed events
         }
       }
@@ -179,6 +189,8 @@ export function GeneratePanel() {
         setProgress(null)
       }
     } catch (err) {
+      console.warn("[caught] src/components/panels/GeneratePanel.tsx:189", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setIsGenerating(false)
       setProgress(null)
       toast.error((err as Error).message ?? 'Failed to start generation')

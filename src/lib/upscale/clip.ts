@@ -1,4 +1,6 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '../fal/client'
+const falSubscribe = falSubscribeBound('lib.upscale.clip')
 import { uploadToR2 } from '../storage/r2'
 import { execSync } from 'child_process'
 import { existsSync, mkdirSync, rmSync } from 'fs'
@@ -53,23 +55,23 @@ export async function upscaleClip(params: {
           let upscaledFrameUrl: string
 
           if (engine === 'real_esrgan') {
-            const res = await fal.subscribe('fal-ai/real-esrgan', {
+            const res = await falSubscribe(falEndpoint('real-esrgan'), {
               input: { image_url: dataUrl, scale: job.targetFactor } as never,
             }) as unknown as { image: { url: string } }
             upscaledFrameUrl = res.image.url
           } else if (engine === 'clarity_upscaler') {
-            const res = await fal.subscribe('fal-ai/clarity-upscaler', {
+            const res = await falSubscribe(falEndpoint('clarity-upscaler'), {
               input: { image_url: dataUrl, scale: job.targetFactor } as never,
             }) as unknown as { image: { url: string } }
             upscaledFrameUrl = res.image.url
           } else if (engine === 'esrgan_plus') {
-            const res = await fal.subscribe('fal-ai/esrgan', {
+            const res = await falSubscribe(falEndpoint('esrgan'), {
               input: { image_url: dataUrl },
             }) as unknown as { image: { url: string } }
             upscaledFrameUrl = res.image.url
           } else {
             // Default: aura_sr
-            const res = await fal.subscribe('fal-ai/aura-sr', {
+            const res = await falSubscribe(falEndpoint('aura-sr'), {
               input: { image_url: dataUrl, upscale_factor: job.targetFactor } as never,
             }) as unknown as { image: { url: string } }
             upscaledFrameUrl = res.image.url
@@ -139,7 +141,9 @@ export async function upscaleClip(params: {
       ).toString().trim()
       const [w, h] = probeOut.split(',').map(Number)
       resolutionOut = { width: w, height: h }
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/upscale/clip.ts:143", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // ignore probe failure
     }
 

@@ -55,7 +55,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let raw: unknown
   try {
     raw = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/rough-cut/generate/route.ts:58", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -65,7 +67,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Deduct credits BEFORE processing
   try {
     await checkAndDeductCredits(userId, 'rough_cut_per_clip', CREDIT_COST, 'AI Rough Cut Copilot')
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/rough-cut/generate/route.ts:68", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json(
       { error: `Insufficient credits. Rough cut costs ${CREDIT_COST} credits.` },
       { status: 402 },

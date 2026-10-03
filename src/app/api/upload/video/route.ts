@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { nanoid } from 'nanoid'
+import { db } from '@/lib/db'
+import { ensureMainFolder } from '@/lib/library/folders'
 
 const MAX_SIZE = 500 * 1024 * 1024 // 500MB
 
@@ -19,6 +21,36 @@ export async function POST(request: NextRequest) {
   const ext = file.name.split('.').pop() ?? 'mp4'
   const key = `uploads/${userId}/videos/${nanoid()}.${ext}`
 
-  const url = await uploadToR2(buffer, key, file.type)
-  return NextResponse.json({ url })
+  const storedUrl = await uploadToR2(buffer, key, file.type)
+  const id = nanoid()
+  const projectId = String(formData.get('projectId') ?? '')
+  const folder = projectId
+    ? await ensureMainFolder(projectId).catch((err) => {
+      console.warn('[upload] main folder', err instanceof Error ? err.message : err)
+      return null
+    })
+    : null
+  await db.asset.create({
+    data: {
+      id,
+      ownerId: userId,
+      kind: 'asset',
+      sourcePrompt: file.name,
+      sourceRefs: [key],
+      generatedImage: null,
+      usableAsReference: true,
+      mediaKind: 'imported',
+      label: file.name,
+      folderId: folder?.id,
+      contentType: file.type || 'video/mp4',
+    },
+  })
+  return NextResponse.json({
+    id,
+    storageKey: key,
+    url: storedUrl,
+    mediaPath: `/api/media/${id}`,
+    folderId: folder?.id ?? null,
+    kind: 'imported',
+  })
 }

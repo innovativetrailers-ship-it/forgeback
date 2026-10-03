@@ -1,41 +1,20 @@
-import Anthropic from '@anthropic-ai/sdk'
-import type { TimelineRecipe, Clip, ClipColourGrade } from '@/lib/timeline/schema'
+import { claudeCall } from '@/lib/llm/anthropicClient'
+import type { TimelineRecipe, Clip } from '@/lib/timeline/schema'
+import {
+  isColourGradeSuggestion,
+  suggestionToClipGrade,
+  type ColourGradeSuggestion,
+  type ColourMood,
+} from '@/lib/color/colourGradeShape'
 
-export type ColourMood = 'warm' | 'cool' | 'cinematic' | 'vintage' | 'moody'
-
-export interface ColourGradeSuggestion {
-  shadows: number          // -100 to +100
-  midtones: number         // -100 to +100
-  highlights: number       // -100 to +100
-  temperature: number      // 2700 to 10000 (Kelvin)
-  tint: number             // -100 to +100
-  saturation: number       // 0.0 to 2.0 (multiplier, 1.0 = no change)
-  lutSuggestion: string
-  reasoning: string
-}
+export type { ColourMood, ColourGradeSuggestion }
+export { isColourGradeSuggestion, suggestionToClipGrade }
 
 export interface ColourGradeRequest {
   clipId: string
   frameUrl: string
   mood: ColourMood
   targetLook?: string
-}
-
-// ─── Type guards ──────────────────────────────────────────────────────────────
-
-export function isColourGradeSuggestion(v: unknown): v is ColourGradeSuggestion {
-  if (typeof v !== 'object' || v === null) return false
-  const o = v as Record<string, unknown>
-  return (
-    typeof o.shadows === 'number' &&
-    typeof o.midtones === 'number' &&
-    typeof o.highlights === 'number' &&
-    typeof o.temperature === 'number' &&
-    typeof o.tint === 'number' &&
-    typeof o.saturation === 'number' &&
-    typeof o.lutSuggestion === 'string' &&
-    typeof o.reasoning === 'string'
-  )
 }
 
 // ─── Mood profiles ────────────────────────────────────────────────────────────
@@ -105,9 +84,6 @@ function clampSuggestion(raw: ColourGradeSuggestion): ColourGradeSuggestion {
 // ─── Main export: suggest colour grade ───────────────────────────────────────
 
 export async function suggestColourGrade(params: ColourGradeRequest): Promise<ColourGradeSuggestion> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not configured')
-
   try { new URL(params.frameUrl) } catch {
     throw new Error(`Invalid frameUrl: "${params.frameUrl}"`)
   }
@@ -146,8 +122,7 @@ ${lookSection}
 Consider: current exposure, colour temperature, contrast ratio, dominant hues.
 Output ONLY the JSON object.`
 
-  const client = new Anthropic({ apiKey })
-  const response = await client.messages.create({
+  const response = await claudeCall({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 512,
     system: systemPrompt,
@@ -158,14 +133,14 @@ Output ONLY the JSON object.`
         { type: 'text', text: userPrompt },
       ],
     }],
-  })
+  }, { source: 'color.aigrade' })
 
   const textBlock = response.content.find((b) => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') {
     throw new Error('Anthropic returned no text content for colour grade')
   }
 
-  let jsonText = textBlock.text.trim()
+  let jsonText = (textBlock.text ?? '').trim()
   const fenceMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (fenceMatch) jsonText = fenceMatch[1].trim()
 
@@ -185,22 +160,6 @@ Output ONLY the JSON object.`
 }
 
 // ─── Map AI suggestion to ClipColourGrade ────────────────────────────────────
-
-export function suggestionToClipGrade(suggestion: ColourGradeSuggestion): ClipColourGrade {
-  return {
-    shadows: suggestion.shadows,
-    midtones: suggestion.midtones,
-    highlights: suggestion.highlights,
-    temperature: suggestion.temperature,
-    tint: suggestion.tint,
-    asc_cdl: {
-      lift: [0, 0, 0],
-      gamma: [1, 1, 1],
-      gain: [1, 1, 1],
-      saturation: suggestion.saturation,
-    },
-  }
-}
 
 // ─── Apply to recipe ──────────────────────────────────────────────────────────
 

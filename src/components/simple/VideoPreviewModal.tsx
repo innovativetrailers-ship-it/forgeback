@@ -1,12 +1,13 @@
 'use client'
 
+
+import { logCaught } from '@/lib/diagnostics/caught'
 import { useEffect, useRef, useState } from 'react'
 import { X, Download, Plus, RefreshCw } from 'lucide-react'
 import type { GeneratedClip } from './types'
 import { MODEL_FAMILY_COLOURS } from './types'
 import { jobPlaybackPath } from '@/lib/media/jobPlayback'
-import { probeDuration } from '@/lib/timeline/probeDuration'
-import { useTimelineStore } from '@/store/timeline'
+import { placeFinishedClip } from '@/lib/library/placeFinishedClip'
 import { toast } from '@/lib/toast'
 
 interface Props {
@@ -30,46 +31,35 @@ export function VideoPreviewModal({
   onClose,
   onRegenerate,
   onAddToTimeline,
-  onOpenEditor,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const playSrc = jobPlaybackPath(clip.jobId)
   const [playbackError, setPlaybackError] = useState(false)
   const [adding, setAdding] = useState(false)
-  const addClip = useTimelineStore((s) => s.addClip)
   const modelColour = MODEL_FAMILY_COLOURS[clip.model] ?? '#6b7280'
 
   useEffect(() => {
     setPlaybackError(false)
-    videoRef.current?.play().catch(() => {})
+    videoRef.current?.play().catch((err) => logCaught('components/simple/VideoPreviewModal', err))
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [onClose, playSrc])
 
-  async function handleAddToTimeline() {
-    const sourceUrl = playSrc ?? clip.videoUrl
-    if (!sourceUrl) {
+  async function handleAddToLibrary() {
+    if (!playSrc && !clip.videoUrl) {
       toast.error('This result has no video to add')
       return
     }
     setAdding(true)
     try {
-      const durationSec = clip.duration > 0 ? clip.duration : await probeDuration(sourceUrl)
-      addClip({
-        id: clip.jobId,
-        sourceUrl,
-        posterUrl: clip.thumbnailUrl,
-        durationSec,
-        track: 'video',
-        label: clip.prompt.slice(0, 40),
-      })
+      await placeFinishedClip(clip)
       onAddToTimeline?.(clip)
-      toast.success('Added to timeline')
-      onOpenEditor?.()
+      toast.success('Added to the library')
       onClose()
-    } catch {
-      toast.error('Could not add to timeline')
+    } catch (err) {
+      console.warn('[library] placement failed', err instanceof Error ? err.message : err)
+      toast.error(err instanceof Error ? err.message : 'Could not add to the library')
     } finally {
       setAdding(false)
     }
@@ -150,13 +140,13 @@ export function VideoPreviewModal({
             </button>
             <button
               type="button"
-              onClick={handleAddToTimeline}
+              onClick={handleAddToLibrary}
               disabled={adding || !playSrc || playbackError}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#00e5c8]/20 hover:bg-[#00e5c8]/30
                 text-[#00e5c8] text-sm transition-colors disabled:opacity-40"
             >
               <Plus className="w-4 h-4" />
-              {adding ? 'Adding…' : 'Add to Timeline'}
+              {adding ? 'Adding…' : 'Add to Library'}
             </button>
             <a
               href={downloadHref}

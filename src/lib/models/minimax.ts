@@ -1,5 +1,6 @@
-import { runFal, extractVideoUrl, fal } from '@/lib/fal/client'
-import { buildFalVideoInput } from '@/lib/fal/videoPayloads'
+import { runFal, extractVideoUrl, fal, falQueueBound} from '@/lib/fal/client'
+const falQueueOps = falQueueBound('lib.models.minimax')
+import { buildPayload } from '@/lib/fal/videoPayloads'
 import { resolveHailuoEndpoint } from '@/lib/fal/hailuoEndpoints'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
@@ -11,7 +12,7 @@ export async function generateVideo(
   const isI2V = Boolean(input.startFrameUrl)
   const model = resolveHailuoEndpoint(REGISTRY_KEY, isI2V)
 
-  const falInput = await buildFalVideoInput(model, REGISTRY_KEY, {
+  const falInput = await buildPayload(model, REGISTRY_KEY, {
     prompt: input.prompt,
     duration: input.duration ?? 6,
     aspectRatio: input.aspectRatio ?? '16:9',
@@ -34,17 +35,19 @@ export async function generateVideo(
 export async function pollStatus(requestId: string): Promise<GenerateVideoOutput> {
   const model = resolveHailuoEndpoint(REGISTRY_KEY, false)
   try {
-    const status = await fal.queue.status(model, { requestId, logs: false }) as { status: string }
+    const status = await falQueueOps.status(model, { requestId, logs: false }) as { status: string }
     if (status.status !== 'COMPLETED') {
       if (status.status === 'FAILED') {
         return { jobId: requestId, status: 'failed', error: 'Minimax generation failed' }
       }
       return { jobId: requestId, status: 'processing' }
     }
-    const result = await fal.queue.result(model, { requestId }) as { data: unknown }
+    const result = await falQueueOps.result(model, { requestId }) as { data: unknown }
     const videoUrl = extractVideoUrl(result.data)
     return { jobId: requestId, status: 'complete', videoUrl }
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/models/minimax.ts:48", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return { jobId: requestId, status: 'processing' }
   }
 }

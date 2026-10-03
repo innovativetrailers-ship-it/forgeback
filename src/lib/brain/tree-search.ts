@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import { runModel1 } from './model1'
 import { db } from '../db'
 import { nanoid } from 'nanoid'
@@ -58,7 +59,9 @@ FilmPlan schema:
 
     try {
       return JSON.parse(result.content) as FilmPlan
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/brain/tree-search.ts:62", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       return null
     }
   })
@@ -92,7 +95,7 @@ FilmPlan schema:
         } as never,
         isProcessed: false,
       },
-    }).catch(() => {})
+    }).catch((err) => logCaught('lib/brain/tree-search', err))
   }
 
   // 4. Convert best plan to TimelineRecipe

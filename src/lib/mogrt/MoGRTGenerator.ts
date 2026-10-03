@@ -3,9 +3,7 @@
  * Uses Claude to generate a Remotion component config from a natural language description.
  */
 
-import Anthropic from '@anthropic-ai/sdk'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
 
 export interface RemotionComponentConfig {
   name:        string
@@ -38,19 +36,19 @@ Rules:
 `.trim()
 
 export async function generateMoGRT(description: string): Promise<RemotionComponentConfig> {
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
     model:      'claude-sonnet-4-5',
     max_tokens: 2048,
     messages: [{
       role:    'user',
       content: `${REMOTION_SCHEMA_PROMPT}\n\nGenerate a motion graphics template for: "${description}"\n\nReturn only valid JSON matching the RemotionComponentConfig schema.`,
     }],
-  })
+  }, { source: 'mogrt.gen' })
 
-  const content = response.content[0]
-  if (content.type !== 'text') throw new Error('Unexpected response type')
+  const text = claudeText(response)
+  if (!text) throw new Error('Unexpected response type')
 
-  const jsonMatch = content.text.match(/\{[\s\S]*\}/)
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
   if (!jsonMatch) throw new Error('No JSON found in response')
 
   return JSON.parse(jsonMatch[0]) as RemotionComponentConfig

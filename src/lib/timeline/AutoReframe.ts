@@ -1,4 +1,6 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '../fal/client'
+const falSubscribe = falSubscribeBound('lib.timeline.AutoReframe')
 import { uploadToR2 } from '../storage/r2'
 import { execSync } from 'child_process'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
@@ -59,7 +61,7 @@ export async function reframeClip(params: {
       for (const thumb of thumbFiles) {
         const thumbData = execSync(`base64 "${join(framesDir, thumb)}"`).toString().trim()
         try {
-          const detection = await fal.subscribe('fal-ai/detr', {
+          const detection = await falSubscribe(falEndpoint('detr'), {
             input: { image_url: `data:image/jpeg;base64,${thumbData}` },
           }) as unknown as {
             objects: Array<{ box: { xmin: number; ymin: number; xmax: number; ymax: number } }>
@@ -78,7 +80,9 @@ export async function reframeClip(params: {
             const y = Math.round((srcH - targetH) / 2)
             cropCoords.push({ x, y, width: targetW, height: targetH })
           }
-        } catch {
+        } catch (err) {
+          console.warn("[caught] src/lib/timeline/AutoReframe.ts:82", err instanceof Error ? { name: err.name, message: err.message } : err)
+
           const x = Math.round((srcW - targetW) / 2)
           const y = Math.round((srcH - targetH) / 2)
           cropCoords.push({ x, y, width: targetW, height: targetH })

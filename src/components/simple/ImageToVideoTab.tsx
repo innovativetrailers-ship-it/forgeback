@@ -93,19 +93,21 @@ export function ImageToVideoTab({ onGenerated, creditBalance }: Props) {
 
       const sse = new EventSource(`/api/jobs/${jobId}/stream`)
       sse.onmessage = (e) => {
-        const data = JSON.parse(e.data) as { status: string; progress?: number; message?: string; outputUrl?: string; error?: string }
+        const data = JSON.parse(e.data) as { status: string; progress?: number; message?: string; outputUrl?: string; error?: string; userMessage?: string }
         if (data.status === 'complete' && data.outputUrl) {
           onGenerated({ ...activeClip, status: 'complete', videoUrl: data.outputUrl, progress: 100 })
           sse.close()
         } else if (data.status === 'failed') {
-          onGenerated({ ...activeClip, status: 'failed', error: data.error ?? 'Failed' })
+          onGenerated({ ...activeClip, status: 'failed', error: data.userMessage ?? data.error ?? 'Failed', userMessage: data.userMessage })
           sse.close()
         } else {
-          onGenerated({ ...activeClip, status: 'processing', progress: data.progress, progressMessage: data.message })
+          onGenerated({ ...activeClip, status: 'processing', progress: data.progress, progressMessage: data.userMessage ?? data.message, userMessage: data.userMessage })
         }
       }
       sse.onerror = () => {} // transient — allow EventSource auto-reconnect
     } catch (err) {
+      console.warn("[caught] src/components/simple/ImageToVideoTab.tsx:108", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       onGenerated({ id: nanoid(), jobId: nanoid(), prompt, model: selectedPill.model, quality, creditsUsed: selectedPill.credits, duration: 5, aspectRatio: '16:9', status: 'failed', error: (err as Error).message, createdAt: new Date() })
     } finally {
       setIsLoading(false)

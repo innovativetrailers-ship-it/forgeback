@@ -33,7 +33,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let body: Record<string, unknown>
   try {
     body = (await request.json()) as Record<string, unknown>
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/credits/purchase/route.ts:36", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 

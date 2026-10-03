@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import { db } from '@/lib/db'
 import { isEphemeralVideoUrl } from '@/lib/media/ephemeralUrls'
 import {
@@ -79,7 +80,7 @@ export async function resolveJobPlaybackUrl(
       await db.renderJob.update({
         where: { id: jobId },
         data: { outputUrl: publicUrl },
-      }).catch(() => {})
+      }).catch((err) => logCaught('lib/storage/persistMedia', err))
     }
     return publicUrl
   }
@@ -94,9 +95,11 @@ export async function resolveJobPlaybackUrl(
       await db.renderJob.update({
         where: { id: jobId },
         data: { outputUrl: persisted },
-      }).catch(() => {})
+      }).catch((err) => logCaught('lib/storage/persistMedia', err))
       return persisted
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/storage/persistMedia.ts:100", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       return null
     }
   }
@@ -117,7 +120,9 @@ export async function signedPlaybackUrl(
   if (await objectExists(key)) {
     try {
       return await getSignedDownloadUrl(key, 3600)
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/storage/persistMedia.ts:121", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       return resolved
     }
   }

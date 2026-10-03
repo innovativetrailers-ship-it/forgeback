@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { Film, Clock, Trash2 } from 'lucide-react'
 import { GenerationCard } from './GenerationCard'
 import { VideoPreviewModal } from './VideoPreviewModal'
+import { ClipContextMenu } from '@/components/editor/ClipContextMenu'
+import { deleteFromLibrary } from '@/lib/library/deleteFromLibrary'
+import { toast } from '@/lib/toast'
 import type { GeneratedClip } from './types'
 
 interface Props {
@@ -25,6 +28,7 @@ export function ResultsGallery({
 }: Props) {
   const [expandedClip, setExpandedClip] = useState<GeneratedClip | null>(null)
   const [filter, setFilter] = useState<'all' | 'done' | 'generating' | 'failed'>('all')
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
 
   const filteredClips = clips.filter((c) => {
     if (filter === 'done') return c.status === 'complete'
@@ -92,7 +96,14 @@ export function ResultsGallery({
       {/* Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filteredClips.map((clip) => (
-          <div key={clip.id} className="relative group/card">
+          <div
+            key={clip.id}
+            className="relative group/card"
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setMenu({ id: clip.id, x: event.clientX, y: event.clientY })
+            }}
+          >
             <GenerationCard
               clip={clip}
               onRegenerate={onRegenerate}
@@ -101,7 +112,13 @@ export function ResultsGallery({
               onOpenEditor={onOpenEditor}
             />
             <button
-              onClick={() => onDelete(clip.id)}
+              onClick={() => {
+                void deleteFromLibrary(clip.id).catch((err) => {
+                  console.warn("[caught] src/components/simple/ResultsGallery.tsx:116", err instanceof Error ? { name: err.name, message: err.message } : err)
+
+                  toast.error(err instanceof Error ? err.message : 'Could not delete')
+                })
+              }}
               className="absolute top-2 right-10 p-1 rounded-full bg-black/60 text-white/40
                 opacity-0 group-hover/card:opacity-100 transition-opacity hover:text-red-400 hover:bg-black/80 z-10"
               title="Delete"
@@ -111,6 +128,15 @@ export function ResultsGallery({
           </div>
         ))}
       </div>
+
+      {menu && (
+        <ClipContextMenu
+          clipId={menu.id}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+        />
+      )}
 
       {expandedClip && (
         <VideoPreviewModal

@@ -28,7 +28,9 @@ async function getModelSchema(falModelId: string): Promise<ModelSchema | null> {
     const schema = res.ok ? ((await res.json()) as ModelSchema) : null
     schemaCache.set(falModelId, { schema, fetchedAt: Date.now() })
     return schema
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/cognition/routing/schemaPayload.ts:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return null // fall back to default payload if schema unavailable
   }
 }
@@ -40,7 +42,7 @@ export interface PayloadIntent {
   referenceUrl?: string
 }
 
-export async function buildPayload(
+export async function buildCognitionPayload(
   falModelId: string,
   intent: PayloadIntent,
 ): Promise<Record<string, unknown>> {

@@ -28,7 +28,9 @@ export function SignupStep3() {
       })
       if (!res.ok) { const d = await res.json(); setError(d.error ?? 'Activation failed'); return }
       router.push('/simple')
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/auth/SignupStep3.tsx:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError('Network error')
     } finally {
       setLoading(false)
@@ -47,7 +49,9 @@ export function SignupStep3() {
       const data = await res.json()
       if (data.url) window.location.href = data.url
       else setError(data.error ?? 'Failed to start checkout')
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/auth/SignupStep3.tsx:50", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError('Network error')
     } finally {
       setLoading(false)

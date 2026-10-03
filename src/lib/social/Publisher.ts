@@ -180,6 +180,8 @@ export async function publishToSocial(params: PublishParams): Promise<PublishRes
 
       results.push(result)
     } catch (err) {
+      console.warn("[caught] src/lib/social/Publisher.ts:182", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       results.push({ platform, success: false, error: err instanceof Error ? err.message : 'Unknown error' })
     }
   }

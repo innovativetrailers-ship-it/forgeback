@@ -6,6 +6,10 @@ import https from 'https'
 import http from 'http'
 import { pipeline } from 'stream/promises'
 import type { TimelineRecipe, Clip, ColourGradeSettings } from './schema'
+import { controlExportFilters, planarOverlayPlacement } from './controlLayer'
+import { peakBlurFilter, speedRampFilter } from './timeRemap'
+import { expandForExport } from './nleDepth'
+import { deepGradeFragment } from '@cinema/core'
 
 export type ExportFormat = 'mp4_1080p' | 'mp4_4k' | 'prores_422' | 'prores_4444' | 'dcp'
 
@@ -23,10 +27,69 @@ const FORMAT_SETTINGS: Record<
 const TRANSITION_MAP: Record<string, string> = {
   dissolve: 'dissolve',
   fade: 'fadeblack',
+  'fade-in': 'fadeblack',
+  'fade-out': 'fadeblack',
+  flash: 'fadewhite',
   wipe: 'slideleft',
+  slide: 'slideleft',
+  push: 'slideright',
   zoom: 'zoomin',
+  whip: 'hblur',
+  spin: 'radial',
   glitch: 'pixelize',
+  blur: 'hblur',
   film_burn: 'hblur',
+  light_leak: 'fadewhite',
+}
+
+function filmLook(name: string | undefined): string {
+  if (name === 'bw_contrast') return 'hue=s=0,eq=contrast=1.25'
+  if (name === 'fuji_3510') return 'eq=saturation=0.9:contrast=1.05,hue=h=-8'
+  if (name === 'kodak_2383') return 'eq=saturation=1.05:contrast=1.12,colorbalance=rs=0.06:bs=-0.04'
+  if (name === 'kodak_5219') return 'eq=saturation=1.15:contrast=1.08,colorbalance=rs=0.04:bs=-0.02'
+  return ''
+}
+
+function isHardCut(type: string | undefined): boolean {
+  return !type || type === 'cut' || type === 'match' || type === 'generative-bridge'
+}
+
+function centerReframe(aspect: Clip['reframe'], width: number, height: number): string | null {
+  if (!aspect) return null
+  const [aw, ah] = aspect.split(':').map(Number)
+  if (!aw || !ah) return null
+  const target = aw / ah
+  const current = width / height
+  if (Math.abs(target - current) < 0.02) return null
+  if (target < current) {
+    const cropW = Math.max(2, Math.round(height * target))
+    const x = Math.max(0, Math.round((width - cropW) / 2))
+    return `crop=${cropW}:${height}:${x}:0`
+  }
+  const cropH = Math.max(2, Math.round(width / target))
+  const y = Math.max(0, Math.round((height - cropH) / 2))
+  return `crop=${width}:${cropH}:0:${y}`
+}
+
+async function resolveExportSource(sourceUrl: string): Promise<string> {
+  if (!sourceUrl.startsWith('/api/media/')) return sourceUrl
+  const id = sourceUrl.slice('/api/media/'.length).split('?')[0]
+  const { db } = await import('@/lib/db')
+  const { resolveOwnedMedia, signedUrlForStoredKey } = await import('@/lib/media/resolveStoredMedia')
+  const asset = await db.asset.findUnique({ where: { id }, select: { ownerId: true } })
+  const clip = asset ? null : await db.studioClip.findUnique({
+    where: { id },
+    select: { scene: { select: { project: { select: { userId: true } } } } },
+  })
+  const job = asset || clip ? null : await db.renderJob.findUnique({ where: { id }, select: { userId: true } })
+  const userId = asset?.ownerId ?? clip?.scene.project.userId ?? job?.userId
+  if (!userId) throw new Error(`Export cannot resolve media ${id}`)
+  const resolved = await resolveOwnedMedia(id, userId)
+  if (resolved.remoteUrl) return resolved.remoteUrl
+  if (resolved.reason !== 'ok' || !resolved.key) throw new Error(`Export media ${id} has no stored file`)
+  const signed = await signedUrlForStoredKey(resolved.key)
+  if (!signed) throw new Error(`Export media ${id} is missing from storage`)
+  return signed
 }
 
 async function downloadFile(url: string, destPath: string): Promise<void> {
@@ -38,7 +101,10 @@ async function downloadFile(url: string, destPath: string): Promise<void> {
         return
       }
       const writer = createWriteStream(destPath)
-      pipeline(res, writer).then(resolve).catch(reject)
+      pipeline(res, writer).then(resolve).catch((err) => {
+        console.warn("[caught] src/lib/timeline/renderer.ts:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+        reject(err)
+      })
     }).on('error', (err: Error) => reject(err))
   })
 }
@@ -98,8 +164,6 @@ function buildEffectFilters(effects: NonNullable<Clip['effects']>): string {
           return `tmix=frames=${Math.round(i * 5 + 2)}:weights=1`
         case 'halation':
           return `gblur=sigma=${i * 8}[h];[h]blend=all_mode=screen:all_opacity=${i * 0.35}`
-        case 'lens_flare':
-          return `flite=s=${i}` // placeholder — real lens flare needs custom filter graph
         default:
           return ''
       }
@@ -127,8 +191,9 @@ export async function renderTimeline(
 
   try {
     // ── 1. Gather all clips from video tracks ──────────────────────────────
-    const videoTracks = recipe.tracks.filter((t) => t.type === 'video' && !t.muted)
-    const audioTracks = recipe.tracks.filter((t) => t.type === 'audio' && !t.muted)
+    const prepared = expandForExport(recipe)
+    const videoTracks = prepared.tracks.filter((t) => t.type === 'video' && !t.muted)
+    const audioTracks = prepared.tracks.filter((t) => t.type === 'audio' && !t.muted)
 
     const allVideoClips = videoTracks.flatMap((t) => t.clips).sort((a, b) => a.startTime - b.startTime)
     const allAudioClips = audioTracks.flatMap((t) => t.clips).sort((a, b) => a.startTime - b.startTime)
@@ -144,17 +209,46 @@ export async function renderTimeline(
       ...allVideoClips.map((c) => c.sourceUrl),
       ...allAudioClips.map((c) => c.sourceUrl),
     ])]
+    const fetchable = new Map<string, string>()
+    for (const sourceUrl of allUrls) {
+      fetchable.set(sourceUrl, await resolveExportSource(sourceUrl))
+    }
 
     await Promise.all(
       allUrls.map(async (url) => {
+        const source = fetchable.get(url) ?? url
         const ext = url.split('.').pop()?.split('?')[0] ?? 'mp4'
         const dest = path.join(tempDir, `src_${downloaded++}_${Date.now()}.${ext}`)
-        await downloadFile(url, dest)
+        await downloadFile(source, dest)
         clipPaths.set(url, dest)
         downloadedFiles.push(dest)
         onProgress?.({ stage: 'downloading', percent: Math.round((downloaded / allUrls.length) * 40) })
       })
     )
+
+    const lutPaths = new Map<string, string>()
+    let lutIndex = 0
+    for (const clip of allVideoClips) {
+      const lutUrl = clip.colourGrade?.lutUrl?.trim()
+      if (!lutUrl || !lutUrl.startsWith('http') || lutPaths.has(lutUrl)) continue
+      const lutPath = path.join(tempDir, `clip_lut_${lutIndex++}.cube`)
+      await downloadFile(lutUrl, lutPath)
+      downloadedFiles.push(lutPath)
+      lutPaths.set(lutUrl, lutPath)
+    }
+
+    const insertPaths = new Map<string, string>()
+    let insertIndex = 0
+    for (const clip of allVideoClips) {
+      const imageUrl = clip.control?.planarInsert?.imageUrl?.trim()
+      if (!imageUrl || insertPaths.has(imageUrl)) continue
+      const source = await resolveExportSource(imageUrl)
+      const ext = imageUrl.split('.').pop()?.split('?')[0] ?? 'png'
+      const dest = path.join(tempDir, `insert_${insertIndex++}.${ext}`)
+      await downloadFile(source, dest)
+      downloadedFiles.push(dest)
+      insertPaths.set(imageUrl, dest)
+    }
 
     // ── 3. Build FFmpeg filter graph ──────────────────────────────────────
     onProgress?.({ stage: 'encoding', percent: 40 })
@@ -187,12 +281,32 @@ export async function renderTimeline(
       filters.push(`scale=${settings.width}:${settings.height}:force_original_aspect_ratio=decrease`)
       filters.push(`pad=${settings.width}:${settings.height}:(ow-iw)/2:(oh-ih)/2:black`)
       filters.push(`setpts=PTS-STARTPTS`)
+      const framed = centerReframe(clip.reframe, settings.width, settings.height)
+      if (framed) filters.push(framed, `scale=${settings.width}:${settings.height}`)
+      const ramp = speedRampFilter(clip, clipDuration)
+      if (ramp) filters.push(ramp)
+      const blur = peakBlurFilter(clip)
+      if (blur) filters.push(blur)
+
+      filters.push(...controlExportFilters(clip.control, clipDuration, settings.width, settings.height))
+
+      const placement = planarOverlayPlacement(clip.control, clipDuration, settings.width, settings.height)
+      const insertPath = placement ? insertPaths.get(placement.imageUrl) : undefined
 
       // Apply effects
       if (clip.effects && clip.effects.length > 0) {
         const effectFilter = buildEffectFilters(clip.effects)
         if (effectFilter) filters.push(effectFilter)
       }
+
+      if (clip.colourGrade?.lutUrl?.startsWith('http')) {
+        const lutPath = lutPaths.get(clip.colourGrade.lutUrl.trim())
+        if (lutPath) filters.push(`lut3d=${lutPath.replace(/\\/g, '/').replace(/:/g, '\\:')}`)
+      }
+      const look = filmLook(clip.colourGrade?.filmEmulation)
+      if (look) filters.push(look)
+      const deep = deepGradeFragment(clip.colourGrade?.deep).replace(/^,/, '')
+      if (deep) filters.push(deep)
 
       // Apply colour grade
       if (clip.colourGrade) {
@@ -218,7 +332,14 @@ export async function renderTimeline(
         if (gradeFilter) filters.push(gradeFilter)
       }
 
-      filterParts.push(`${filters.join(',')}[v${i}]`)
+      if (placement && insertPath) {
+        const escaped = insertPath.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'")
+        filterParts.push(`${filters.join(',')}[vpre${i}]`)
+        filterParts.push(`movie='${escaped}',scale=${placement.w}:${placement.h}[pins${i}]`)
+        filterParts.push(`[vpre${i}][pins${i}]overlay=x='${placement.x}':y='${placement.y}':format=auto[v${i}]`)
+      } else {
+        filterParts.push(`${filters.join(',')}[v${i}]`)
+      }
     })
 
     // Concatenate clips with transitions
@@ -231,7 +352,7 @@ export async function renderTimeline(
         const clip = allVideoClips[i]
         const outLabel = i === allVideoClips.length - 1 ? 'vout' : `vconcat${i}`
 
-        if (clip.transition && clip.transition.type !== 'cut') {
+        if (clip.transition && !isHardCut(clip.transition.type)) {
           const xfadeType = TRANSITION_MAP[clip.transition.type] ?? 'dissolve'
           const offset = allVideoClips[i - 1].endTime - clip.transition.duration
 
@@ -251,18 +372,26 @@ export async function renderTimeline(
       allAudioClips.forEach((clip, i) => {
         const inputIndex = videoInputCount + i
         const delayMs = Math.round(clip.startTime * 1000)
-        const vol = clip.audioSettings?.volume ?? 100
-        audioDelayParts.push(`[${inputIndex}:a]adelay=${delayMs}|${delayMs},volume=${vol / 100}[a${i}]`)
+        const raw = clip.audioSettings?.volume
+        const gain = raw == null ? 1 : raw > 2 ? raw / 100 : raw
+        const eq = clip.audioSettings?.eq
+        const tone = [
+          eq?.low ? `bass=g=${eq.low}` : '',
+          eq?.mid ? `equalizer=f=1000:width_type=q:width=1:g=${eq.mid}` : '',
+          eq?.high ? `treble=g=${eq.high}` : '',
+        ].filter(Boolean).join(',')
+        audioDelayParts.push(`[${inputIndex}:a]adelay=${delayMs}|${delayMs}${tone ? ',' + tone : ''},volume=${gain}[a${i}]`)
       })
       filterParts.push(...audioDelayParts)
 
       if (allAudioClips.length === 1) {
-        filterParts.push(`[a0]acopy[aout]`)
+        filterParts.push(`[a0]loudnorm=I=-14:TP=-1.5:LRA=11[anorm]`)
       } else {
         const audioInputs = allAudioClips.map((_, i) => `[a${i}]`).join('')
         filterParts.push(
-          `${audioInputs}amix=inputs=${allAudioClips.length}:duration=longest:normalize=0[aout]`
+          `${audioInputs}amix=inputs=${allAudioClips.length}:duration=longest:normalize=0[amixed]`,
         )
+        filterParts.push('[amixed]loudnorm=I=-14:TP=-1.5:LRA=11[anorm]')
       }
     }
 
@@ -293,7 +422,7 @@ export async function renderTimeline(
     // ── 4. Assemble and run FFmpeg ──────────────────────────────────────
     cmd.complexFilter(filterParts.join(';'))
     cmd.outputOption('-map', '[vrender]')
-    if (hasAudio) cmd.outputOption('-map', '[aout]')
+    if (hasAudio) cmd.outputOption('-map', '[anorm]')
 
     // Codec settings
     cmd.videoCodec(settings.codec)
@@ -301,6 +430,11 @@ export async function renderTimeline(
     if (settings.bitrate) cmd.outputOption('-b:v', settings.bitrate)
     if (settings.profile) cmd.outputOption('-profile:v', settings.profile)
     if (hasAudio) cmd.audioCodec('aac').audioBitrate('256k')
+    else {
+      cmd.outputOption('-map', '0:a?')
+      cmd.audioCodec('aac').audioBitrate('256k')
+      cmd.audioFilter('loudnorm=I=-14:TP=-1.5:LRA=11')
+    }
 
     // C2PA metadata injection
     cmd.outputOption('-metadata', `generated_by=CINEMA`)
@@ -354,7 +488,9 @@ export async function renderTimeline(
   } finally {
     // Clean up temp downloads
     for (const f of downloadedFiles) {
-      try { if (existsSync(f)) unlinkSync(f) } catch { /* ignore */ }
+      try { if (existsSync(f)) unlinkSync(f) } catch (err) {
+        console.warn("[caught] src/lib/timeline/renderer.ts:357", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore */ }
     }
   }
 }
@@ -395,8 +531,12 @@ export async function generateProxy(
 
   const url = await uploadToR2(buffer, key, 'video/mp4')
 
-  try { unlinkSync(inputPath) } catch { /* ignore */ }
-  try { unlinkSync(outputPath) } catch { /* ignore */ }
+  try { unlinkSync(inputPath) } catch (err) {
+    console.warn("[caught] src/lib/timeline/renderer.ts:398", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore */ }
+  try { unlinkSync(outputPath) } catch (err) {
+    console.warn("[caught] src/lib/timeline/renderer.ts:399", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore */ }
 
   return url
 }

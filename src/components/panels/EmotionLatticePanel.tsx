@@ -2,12 +2,13 @@
 
 import { useState, useCallback } from 'react'
 import { useEditorStore } from '@/store/editor'
+import { useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
 import { useUIStore } from '@/store/ui'
 import {
   computeArcPath, EMOTION_COLORS,
   isEmotionLatticeResult,
   type EmotionLatticeResult, type EmotionalBeat,
-} from '@/lib/emotion/EmotionLattice'
+} from '@/lib/emotion/emotionShape'
 
 const CHART_W = 240
 const CHART_H = 80
@@ -25,7 +26,7 @@ const PACE_RECS: Array<{ key: keyof EmotionLatticeResult['paceRecommendations'][
 ]
 
 export function EmotionLatticePanel() {
-  const recipe = useEditorStore((s) => s.recipe)
+  const recipe = useEditorRecipeView()
   const setPlayheadTime = useEditorStore((s) => s.setPlayheadTime)
   const addToast = useUIStore((s) => s.addToast)
 
@@ -69,6 +70,8 @@ export function EmotionLatticePanel() {
       }
       setResult(data.result)
     } catch (e: unknown) {
+      console.warn("[caught] src/components/panels/EmotionLatticePanel.tsx:72", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       setError(e instanceof Error ? e.message : 'Network error')
     } finally {
       setLoading(false)

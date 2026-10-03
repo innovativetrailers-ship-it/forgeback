@@ -1,34 +1,15 @@
-/** Per-5s credit rates — silent generation (no model-native audio; ElevenLabs owns audio). */
+/** Per-5s credit rates — silent generation except Grok, which is audio-native. */
 import { VIDEO_MODEL_REGISTRY } from '@/lib/models/registry'
 
-/** Per-5s credit rates — silent generation (no model-native audio; ElevenLabs owns audio). */
 export const MODEL_COSTS: Record<string, number> = {
-  'veo-3.1':              23,  // silent ~$0.112/s equiv vs ~33% premium with audio
-  'kling-3.0':            17,  // silent $0.112/s vs $0.168/s with audio
-  'seedance-2.0':         20,
-  'runway-gen4':          22,
-  'hunyuan-video-1.5':    12,
-  'luma-ray3':             8,
-  'minimax-2.3':          10,
-  'wan-2.2':               2,
-  'wan-2.6':               2,
-  'pika-2.5':              8,
-  'skyreels-v3':          18,
-  'ltx-2.3':               4,
-  'ltx-2.3-fast':          2,
-  'pixverse-c1':          28,
-  'pixverse-v6':          14,
-  'hunyuan-hy-motion':    20,
-  'hunyuan-world-mirror': 22,
-  'hunyuan-r-dmesh':      25,
-  'nano-banana-2':         2,
-  'nano-banana-pro':       5,
-  'grok-imagine-video':   20,  // $0.05/s API cost → 20cr/5s covers margin
-  // ── V3 model expansion (target = 21 video models) ──
-  'sora-2':               35,  // replicate (openai/sora-2) — physics lead
-  'happyhorse-1.0':       22,  // fal — dialogue/emotion performance lead
-  'kling-o3':             20,  // silent rate (same audio premium removed as kling-3.0)
-  'hailuo-2.3':           12,  // fal — CGI character / product hybrid
+  'gemini-omni':        25,
+  'veo-3.1':            23,
+  'kling-3.0':          17,
+  'seedance-2.0':       20,
+  'runway-gen4':        22,
+  'grok-imagine-video': 20,
+  'wan-2.7':             8,
+  'ltx-2.3-fast':        2,
 }
 
 export const MODEL_SPECIALTIES: Record<string, {
@@ -37,40 +18,21 @@ export const MODEL_SPECIALTIES: Record<string, {
   weaknesses: string[]
   bestFor:    string
 }> = {
-  // ── V3 model expansion ──
-  'sora-2': {
+  'gemini-omni': {
     costTier:   'premium',
-    strengths:  ['physics_simulation', 'fluid_dynamics', 'realistic_physics', 'photorealism', 'aerial'],
-    weaknesses: ['cost', 'not_on_fal'],
-    bestFor:    'Physics simulation — fluid, fire, structural collapse, realistic dynamics',
-  },
-  'happyhorse-1.0': {
-    costTier:   'premium',
-    strengths:  ['dialogue', 'character_emotion', 'lip_sync', 'physical_action', 'facial_consistency'],
-    weaknesses: ['cost'],
-    bestFor:    'Dialogue close-ups and emotional character performance',
-  },
-  'kling-o3': {
-    costTier:   'premium',
-    strengths:  ['character_emotion', 'dialogue', 'physical_action', 'facial_consistency', 'human_motion'],
-    weaknesses: ['cost'],
-    bestFor:    'Premium character emotion + dialogue close-ups',
-  },
-  'hailuo-2.3': {
-    costTier:   'mid',
-    strengths:  ['cgi_character', 'product_commercial', 'motion_from_still', 'image_to_video'],
-    weaknesses: ['extreme_vfx'],
-    bestFor:    'CGI character and product shots animated from stills',
+    strengths:  ['quality', 'photorealism', 'character_consistency', 'video_edit', 'text_to_video'],
+    weaknesses: ['max_10s'],
+    bestFor:    'Primary quality t2v up to 10s. Native audio cannot be switched off; ElevenLabs still owns the mix.',
   },
   'veo-3.1': {
     costTier:   'premium',
-    strengths:  ['fluid_dynamics', 'physics', 'photorealism', 'native_audio', 'realism'],
+    strengths:  ['4k', 'long_takes', 'fluid_dynamics', 'physics', 'photorealism', 'aerial'],
     weaknesses: ['cost', 'slow'],
-    bestFor:    'Photorealistic hero shots, water/fire physics, native audio',
+    bestFor:    '4K and long takes via extend. Secondary to Omni on short quality t2v. Video is silent; ElevenLabs owns audio.',
   },
   'kling-3.0': {
     costTier:   'mid',
-    strengths:  ['locomotion', 'hands', 'facial_consistency', 'human_motion', 'vehicle'],
+    strengths:  ['locomotion', 'hands', 'facial_consistency', 'human_motion', 'vehicle', 'action_choreography'],
     weaknesses: ['environments', 'abstract'],
     bestFor:    'Human movement, vehicle pans, hand close-ups',
   },
@@ -80,77 +42,17 @@ export const MODEL_SPECIALTIES: Record<string, {
     weaknesses: ['environments', 'action'],
     bestFor:    'Dialogue scenes, character close-ups, emotional performance',
   },
-  'skyreels-v3': {
-    costTier:   'mid',
-    strengths:  ['infinite_length', 'emotional_acting', 'portrait', 'facial_expression', 'long_sequence'],
-    weaknesses: ['cost_vs_budget'],
-    bestFor:    'Infinite-length sequences, long-form portrait, emotional acting',
-  },
   'runway-gen4': {
     costTier:   'mid',
-    strengths:  ['multi_shot', 'character_continuity', 'commercial', 'product'],
+    strengths:  ['multi_shot', 'character_continuity', 'commercial', 'product', 'camera_control'],
     weaknesses: ['abstract', 'physics'],
-    bestFor:    'Multi-shot sequences, product advertising, brand consistency',
+    bestFor:    'Camera intent written into the prompt. Single start frame.',
   },
-  'pixverse-c1': {
-    costTier:   'premium',
-    strengths:  ['cgi_vfx', 'fluid_dynamics', 'action_choreography', 'atmospheric', 'stylised', 'spatial_consistency', 'particles', 'lighting_effects'],
-    weaknesses: ['cost', 'generation_time'],
-    bestFor:    'CGI VFX: particles, fire, explosions, atmospheric effects, combat',
-  },
-  'pixverse-v6': {
-    costTier:   'mid',
-    strengths:  ['camera_control', 'character_emotion', 'multi_shot', 'native_audio', 'commercial'],
-    weaknesses: ['extreme_vfx'],
-    bestFor:    'Cinematic multi-shot with precise camera language, 15s stories',
-  },
-  'hunyuan-video-1.5': {
-    costTier:   'mid',
-    strengths:  ['crowd', 'cyberpunk', 'multi_person', 'density', 'urban'],
-    weaknesses: ['portrait', 'dialogue'],
-    bestFor:    'Crowd scenes, dense urban environments, cyberpunk aesthetics',
-  },
-  'hunyuan-hy-motion': {
-    costTier:   'mid',
-    strengths:  ['3d_character_animation', 'motion_capture_style', 'skeletal_animation', 'dance', 'sports'],
-    weaknesses: ['environments', 'non_humanoid'],
-    bestFor:    'CGI character animation: walk cycles, dance, combat, sports',
-  },
-  'hunyuan-world-mirror': {
-    costTier:   'mid',
-    strengths:  ['3d_reconstruction', 'scene_geometry', 'environment_cgi', 'depth_accurate'],
-    weaknesses: ['character_detail', 'speed'],
-    bestFor:    'CGI environment reconstruction, 3D world building from reference',
-  },
-  'hunyuan-r-dmesh': {
-    costTier:   'premium',
-    strengths:  ['mesh_animation', '3d_vfx', 'surface_tracking', 'procedural_cgi'],
-    weaknesses: ['cost', 'complexity'],
-    bestFor:    'Advanced CGI: mesh deformation, 3D surface animation',
-  },
-  'luma-ray3': {
+  'wan-2.7': {
     costTier:   'budget',
-    strengths:  ['aerial', 'camera_movement', 'environments', 'landscape', 'establishing'],
-    weaknesses: ['faces', 'dialogue'],
-    bestFor:    'Aerial shots, landscape reveals, smooth camera movements',
-  },
-  'minimax-2.3': {
-    costTier:   'budget',
-    strengths:  ['long_form', 'consistent_quality', 'narrative', 'physics'],
-    weaknesses: ['extreme_detail'],
-    bestFor:    'Long sequences up to 6min, narrative consistency',
-  },
-  'wan-2.2': {
-    costTier:   'budget',
-    strengths:  ['wildlife', 'texture', 'nature', 'fur', 'organic'],
-    weaknesses: ['urban', 'human', 'dialogue'],
-    bestFor:    'Wildlife, nature texture, organic materials, budget backgrounds',
-  },
-  'ltx-2.3': {
-    costTier:   'mid',
-    strengths:  ['4k_native', '50fps', 'portrait_vertical', 'fast', 'audio_stereo'],
-    weaknesses: ['complex_physics'],
-    bestFor:    '4K portrait/vertical, high-resolution fast generation',
+    strengths:  ['volume', 'first_last_frame', 'character_reference'],
+    weaknesses: ['hero_quality'],
+    bestFor:    'Ordinary production shots, first and last frame, 720p',
   },
   'ltx-2.3-fast': {
     costTier:   'budget',
@@ -158,17 +60,11 @@ export const MODEL_SPECIALTIES: Record<string, {
     weaknesses: ['quality', 'resolution'],
     bestFor:    'Quick drafts, storyboard previews, rapid iteration',
   },
-  'pika-2.5': {
-    costTier:   'budget',
-    strengths:  ['object_editing', 'close_up', 'product', 'swap', 'targeted_edit'],
-    weaknesses: ['full_scene', 'long_form'],
-    bestFor:    'Object replacement, product shots, targeted frame edits',
-  },
   'grok-imagine-video': {
     costTier:   'mid',
-    strengths:  ['native_audio', 'speed', 'photorealism', 'text_to_video', 'image_to_video', 'creative_style', 'short_clips'],
-    weaknesses: ['max_15s', 'not_on_fal'],
-    bestFor:    'Fast photorealistic clips with native audio, 6–15s, ~30s generation time',
+    strengths:  ['native_audio', 'speed', 'photorealism', 'text_to_video', 'creative_style', 'short_clips'],
+    weaknesses: ['max_15s'],
+    bestFor:    'The one audio-native model: fast clips with synced sound',
   },
 }
 
@@ -177,24 +73,21 @@ export const FAL_MODEL_IDS: Record<string, string> = {
     Object.entries(VIDEO_MODEL_REGISTRY).map(([k, e]) => [k, e.falEndpoint]),
   ),
 
-  // LLMs via OpenRouter on FAL
-  'claude-sonnet':        'openrouter/anthropic/claude-sonnet-4-6',
-  'claude-haiku':         'openrouter/anthropic/claude-haiku-4-5',
-  'grok-3':               'openrouter/x-ai/grok-3',
-  'groq-llama':           'openrouter/groq/llama-3.3-70b-versatile',
-  'kimi-k2':              'openrouter/moonshotai/kimi-k2-0905',
-  'qwen-max':             'openrouter/qwen/qwen3-7b-max',
+  'claude-sonnet': 'openrouter/anthropic/claude-sonnet-4-6',
+  'claude-haiku':  'openrouter/anthropic/claude-haiku-4-5',
+  'grok-3':        'openrouter/x-ai/grok-3',
+  'groq-llama':    'openrouter/groq/llama-3.3-70b-versatile',
+  'kimi-k2':       'openrouter/moonshotai/kimi-k2-0905',
+  'qwen-max':      'openrouter/qwen/qwen3-7b-max',
 }
 
 export const TIER_ENGINE_MAP: Record<string, string> = {
-  'draft':     'ltx-2.3-fast',
-  'standard':  'wan-2.2',
-  'cinematic': 'luma-ray3',
-  'film':      'kling-3.0',
+  draft:     'ltx-2.3-fast',
+  standard:  'seedance-2.0',
+  cinematic: 'kling-3.0',
+  film:      'gemini-omni',
 }
 
-// Friendly display data for the AI Director "Model Council" picker — EVERY video model.
-// Registry-driven: adding a model here auto-adds it to the picker (ids match MODEL_COSTS).
 export const MODEL_COUNCIL_DISPLAY: Array<{
   id:       string
   name:     string
@@ -202,24 +95,12 @@ export const MODEL_COUNCIL_DISPLAY: Array<{
   tagline:  string
   dotColor: string
 }> = [
-  { id: 'veo-3.1',            name: 'Veo 3',         role: 'Visual Lead',        tagline: 'Photorealism, physics, native audio', dotColor: '#a855f7' },
-  { id: 'kling-3.0',          name: 'Kling Pro',     role: 'Motion Expert',      tagline: 'Camera movement, locomotion',         dotColor: '#3b82f6' },
-  { id: 'seedance-2.0',       name: 'Seedance',      role: 'Scene Architect',    tagline: 'Long scenes, continuity, dialogue',   dotColor: '#22c55e' },
-  { id: 'runway-gen4',        name: 'Runway',        role: 'Style Artist',       tagline: 'Camera control, Motion Brush, Aleph',  dotColor: '#ec4899' },
-  { id: 'luma-ray3',          name: 'Luma',          role: 'Action Director',    tagline: 'Aerial, landscape, dynamic motion',   dotColor: '#10b981' },
-  { id: 'minimax-2.3',        name: 'Minimax',       role: 'Dialogue Expert',    tagline: 'Talking heads, facial sync',          dotColor: '#f59e0b' },
-  { id: 'pixverse-c1',        name: 'PixVerse C1',   role: 'VFX Specialist',     tagline: 'Particles, fluid, atmospheric',       dotColor: '#06b6d4' },
-  { id: 'pixverse-v6',        name: 'PixVerse V6',   role: 'Stylist',            tagline: 'General stylised video',              dotColor: '#0ea5e9' },
-  { id: 'skyreels-v3',        name: 'SkyReels V3',   role: 'Long-form Director', tagline: 'Infinite-length sequences',           dotColor: '#8b5cf6' },
-  { id: 'ltx-2.3',            name: 'LTX 2.3',       role: 'Resolution Master',  tagline: '4K / 50fps high resolution',          dotColor: '#14b8a6' },
-  { id: 'ltx-2.3-fast',       name: 'LTX Fast',      role: 'Draft Artist',       tagline: 'Instant pre-vis drafts',              dotColor: '#2dd4bf' },
-  { id: 'wan-2.2',            name: 'Wan 2.6',       role: 'Budget Workhorse',   tagline: 'Environments, nature, low cost',      dotColor: '#84cc16' },
-  { id: 'hunyuan-video-1.5',  name: 'HunyuanVideo',  role: 'Crowd Master',       tagline: 'Urban density, volumetric light',     dotColor: '#f472b6' },
-  { id: 'hunyuan-hy-motion',  name: 'HY-Motion',     role: '3D Animator',        tagline: 'Character animation, walk cycles',    dotColor: '#fb7185' },
-  { id: 'pika-2.5',           name: 'Pika 2.5',      role: 'Commercial Pro',     tagline: 'Product shots, clean style',          dotColor: '#fbbf24' },
-  { id: 'grok-imagine-video', name: 'Grok Imagine',  role: 'Audio-Native',       tagline: 'Fast clips with synced audio',        dotColor: '#e879f9' },
-  { id: 'sora-2',             name: 'Sora 2',        role: 'Physics Lead',       tagline: 'Fluid, fire, realistic dynamics',     dotColor: '#6366f1' },
-  { id: 'happyhorse-1.0',     name: 'HappyHorse',    role: 'Performance Lead',   tagline: 'Dialogue close-ups, emotion',         dotColor: '#ef4444' },
-  { id: 'kling-o3',           name: 'Kling O3',      role: 'Emotion Premium',    tagline: 'Premium character emotion',           dotColor: '#0891b2' },
-  { id: 'hailuo-2.3',         name: 'Hailuo 2.3',    role: 'CGI Hybrid',         tagline: 'CGI character, product, image-to-video', dotColor: '#eab308' },
+  { id: 'gemini-omni',        name: 'Gemini Omni',   role: 'Quality Lead',    tagline: 'Primary quality t2v, up to 10s.',           dotColor: '#f59e0b' },
+  { id: 'veo-3.1',            name: 'Veo 3.1',       role: '4K / Long',       tagline: '4K and long takes. Silent picture.',        dotColor: '#a855f7' },
+  { id: 'kling-3.0',          name: 'Kling 3.0',     role: 'Motion Expert',   tagline: 'Camera movement, locomotion',               dotColor: '#3b82f6' },
+  { id: 'seedance-2.0',       name: 'Seedance 2.0',  role: 'Performance',     tagline: 'Faces, dialogue, continuity',               dotColor: '#22c55e' },
+  { id: 'runway-gen4',        name: 'Runway Gen-4.5', role: 'Camera Control', tagline: 'Camera sentence in the prompt',             dotColor: '#ec4899' },
+  { id: 'grok-imagine-video', name: 'Grok Imagine',  role: 'Audio-Native',    tagline: 'The one model that bakes sound',            dotColor: '#e879f9' },
+  { id: 'wan-2.7',            name: 'Wan 2.7',       role: 'Budget',          tagline: 'Volume, first and last frame, 720p',        dotColor: '#06b6d4' },
+  { id: 'ltx-2.3-fast',       name: 'LTX Fast',      role: 'Draft Artist',    tagline: 'Instant pre-vis drafts',                    dotColor: '#2dd4bf' },
 ]

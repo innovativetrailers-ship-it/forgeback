@@ -15,6 +15,16 @@ import { denyUnlessCron } from '@/lib/cron-guard'
 type CronMode = 'update_detection' | 'weekly_probes' | 'monthly_comparison' | 'queue_check' | 'all'
 
 export async function GET(req: NextRequest) {
+  if (!intelligenceProbesEnabled()) {
+    return NextResponse.json(
+      {
+        error:
+          'Intelligence cron disabled. Requires RUN_MODEL_EVAL=true, ALLOW_BILLABLE_EVAL=true, ENABLE_INTELLIGENCE_PROBES=true, NODE_ENV≠production, and GENERATION_PAUSED=false.',
+      },
+      { status: 403 },
+    )
+  }
+
   const denied = denyUnlessCron(req)
   if (denied) return denied
 
@@ -70,6 +80,8 @@ export async function GET(req: NextRequest) {
       log,
     })
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/cron/intelligence/route.ts:82", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Intelligence cron failed'
     return NextResponse.json({ error: msg, log }, { status: 500 })
   }
@@ -87,7 +99,9 @@ export async function POST(req: NextRequest) {
   let body: { mode?: CronMode }
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/cron/intelligence/route.ts:100", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     body = {}
   }
 

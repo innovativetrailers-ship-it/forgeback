@@ -1,5 +1,6 @@
 import { runFal } from '../fal/client'
-import { buildFalVideoInput } from '@/lib/fal/videoPayloads'
+import { buildPayload } from '@/lib/fal/videoPayloads'
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 import { resolveLtxEndpoint, LTX_T2V_BY_REGISTRY } from '@/lib/fal/ltxEndpoints'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
@@ -15,9 +16,9 @@ export interface LTXPayload {
 }
 
 export async function generateLTX(payload: LTXPayload): Promise<string> {
-  const registryKey = payload.registryKey ?? 'ltx-2.3-fast'
+  const registryKey = payload.registryKey ?? refuseSilentModelSwap('ltx', 'ltx-2.3-fast')
   const endpoint = resolveLtxEndpoint(registryKey, false)
-  const input = await buildFalVideoInput(endpoint, registryKey, {
+  const input = await buildPayload(endpoint, registryKey, {
     prompt: payload.prompt,
     duration: payload.duration,
     aspectRatio: payload.aspectRatio ?? '16:9',
@@ -43,6 +44,8 @@ export async function generateVideo(input: GenerateVideoInput): Promise<Generate
     })
     return { jobId: `ltx-${Date.now()}`, status: 'complete', videoUrl }
   } catch (err) {
+    console.warn("[caught] src/lib/models/ltx.ts:46", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return {
       jobId: `ltx-${Date.now()}`,
       status: 'failed',

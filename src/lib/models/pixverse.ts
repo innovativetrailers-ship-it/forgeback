@@ -1,4 +1,4 @@
-import { buildFalVideoInput } from '@/lib/fal/videoPayloads'
+import { buildPayload } from '@/lib/fal/videoPayloads'
 import { resolvePixverseEndpoint } from '@/lib/fal/pixverseEndpoints'
 import { falGenerateJob, falPollJob } from '@/lib/fal/modelQueue'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
@@ -15,7 +15,7 @@ export async function generateVideo(
   const isI2V = Boolean(input.startFrameUrl)
   const model = resolvePixverseEndpoint(registryKey, isI2V)
 
-  const falInput = await buildFalVideoInput(model, registryKey, {
+  const falInput = await buildPayload(model, registryKey, {
     prompt,
     duration: input.duration ?? 5,
     aspectRatio: input.aspectRatio ?? '16:9',

@@ -74,7 +74,9 @@ export function FoleyRecorder({ clipId, clipDuration, onTakeAdded }: Props) {
 
       recorder.start()
       setIsRecording(true)
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/audio/FoleyRecorder.tsx:77", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError('Microphone access denied.')
     }
   }, [clipId, syncTimecode, takes.length, label, onTakeAdded])

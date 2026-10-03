@@ -19,6 +19,8 @@ export async function PATCH(
     const view = await patchBehavioral(id, userId, body.prompt)
     return NextResponse.json(view)
   } catch (e) {
+    console.warn("[caught] src/app/api/vault/character/[id]/behavioral/route.ts:21", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     const message = e instanceof Error ? e.message : 'Update failed'
     return NextResponse.json({ error: message }, { status: 404 })
   }

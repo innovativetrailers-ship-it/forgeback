@@ -6,9 +6,9 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { buildPayload } from '@cinema/core'
 import { probeAllFalEndpoints, SAMPLE_SHOT } from '../src/lib/fal/registryProbe'
 import {
-  buildPayload,
   fetchConstraints,
   upsertConstraints,
 } from '../src/lib/fal/schemaSync'
@@ -75,12 +75,22 @@ async function main(): Promise<void> {
       }
       seed[endpoint] = constraints
 
-      await buildPayload(endpoint, {
+      buildPayload(endpoint, {
         prompt: SAMPLE_SHOT.prompt,
         duration: SAMPLE_SHOT.duration,
         aspectRatio: SAMPLE_SHOT.aspectRatio,
         anchorUrl: endpoint.includes('image-to-video') ? SAMPLE_SHOT.imageUrl : undefined,
         resolution: '720p',
+      }, {
+        endpoint: constraints.endpoint,
+        required: constraints.required,
+        forbidden: constraints.forbidden,
+        enums: constraints.enums,
+        types: constraints.types,
+        audioField: null,
+        schemaHash: constraints.schemaHash,
+        fetchedAt: constraints.fetchedAt,
+        properties: constraints.properties,
       })
     } catch (err) {
       constraintErrors.push(

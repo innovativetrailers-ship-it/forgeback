@@ -1,3 +1,4 @@
+import { assertGenerationNotPaused } from '@/lib/generation/pause'
 import { uploadToR2 } from '@/lib/storage/r2'
 import type { MusicProvider, MusicRequest, MusicResult } from './types'
 
@@ -40,6 +41,7 @@ async function pollSunoTask(taskId: string, timeoutMs: number): Promise<string> 
 export const sunoProvider: MusicProvider = {
   id: 'suno',
   async generate(req: MusicRequest): Promise<MusicResult> {
+    assertGenerationNotPaused(req.source || 'audio.music')
     const base = process.env.SUNO_GATEWAY_URL?.replace(/\/$/, '')
     if (!base) throw new SunoUnavailableError('SUNO_GATEWAY_URL not configured')
 

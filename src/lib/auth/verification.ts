@@ -33,7 +33,9 @@ async function sendWelcomeEmail(userId: string): Promise<void> {
     if (!user?.email) return
     // Placeholder — wire to your email provider (Resend, SendGrid, etc.)
     console.info(`[welcome-email] Would send welcome to ${user.email}`)
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/auth/verification.ts:36", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     // Non-fatal — don't block activation on email failure
   }
 }

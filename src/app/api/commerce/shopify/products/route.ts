@@ -14,6 +14,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const products = await fetchShopifyProducts(shop, token)
     return NextResponse.json({ products })
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/commerce/shopify/products/route.ts:16", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const message = err instanceof Error ? err.message : 'Failed to fetch products'
     return NextResponse.json({ error: message }, { status: 500 })
   }

@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
@@ -33,6 +34,9 @@ export async function POST(
       { status: 409 },
     )
   }
+
+  const { recordShotOutcome } = await import('@/lib/cognition/learnOutcomes')
+  await recordShotOutcome({ userId, shotId: id, signal: 'failed' }).catch((err) => logCaught('app/api/studio/shot/[id]/fail/route', err))
 
   return NextResponse.json({ ok: true })
 }

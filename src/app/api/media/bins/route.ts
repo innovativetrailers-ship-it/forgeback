@@ -47,7 +47,9 @@ export async function POST(req: NextRequest) {
   let body: BinsRequestBody
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/media/bins/route.ts:50", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -136,6 +138,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 })
     }
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/media/bins/route.ts:138", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Bin operation failed'
     return NextResponse.json({ error: msg }, { status: 500 })
   }

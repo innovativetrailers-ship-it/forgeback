@@ -42,9 +42,7 @@ npm run worker:export &
 echo "▶ Starting DAS pull worker..."
 npm run worker:das &
 
-# Intelligence cron
-echo "▶ Starting intelligence cron..."
-npx tsx src/workers/intelligence-cron.ts &
+# Intelligence cron is disabled — it billed FAL and Anthropic on a schedule.
 
 # Growth Engine workers (optional — only if training pipeline is configured)
 if [ "${ENABLE_TRAINING_PIPELINE:-false}" = "true" ]; then
@@ -60,7 +58,7 @@ fi
 
 echo ""
 echo "✅ Cinematic Forge running at http://localhost:3000"
-echo "   Workers: render, training, export, DAS pull, intelligence-cron"
+echo "   Workers: render, training, export, DAS pull"
 if [ "${ENABLE_TRAINING_PIPELINE:-false}" = "true" ]; then
   echo "   Growth Engine: training-pipeline, quality-gate, distillation"
 fi

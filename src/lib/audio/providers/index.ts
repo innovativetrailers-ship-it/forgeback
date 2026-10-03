@@ -1,3 +1,5 @@
+import { requireCallerSource } from '@cinema/core'
+import { assertGenerationNotPaused } from '@/lib/generation/pause'
 import { elevenLabsMusicProvider } from './elevenlabsMusic'
 import { sunoProvider, SunoUnavailableError } from './suno'
 import type { MusicRequest, MusicResult } from './types'
@@ -5,6 +7,8 @@ import type { MusicRequest, MusicResult } from './types'
 export type { MusicRequest, MusicResult, MusicProvider } from './types'
 
 export async function generateMusic(req: MusicRequest): Promise<MusicResult> {
+  requireCallerSource(req.source)
+  assertGenerationNotPaused(req.source)
   if (process.env.SUNO_GATEWAY_URL) {
     try {
       return await sunoProvider.generate(req)

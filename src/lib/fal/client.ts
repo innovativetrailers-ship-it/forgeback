@@ -1,8 +1,10 @@
 // Single source for all FAL calls — routes through falQueue (URL-based polling).
 
 import { fal as falSdk } from '@fal-ai/client'
+import { requireCallerSource } from '@cinema/core'
 import { getFalKey } from '@/lib/config/keys'
 import { assertGenerationNotPaused } from '@/lib/generation/pause'
+import { currentGen } from '@/lib/diagnostics/correlation'
 import {
   parseFalSubmission,
   pollFalStatusOnce,
@@ -20,6 +22,7 @@ export type { FalProgressUpdate } from './withTimeout'
 export type { FalSubmission, FalQueueStatus } from './falQueue'
 export {
   submitToFal,
+  pollFalResult,
   pollFalStatusOnce,
   serializeFalSubmission,
   parseFalSubmission,
@@ -27,6 +30,21 @@ export {
 } from './falQueue'
 
 falSdk.config({ credentials: getFalKey() })
+
+function chokepointSubmitLog(endpoint: string, source: string, promptHead: string): void {
+  const ctx = currentGen()
+  console.log('[fal_submit]', JSON.stringify({
+    provider: 'fal',
+    endpoint,
+    source,
+    model: ctx.model ?? null,
+    mode: ctx.mode ?? null,
+    stage: ctx.stage ?? 'submit',
+    shotId: ctx.shotId ?? null,
+    falRequestId: ctx.falRequestId ?? null,
+    promptHead,
+  }))
+}
 
 interface FalPayload {
   detail?: string
@@ -43,8 +61,9 @@ export async function runFal<T = unknown>(
   timeoutMs: number = 1_200_000,
   onPoll?: () => void | Promise<void>,
   checkpoint?: FalWithTimeoutOptions['checkpoint'],
+  source?: string,
 ): Promise<T> {
-  return falWithTimeout<T>(modelId, input, timeoutMs, { onProgress, onPoll, checkpoint })
+  return falWithTimeout<T>(modelId, input, timeoutMs, { onProgress, onPoll, checkpoint, source })
 }
 
 /**
@@ -56,12 +75,9 @@ const guardedQueue = {
     endpoint: string,
     options: { input: Record<string, unknown> } & Record<string, unknown>,
   ) => {
+    const source = requireCallerSource(typeof options.source === 'string' ? options.source : '')
     assertGenerationNotPaused(endpoint)
-    console.log('[fal_submit]', JSON.stringify({
-      endpoint,
-      source: 'fal:sdk:queue',
-      promptHead: String(options.input?.prompt ?? '').slice(0, 50),
-    }))
+    chokepointSubmitLog(endpoint, source, String(options.input?.prompt ?? '').slice(0, 50))
     return falSdk.queue.submit(endpoint, options)
   },
 }
@@ -109,6 +125,17 @@ export function extractVideoUrl(data: unknown): string | undefined {
   return undefined
 }
 
+export function extractAudioUrl(data: unknown): string | undefined {
+  if (!data || typeof data !== 'object') return undefined
+  const d = data as Record<string, unknown>
+  const audio = d.audio as { url?: string } | undefined
+  if (audio?.url) return audio.url
+  if (typeof d.audio_url === 'string') return d.audio_url
+  const output = d.output as { audio?: { url?: string } } | undefined
+  if (output?.audio?.url) return output.audio.url
+  return extractVideoUrl(data)
+}
+
 /** Submit to FAL queue — returns request id (legacy) + pollUrl with full submission. */
 export async function submitFalQueue(
   modelId: string,
@@ -142,6 +169,46 @@ export async function pollFalQueue(
   }
 
   return pollFalStatusOnce(submission)
+}
+
+export function falSubscribeBound(source: string) {
+  const caller = requireCallerSource(source)
+  return async function falSubscribe<T = unknown>(
+    modelId: string,
+    options: { input: Record<string, unknown> } & Record<string, unknown>,
+  ): Promise<{ data: T }> {
+    assertGenerationNotPaused(modelId)
+    const promptHead = String(options.input?.prompt ?? '').slice(0, 50)
+    chokepointSubmitLog(modelId, caller, promptHead)
+    const data = await runFal<T>(modelId, options.input, undefined, 1_200_000, undefined, undefined, caller)
+    return { data }
+  }
+}
+
+export function falQueueBound(source: string) {
+  const caller = requireCallerSource(source)
+  return {
+    submit: async (
+      endpoint: string,
+      options: { input: Record<string, unknown> } & Record<string, unknown>,
+    ) => {
+      const submission = await submitToFal(endpoint, options.input ?? {}, caller)
+      return {
+        request_id: submission.requestId,
+        status_url: submission.statusUrl,
+        response_url: submission.responseUrl,
+        cancel_url: submission.cancelUrl,
+      }
+    },
+    status: (
+      endpoint: string,
+      options: { requestId: string; logs?: boolean },
+    ) => falSdk.queue.status(endpoint, options),
+    result: (
+      endpoint: string,
+      options: { requestId: string },
+    ) => falSdk.queue.result(endpoint, options),
+  }
 }
 
 export function extractImageUrl(data: unknown): string | undefined {

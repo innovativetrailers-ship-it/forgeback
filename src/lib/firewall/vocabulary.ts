@@ -52,7 +52,7 @@ export function sanitiseForUser(text: string): string {
     .replace(/\bmulti-agent\b/gi, 'multi-engine')
     .replace(/\bswarm\b/gi, 'processing pipeline')
     .replace(/\bAgenticLoop\b/gi, 'ReasoningLoop')
-    .replace(/\bSwarmRouter\b/gi, 'MediaRouter')
+    .replace(/\bSwarmRouter\b/gi, 'Router')
 }
 
 export function engineIdToDisplay(engineId: string): string {

@@ -1,5 +1,13 @@
 import { create } from 'zustand'
 import { nanoid } from 'nanoid'
+import { commitEditorRecipe, toEditorTimelineRecipe } from '@/lib/timeline/to-editor-recipe'
+import { usePlaybackStore } from '@/store/playbackStore'
+
+function withEditorRecipe(mutate: (recipe: TimelineRecipe) => TimelineRecipe): void {
+  const current = usePlaybackStore.getState().recipe
+  if (!current) return
+  commitEditorRecipe(mutate(toEditorTimelineRecipe(current)))
+}
 
 // ─── Core types ───────────────────────────────────────────────────────────────
 
@@ -65,9 +73,6 @@ export interface RepaintSelection {
 // ─── Store interface ───────────────────────────────────────────────────────────
 
 interface EditorState {
-  recipe: TimelineRecipe | null
-  /** @deprecated use recipe */
-  timeline: TimelineRecipe | null
   selectedClipId: string | null
   selectedTrackId: string | null
   playheadTime: number
@@ -130,8 +135,6 @@ interface EditorState {
 // ─── Store implementation ──────────────────────────────────────────────────────
 
 export const useEditorStore = create<EditorState>((set, get) => ({
-  recipe: null,
-  timeline: null,
   selectedClipId: null,
   selectedTrackId: null,
   playheadTime: 0,
@@ -145,8 +148,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   mode: 'simple',
   activeTier: 'Studio',
 
-  setRecipe: (recipe) => set({ recipe, timeline: recipe }),
-  setTimeline: (recipe) => set({ recipe, timeline: recipe }),
+  setRecipe: (recipe) => commitEditorRecipe(recipe),
+  setTimeline: (recipe) => commitEditorRecipe(recipe),
 
   selectClip: (clipId) => set({ selectedClipId: clipId }),
   selectTrack: (trackId) => set({ selectedTrackId: trackId }),
@@ -158,40 +161,31 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setMode: (mode) => set({ mode }),
   setTier: (activeTier) => set({ activeTier }),
 
-  addClip: (trackId, clip) => set((s) => {
-    if (!s.recipe) return {}
-    const tracks = s.recipe.tracks.map((t) =>
+  addClip: (trackId, clip) => withEditorRecipe((recipe) => ({
+    ...recipe,
+    tracks: recipe.tracks.map((t) =>
       t.id === trackId ? { ...t, clips: [...t.clips, clip] } : t
-    )
-    const r = { ...s.recipe, tracks }
-    return { recipe: r, timeline: r }
-  }),
+    ),
+  })),
 
   addClipToTrack: (trackId, clip) => get().addClip(trackId, clip),
 
-  updateClip: (clipId, updates) => set((s) => {
-    if (!s.recipe) return {}
-    const tracks = s.recipe.tracks.map((t) => ({
+  updateClip: (clipId, updates) => withEditorRecipe((recipe) => ({
+    ...recipe,
+    tracks: recipe.tracks.map((t) => ({
       ...t,
       clips: t.clips.map((c) => c.id === clipId ? { ...c, ...updates } : c),
-    }))
-    const r = { ...s.recipe, tracks }
-    return { recipe: r, timeline: r }
-  }),
+    })),
+  })),
 
-  removeClip: (clipId) => set((s) => {
-    if (!s.recipe) return {}
-    const tracks = s.recipe.tracks.map((t) => ({
-      ...t, clips: t.clips.filter((c) => c.id !== clipId),
-    }))
-    const r = { ...s.recipe, tracks }
-    return { recipe: r, timeline: r }
-  }),
+  removeClip: (clipId) => {
+    usePlaybackStore.getState().removeTimelineClip(clipId)
+    set({ selectedClipId: null })
+  },
 
-  moveClip: (clipId, toTrackId, toStartTime) => set((s) => {
-    if (!s.recipe) return {}
+  moveClip: (clipId, toTrackId, toStartTime) => withEditorRecipe((recipe) => {
     let moving: Clip | undefined
-    const tracks = s.recipe.tracks.map((t) => {
+    const tracks = recipe.tracks.map((t) => {
       const idx = t.clips.findIndex((c) => c.id === clipId)
       if (idx !== -1) { moving = t.clips[idx]; return { ...t, clips: t.clips.filter((c) => c.id !== clipId) } }
       return t
@@ -201,63 +195,56 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       }
       return t
     })
-    const r = { ...s.recipe, tracks }
-    return { recipe: r, timeline: r }
+    return { ...recipe, tracks }
   }),
 
   trimClip: (clipId, trimIn, trimOut) => get().updateClip(clipId, { trimIn, trimOut }),
 
-  splitClip: (clipId, atTime) => set((s) => {
-    if (!s.recipe) return {}
-    const tracks = s.recipe.tracks.map((t) => {
+  splitClip: (clipId, atTime) => withEditorRecipe((recipe) => {
+    const tracks = recipe.tracks.map((t) => {
       const idx = t.clips.findIndex((c) => c.id === clipId)
       if (idx === -1) return t
       const clip = t.clips[idx]
       const splitPoint = atTime - clip.startTime
       if (splitPoint <= 0 || splitPoint >= clip.duration) return t
-      const a: Clip = { ...clip, id: `${clip.id}_a`, duration: splitPoint, trimOut: 0 }
-      const b: Clip = { ...clip, id: `${clip.id}_b`, startTime: atTime, duration: clip.duration - splitPoint, trimIn: 0 }
+      const origIn = clip.trimIn
+      const origOut = clip.trimOut > 0 ? clip.trimOut : clip.trimIn + clip.duration
+      const cutPoint = origIn + splitPoint
+      if (!(cutPoint > origIn && cutPoint < origOut)) return t
+      const a: Clip = { ...clip, id: `${clip.id}_a`, duration: splitPoint, trimIn: origIn, trimOut: cutPoint }
+      const b: Clip = { ...clip, id: `${clip.id}_b`, startTime: atTime, duration: clip.duration - splitPoint, trimIn: cutPoint, trimOut: origOut }
       const clips = [...t.clips]
       clips.splice(idx, 1, a, b)
       return { ...t, clips }
     })
-    const r = { ...s.recipe, tracks }
-    return { recipe: r, timeline: r }
+    return { ...recipe, tracks }
   }),
 
-  addTrack: (typeOrTrack) => set((s) => {
-    if (!s.recipe) return {}
+  addTrack: (typeOrTrack) => withEditorRecipe((recipe) => {
     const track: Track = typeof typeOrTrack === 'string'
       ? { id: `track_${nanoid(6)}`, type: typeOrTrack as Track['type'], name: `${typeOrTrack} track`, height: 72, muted: false, locked: false, solo: false, clips: [] }
       : typeOrTrack
-    const r = { ...s.recipe, tracks: [...s.recipe.tracks, track] }
-    return { recipe: r, timeline: r }
+    return { ...recipe, tracks: [...recipe.tracks, track] }
   }),
 
-  removeTrack: (trackId) => set((s) => {
-    if (!s.recipe) return {}
-    const r = { ...s.recipe, tracks: s.recipe.tracks.filter((t) => t.id !== trackId) }
-    return { recipe: r, timeline: r }
-  }),
+  removeTrack: (trackId) => withEditorRecipe((recipe) => ({
+    ...recipe,
+    tracks: recipe.tracks.filter((t) => t.id !== trackId),
+  })),
 
-  updateTrack: (trackId, updates) => set((s) => {
-    if (!s.recipe) return {}
-    const tracks = s.recipe.tracks.map((t) => t.id === trackId ? { ...t, ...updates } : t)
-    const r = { ...s.recipe, tracks }
-    return { recipe: r, timeline: r }
-  }),
+  updateTrack: (trackId, updates) => withEditorRecipe((recipe) => ({
+    ...recipe,
+    tracks: recipe.tracks.map((t) => t.id === trackId ? { ...t, ...updates } : t),
+  })),
 
-  reorderTracks: (trackIds) => set((s) => {
-    if (!s.recipe) return {}
-    const map = new Map(s.recipe.tracks.map((t) => [t.id, t]))
+  reorderTracks: (trackIds) => withEditorRecipe((recipe) => {
+    const map = new Map(recipe.tracks.map((t) => [t.id, t]))
     const tracks = trackIds.map((id) => map.get(id)).filter((t): t is Track => !!t)
-    const r = { ...s.recipe, tracks }
-    return { recipe: r, timeline: r }
+    return { ...recipe, tracks }
   }),
 
-  addGeneratingJob: (jobId, clipId, trackId, duration = 5) => set((s) => {
-    if (!s.recipe) return {}
-    const track = s.recipe.tracks.find((t) => t.id === trackId)
+  addGeneratingJob: (jobId, clipId, trackId, duration = 5) => withEditorRecipe((recipe) => {
+    const track = recipe.tracks.find((t) => t.id === trackId)
     const lastEnd = track?.clips.reduce((acc, c) => Math.max(acc, c.startTime + c.duration), 0) ?? 0
     const placeholder: Clip = {
       id: clipId, trackId, startTime: lastEnd, duration,
@@ -267,43 +254,36 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       trimIn: 0, trimOut: 0, volume: 1, opacity: 1, speed: 1,
       colourGradeJson: null, sfxMakeupJson: null,
     }
-    const tracks = s.recipe.tracks.map((t) =>
+    const tracks = recipe.tracks.map((t) =>
       t.id === trackId ? { ...t, clips: [...t.clips, placeholder] } : t
     )
-    const r = { ...s.recipe, tracks }
-    return { recipe: r, timeline: r }
+    return { ...recipe, tracks }
   }),
 
-  updateGenerationProgress: (jobId, progress) => set((s) => {
-    if (!s.recipe) return {}
-    const tracks = s.recipe.tracks.map((t) => ({
+  updateGenerationProgress: (jobId, progress) => withEditorRecipe((recipe) => ({
+    ...recipe,
+    tracks: recipe.tracks.map((t) => ({
       ...t,
       clips: t.clips.map((c) => c.jobId === jobId ? { ...c, generationProgress: progress } : c),
-    }))
-    const r = { ...s.recipe, tracks }
-    return { recipe: r, timeline: r }
-  }),
+    })),
+  })),
 
-  resolveGeneratingJob: (jobId, outputUrl, proxyUrl = '', thumbnailUrl = '') => set((s) => {
-    if (!s.recipe) return {}
-    const tracks = s.recipe.tracks.map((t) => ({
+  resolveGeneratingJob: (jobId, outputUrl, proxyUrl = '', thumbnailUrl = '') => withEditorRecipe((recipe) => ({
+    ...recipe,
+    tracks: recipe.tracks.map((t) => ({
       ...t,
       clips: t.clips.map((c) => c.jobId === jobId
-        ? { ...c, videoUrl: outputUrl, proxyUrl, thumbnailUrl, isGenerating: false, generationProgress: 100 }
+        ? { ...c, videoUrl: outputUrl, src: outputUrl, proxyUrl, thumbnailUrl, isGenerating: false, generationProgress: 100 }
         : c),
-    }))
-    const r = { ...s.recipe, tracks }
-    return { recipe: r, timeline: r }
-  }),
+    })),
+  })),
 
-  removeGeneratingJob: (jobId) => set((s) => {
-    if (!s.recipe) return {}
-    const tracks = s.recipe.tracks.map((t) => ({
+  removeGeneratingJob: (jobId) => withEditorRecipe((recipe) => ({
+    ...recipe,
+    tracks: recipe.tracks.map((t) => ({
       ...t, clips: t.clips.filter((c) => c.jobId !== jobId),
-    }))
-    const r = { ...s.recipe, tracks }
-    return { recipe: r, timeline: r }
-  }),
+    })),
+  })),
 
   setRepaintSelection: (sel) => set({ repaintSelection: sel }),
   openRepaintModal: (sel) => set({ repaintSelection: sel, isRepaintModalOpen: true }),

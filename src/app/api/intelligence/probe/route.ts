@@ -31,6 +31,16 @@ interface ProbeRequestBody {
 }
 
 export async function POST(req: NextRequest) {
+  if (!intelligenceProbesEnabled()) {
+    return NextResponse.json(
+      {
+        error:
+          'Intelligence probes disabled. Requires RUN_MODEL_EVAL=true, ALLOW_BILLABLE_EVAL=true, ENABLE_INTELLIGENCE_PROBES=true, NODE_ENV≠production, and GENERATION_PAUSED=false.',
+      },
+      { status: 403 },
+    )
+  }
+
   // Full battery = 118 FAL video generations per model — CRON_SECRET or ADMIN only.
   const cronSecret = req.headers.get('authorization')
   const session = await auth()
@@ -50,20 +60,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (!intelligenceProbesEnabled()) {
-    return NextResponse.json(
-      {
-        error:
-          'Intelligence probes disabled. Requires ENABLE_INTELLIGENCE_PROBES=true and GENERATION_PAUSED=false.',
-      },
-      { status: 503 },
-    )
-  }
-
   let body: ProbeRequestBody
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/intelligence/probe/route.ts:66", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -110,6 +112,8 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/intelligence/probe/route.ts:112", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Probe run failed'
     return NextResponse.json({ error: msg }, { status: 500 })
   }

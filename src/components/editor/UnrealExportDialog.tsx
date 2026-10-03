@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useEditorStore } from '@/store/editor'
+import { useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
 
 interface ExportResult {
   sequencerUrl: string
@@ -13,7 +13,7 @@ interface ExportResult {
 type Phase = 'idle' | 'exporting' | 'done' | 'error'
 
 export function UnrealExportDialog() {
-  const recipe = useEditorStore((s) => s.recipe)
+  const recipe = useEditorRecipeView()
   const [phase, setPhase] = useState<Phase>('idle')
   const [result, setResult] = useState<ExportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -38,6 +38,8 @@ export function UnrealExportDialog() {
       setResult(data as unknown as ExportResult)
       setPhase('done')
     } catch (e: unknown) {
+      console.warn("[caught] src/components/editor/UnrealExportDialog.tsx:40", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       setError(e instanceof Error ? e.message : 'Network error')
       setPhase('error')
     }

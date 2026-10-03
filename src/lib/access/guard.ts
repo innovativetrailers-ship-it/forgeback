@@ -4,6 +4,7 @@
 // Studio/Ultimate: require active billing (active | past_due).
 
 import { db } from '@/lib/db'
+import { shouldMeter } from '@/lib/credits/meter'
 import {
   getEffectiveTier,
   getRequiredUpgrade,
@@ -15,7 +16,32 @@ import {
 
 export type AccessResult =
   | { allowed: true;  isAdmin: boolean; credits: number; tier: SubscriptionTier }
-  | { allowed: false; reason: string;   code: 401 | 402 | 403 | 404 | 503; tier?: SubscriptionTier }
+  | {
+      allowed: false
+      reason: string
+      code: 401 | 402 | 403 | 404 | 503
+      tier?: SubscriptionTier
+      reasonCode?: 'insufficient_credits'
+      required?: number
+      balance?: number
+    }
+
+export function accessDeniedBody(result: Extract<AccessResult, { allowed: false }>): {
+  error: string
+  code?: 'insufficient_credits'
+  required?: number
+  balance?: number
+} {
+  if (result.reasonCode === 'insufficient_credits') {
+    return {
+      error: result.reason,
+      code: 'insufficient_credits',
+      required: result.required ?? 0,
+      balance: result.balance ?? 0,
+    }
+  }
+  return { error: result.reason }
+}
 
 export type TierAccessResult =
   | { allowed: true }
@@ -37,21 +63,23 @@ async function loadUserAccess(userId: string) {
       creditBalance: true,
       subscriptionTier: true,
       subscriptionStatus: true,
+      isInternal: true,
     },
   })
 }
 
 function tierFromUser(
-  user: { role: string; subscriptionTier: string; subscriptionStatus: string } | null,
-): { tier: SubscriptionTier; effectiveTier: SubscriptionTier; isAdmin: boolean } {
+  user: { role: string; subscriptionTier: string; subscriptionStatus: string; isInternal?: boolean } | null,
+): { tier: SubscriptionTier; effectiveTier: SubscriptionTier; isAdmin: boolean; isInternal: boolean } {
   const isAdmin = user?.role === 'ADMIN'
+  const isInternal = user?.isInternal === true
   const tier = resolveSubscriptionTier(
     user?.subscriptionTier,
     user?.subscriptionStatus,
     user?.role ?? 'USER',
   )
   const effectiveTier = getEffectiveTier(tier, user?.subscriptionStatus, isAdmin)
-  return { tier, effectiveTier, isAdmin }
+  return { tier, effectiveTier, isAdmin, isInternal }
 }
 
 export async function checkAccess(
@@ -59,6 +87,15 @@ export async function checkAccess(
   creditsRequired: number = 0,
   featureFlag?:    FeatureFlag,
 ): Promise<AccessResult> {
+  if (!Number.isFinite(creditsRequired) || creditsRequired < 0) {
+    return {
+      allowed: false,
+      reason: 'Cost estimate was not a finite credit number',
+      code: 402,
+      reasonCode: 'insufficient_credits',
+    }
+  }
+
   if (!userId) {
     return { allowed: false, reason: 'Not authenticated', code: 401 }
   }
@@ -68,10 +105,14 @@ export async function checkAccess(
     return { allowed: false, reason: 'User not found', code: 404 }
   }
 
-  const { tier, effectiveTier, isAdmin } = tierFromUser(user)
+  const { tier, effectiveTier, isAdmin, isInternal } = tierFromUser(user)
+
+  if (isInternal) {
+    return { allowed: true, isAdmin: true, credits: 0, tier: 'admin' }
+  }
 
   if (isAdmin) {
-    return { allowed: true, isAdmin: true, credits: 9_999_999, tier: 'admin' }
+    return { allowed: true, isAdmin: true, credits: user.creditBalance ?? 0, tier: 'admin' }
   }
 
   const perms = TIER_PERMISSIONS[tier]
@@ -87,12 +128,16 @@ export async function checkAccess(
   }
 
   const balance = user.creditBalance ?? 0
-  if (creditsRequired > 0 && balance < creditsRequired) {
+  const metered = shouldMeter({ isInternal: false, balance, required: creditsRequired })
+  if (!metered.allowed) {
     return {
       allowed: false,
       reason:  `Insufficient credits. You have ${balance} credits, this costs ${creditsRequired}.`,
       code:    402,
       tier,
+      reasonCode: 'insufficient_credits',
+      required: creditsRequired,
+      balance,
     }
   }
 

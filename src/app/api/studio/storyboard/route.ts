@@ -24,6 +24,8 @@ export async function POST(request: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'storyboard_gen')
   } catch (err) {
+    console.warn("[caught] src/app/api/studio/storyboard/route.ts:26", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 

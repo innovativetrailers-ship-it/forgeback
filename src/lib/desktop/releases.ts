@@ -92,7 +92,9 @@ export function keyFromReleaseUrl(url: string): string {
   try {
     const u = new URL(url)
     return u.pathname.replace(/^\//, '')
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/desktop/releases.ts:95", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return url
   }
 }
@@ -101,7 +103,9 @@ export async function headPublicAsset(url: string, fetchFn: typeof fetch = fetch
   try {
     const res = await fetchFn(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) })
     return res.ok
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/desktop/releases.ts:104", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return false
   }
 }
@@ -121,7 +125,9 @@ export async function fetchLatestDesktopDownloads(
     const version = parseFeedVersion(macYaml) ?? parseFeedVersion(winYaml)
     if (!version) return buildFallbackDownloadUrls()
     return { version, ...buildDesktopDownloadUrls(version) }
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/desktop/releases.ts:124", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return buildFallbackDownloadUrls()
   }
 }

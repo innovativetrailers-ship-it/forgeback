@@ -51,7 +51,9 @@ export async function packageIMF(spec: IMFPackageSpec): Promise<Response> {
     try {
       const json = await response.json() as { error?: string }
       msg = json.error ?? msg
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn("[caught] src/lib/delivery/IMFPackager.ts:54", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore */ }
     throw new Error(`IMF packaging failed: ${msg}`)
   }
 
@@ -62,7 +64,9 @@ export async function checkIMFHealth(): Promise<boolean> {
   try {
     const res = await fetch(`${IMF_SERVICE}/health`, { signal: AbortSignal.timeout(3000) })
     return res.ok
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/delivery/IMFPackager.ts:65", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return false
   }
 }

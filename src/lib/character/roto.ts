@@ -1,4 +1,6 @@
-import { fal } from '@/lib/fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('lib.character.roto')
 import { UTILITY_FAL_ENDPOINTS } from '@/lib/models/registry'
 import type { FCCCharacter } from './fccSchema'
 import { animatePortraitWithMotion } from './mocap'
@@ -30,7 +32,7 @@ export async function rotoAndOverlay(
   const rembgEndpoint = UTILITY_FAL_ENDPOINTS['rembg-video']
   const inpaintEndpoint = UTILITY_FAL_ENDPOINTS['video-inpaint']
 
-  const rotoResult = await fal.subscribe(rembgEndpoint, {
+  const rotoResult = await falSubscribe(rembgEndpoint, {
     input: { video_url: liveVideoUrl, output_mask: true },
   })
   const maskUrl = extractMaskVideoUrl(rotoResult.data)
@@ -41,7 +43,7 @@ export async function rotoAndOverlay(
       prompt,
       portraitLabel: character.name,
     })
-    const composite = await fal.subscribe(inpaintEndpoint, {
+    const composite = await falSubscribe(inpaintEndpoint, {
       input: {
         prompt,
         video_url: liveVideoUrl,
@@ -56,14 +58,14 @@ export async function rotoAndOverlay(
   }
 
   if (mode === 'aura') {
-    const glow = await fal.subscribe('fal-ai/video-upscaler', {
+    const glow = await falSubscribe(falEndpoint('video-upscaler'), {
       input: { video_url: liveVideoUrl, scale: 1 },
     })
     const out = extractVideoUrl(glow.data) ?? liveVideoUrl
     return out
   }
 
-  const vfx = await fal.subscribe(inpaintEndpoint, {
+  const vfx = await falSubscribe(inpaintEndpoint, {
     input: {
       prompt: 'Cinematic visual effects enhancement in the masked region',
       video_url: liveVideoUrl,

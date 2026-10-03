@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "concurrently \"next dev\" \"bash scripts/start_services.sh --wait\"",
     "build": "next build",
-    "postinstall": "node scripts/prisma-generate.mjs",
+    "postinstall": "node scripts/prisma-generate.mjs && node scripts/install-git-hooks.mjs",
     "deploy:vercel": "bash scripts/deploy-vercel.sh",
     "env:vercel": "bash scripts/sync-vercel-env.sh",
     "env:github": "bash scripts/sync-github-secrets.sh",
@@ -22,7 +22,7 @@
     "worker:training-pipeline": "tsx src/workers/training-pipeline.ts",
     "worker:quality-gate": "tsx src/workers/quality-gate.ts",
     "worker:distillation": "tsx src/workers/distillation.ts",
-    "workers": "concurrently \"npm run worker:render\" \"npm run worker:training\" \"npm run worker:export\" \"npm run worker:das\" \"npm run worker:intelligence\"",
+    "workers": "concurrently \"npm run worker:render\" \"npm run worker:training\" \"npm run worker:export\" \"npm run worker:das\"",
     "db:seed": "npx prisma db seed",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
@@ -35,6 +35,15 @@
     "services:install": "bash scripts/install-python-services.sh",
     "services:check": "bash scripts/check-services.sh",
     "workers:docker": "docker compose -f docker-compose.yml -f docker-compose.workers.yml --profile workers --profile python up",
+    "check:chokepoints": "node scripts/check-chokepoints.mjs",
+    "check:swallowed": "node scripts/check-swallowed-catches.mjs",
+    "check:endpoints": "node scripts/check-endpoints.mjs",
+    "verify:static": "node scripts/verify-static.mjs",
+    "verify": "node scripts/verify.mjs",
+    "test:e2e:launch": "node --test e2e/launch-smoke.test.mjs",
+    "check:capability-net": "node scripts/check-capability-net.mjs",
+    "check:code-net": "node scripts/check-code-net.mjs",
+    "lint:code-net": "eslint src/lib/diagnostics/boundary.ts src/lib/diagnostics/captureCode.ts src/lib/diagnostics/codeGuards.ts src/components/diagnostics/CodeErrorBridge.tsx src/app/api/dev/code/route.ts src/__tests__/code-net.test.ts",
     "verify:fal": "tsx scripts/verify-fal-endpoints.ts",
     "verify:fal:registry": "tsx scripts/verify-fal-registry.ts",
     "upload:releases": "node scripts/upload-releases.mjs"
@@ -43,7 +52,8 @@
     "preset": "ts-jest",
     "testEnvironment": "node",
     "moduleNameMapper": {
-      "^@/(.*)$": "<rootDir>/src/$1"
+      "^@/(.*)$": "<rootDir>/src/$1",
+      "^@cinema/core$": "<rootDir>/packages/core/src/index.ts"
     },
     "transform": {
       "^.+\\.tsx?$": [
@@ -75,6 +85,7 @@
     "@aws-sdk/client-s3": "^3.1041.0",
     "@aws-sdk/s3-request-presigner": "^3.1041.0",
     "@base-ui/react": "^1.4.1",
+    "@cinema/core": "file:packages/core",
     "@elevenlabs/elevenlabs-js": "^2.51.0",
     "@fal-ai/client": "^1.10.1",
     "@ffmpeg/core": "^0.12.10",
@@ -109,6 +120,7 @@
     "clsx": "^2.1.1",
     "concurrently": "^9.2.1",
     "date-fns": "^4.1.0",
+    "dockview-react": "^8.3.1",
     "dotenv": "^17.4.2",
     "fluent-ffmpeg": "^2.1.3",
     "form-data": "^4.0.5",
@@ -139,6 +151,7 @@
     "stripe": "^22.1.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4",
+    "three": "^0.186.1",
     "tsx": "^4.21.0",
     "tw-animate-css": "^1.4.0",
     "typescript": "^5",
@@ -151,6 +164,7 @@
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",
     "@types/multer": "^2.1.0",
+    "@types/three": "^0.186.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "jest": "^30.3.0",

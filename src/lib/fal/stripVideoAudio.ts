@@ -1,3 +1,4 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { runFal, extractVideoUrl } from './client'
 
 /**
@@ -6,7 +7,7 @@ import { runFal, extractVideoUrl } from './client'
  */
 export async function stripGeneratedClipAudio(videoUrl: string): Promise<string> {
   try {
-    const result = await runFal<{ video?: { url: string }; output_url?: string }>('fal-ai/ffmpeg', {
+    const result = await runFal<{ video?: { url: string }; output_url?: string }>(falEndpoint('ffmpeg'), {
       video_url: videoUrl,
       command: 'strip_audio',
       output_format: 'mp4',

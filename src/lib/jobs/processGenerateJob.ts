@@ -8,9 +8,11 @@ import { refundCredits } from '@/lib/credits'
 import { checkNSFW } from '@/lib/moderation/nsfw'
 import { logApiUsage } from '@/lib/telemetry/rlhf'
 import { captureGeneration } from '@/lib/telemetry/delta'
-import { loraAutoTrigger, incrementRenderCount } from '@/lib/vault/lora-trigger'
+import { incrementRenderCount } from '@/lib/vault/lora-trigger'
 import type { GenerateVideoOutput } from '@/lib/models/types'
 import { resolveEngineModel, ASYNC_POLL_ENGINES } from '@/lib/jobs/workerEngineMap'
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
+import { completeGenerateShot, failGenerateShot } from '@/lib/studio/recordGenerateShot'
 
 const POLL_INTERVAL_MS = 4000
 const JOB_TIMEOUT_MS = 25 * 60 * 1000
@@ -78,12 +80,12 @@ async function dispatchToModel(
       const m = await import('@/lib/models/sora')
       return m.generateVideo(validInput)
     }
-    const m = await import('@/lib/models/runway')
+    const m = await import('@/lib/providers/runway')
     return m.generateVideo(validInput)
   }
 
-  const { callEngine } = await import('@/lib/routing/MediaRouter')
-  const result = await callEngine({
+  const { submitEngineVideo } = await import('@/lib/jobs/submitEngineVideo')
+  const result = await submitEngineVideo({
     model: engineModel,
     prompt,
     duration,
@@ -114,7 +116,7 @@ async function pollUntilComplete(
     let result: GenerateVideoOutput
 
     if (modelId === 'runway' || modelId === 'runway-gen4') {
-      const runway = await import('@/lib/models/runway')
+      const runway = await import('@/lib/providers/runway')
       result = await runway.pollStatus(externalJobId)
     } else if (modelId === 'sora' || modelId === 'sora-2') {
       const sora = await import('@/lib/models/sora')
@@ -140,7 +142,7 @@ async function pollUntilComplete(
 
 export async function processGenerateJob(data: ProcessGenerateInput): Promise<void> {
   const { jobId, userId, modelId, payload, projectId } = data
-  const modelName = modelId ?? 'wan'
+  const modelName = modelId?.trim() || refuseSilentModelSwap(jobId, 'wan')
   const startedAt = Date.now()
 
   await db.renderJob.update({
@@ -168,7 +170,9 @@ export async function processGenerateJob(data: ProcessGenerateInput): Promise<vo
 
   await broadcastJobEvent({ jobId, status: 'processing', progress: 75, message: 'Saving to vault…' })
   const { persistVideoToR2 } = await import('@/lib/storage/persistMedia')
+  const { renderVideoKey, objectKeyFromStored } = await import('@/lib/storage/r2')
   const videoUrl = await persistVideoToR2(providerUrl, jobId, userId)
+  const storageKey = objectKeyFromStored(videoUrl) ?? renderVideoKey(userId, jobId)
 
   await broadcastJobEvent({ jobId, status: 'processing', progress: 85, message: 'Running safety check…' })
   const moderation = await checkNSFW(videoUrl, 'video')
@@ -186,12 +190,18 @@ export async function processGenerateJob(data: ProcessGenerateInput): Promise<vo
     data: {
       status: 'COMPLETE',
       outputUrl: videoUrl,
+      storageKey,
       progressPct: 100,
       processingMs: latencyMs,
       completedAt: new Date(),
       statusMessage: 'Complete',
     },
   })
+
+  const studioClipId = typeof payload.studioClipId === 'string' ? payload.studioClipId : ''
+  if (studioClipId) {
+    await completeGenerateShot(studioClipId, videoUrl, providerUrl)
+  }
 
   await Promise.allSettled([
     logApiUsage({
@@ -215,7 +225,6 @@ export async function processGenerateJob(data: ProcessGenerateInput): Promise<vo
   const characterId = payload.characterId as string | undefined
   if (characterId) {
     await incrementRenderCount(characterId)
-    await loraAutoTrigger(characterId, userId)
   }
 
   await broadcastJobEvent({
@@ -257,6 +266,20 @@ export async function processGenerateJobWithRefund(data: ProcessGenerateInput): 
     })
 
     await broadcastJobEvent({ jobId: data.jobId, status: 'failed', error: message })
+    const studioClipId = typeof data.payload.studioClipId === 'string' ? data.payload.studioClipId : ''
+    const { captureGenerationError } = await import('@/lib/diagnostics/capture')
+    const model = typeof data.payload.model === 'string' ? data.payload.model : 'legacy-generate'
+    await captureGenerationError({
+      err,
+      rawError: message,
+      userId: data.userId,
+      jobId: data.jobId,
+      shotId: studioClipId || undefined,
+      stage: 'submit',
+      endpoint: 'generate',
+      model,
+    })
+    await failGenerateShot(studioClipId)
 
     await logApiUsage({
       provider: data.modelId ?? 'unknown',

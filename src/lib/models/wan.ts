@@ -1,5 +1,5 @@
 import { WAN_I2V, WAN_T2V } from '@/lib/fal/wanEndpoints'
-import { buildFalVideoInput } from '@/lib/fal/videoPayloads'
+import { buildPayload } from '@/lib/fal/videoPayloads'
 import {
   extractVideoUrl,
   runFal,
@@ -16,7 +16,7 @@ export async function buildWan26Input(
   input: GenerateVideoInput & { quality?: string },
 ): Promise<Record<string, unknown>> {
   const model = input.startFrameUrl ? WAN_I2V_MODEL : WAN_T2V_MODEL
-  return buildFalVideoInput(model, 'wan-2.6', {
+  return buildPayload(model, 'wan-2.6', {
     prompt: input.prompt,
     duration: input.duration,
     aspectRatio: input.aspectRatio ?? '16:9',

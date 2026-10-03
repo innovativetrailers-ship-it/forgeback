@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 import { z } from 'zod'
 import { dispatchClip } from '@/lib/routing/MediaDispatcher'
 import { blendMultiEngineClip } from '@/lib/routing/SeamlessBlender'
@@ -43,6 +44,8 @@ export async function POST(req: NextRequest) {
     const unitsOfWan = Math.max(1, Math.ceil(totalCredits / 2))
     await checkAndDeductCredits(userId, 'generate_wan', unitsOfWan)
   } catch (err) {
+    console.warn("[caught] src/app/api/generate/dispatch/route.ts:46", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -57,12 +60,14 @@ export async function POST(req: NextRequest) {
       segments: results.map((r) => ({
         segmentId: r.segmentId,
         videoUrl: r.videoUrl,
-        engineId: segments.find((s) => s.segmentId === r.segmentId)?.engineId ?? 'wan',
+        engineId: segments.find((s) => s.segmentId === r.segmentId)?.engineId ?? refuseSilentModelSwap(r.segmentId, 'wan'),
       })),
     })
 
     return NextResponse.json({ results, blendedUrl })
   } catch (err) {
+    console.warn("[caught] src/app/api/generate/dispatch/route.ts:66", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }

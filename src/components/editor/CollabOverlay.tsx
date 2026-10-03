@@ -1,16 +1,20 @@
 'use client'
 
-import { useEditorStore } from '@/store/editor'
+import { usePlaybackStore } from '@/store/playbackStore'
 import { PresenceBar } from './PresenceBar'
 import { ConflictToast } from './ConflictToast'
+import { useProjectCollab } from '@/hooks/useProjectCollab'
 
 /**
  * Mounts presence + conflict watchers once a project is loaded.
- * Reads projectId from the editor store so it can be dropped into
- * any layout without needing to pass props from a server component.
+ * Canonical project id is playbackStore (FIX-K); editor store is the Simple leftover.
  */
 export function CollabOverlay() {
-  const projectId = useEditorStore((s) => s.recipe?.projectId ?? null)
+  const playbackProjectId = usePlaybackStore((s) => s.projectId)
+  const editorProjectId = usePlaybackStore((s) => s.recipe?.projectId ?? null)
+  const projectId = playbackProjectId || editorProjectId
+
+  useProjectCollab(projectId)
 
   if (!projectId) return null
 

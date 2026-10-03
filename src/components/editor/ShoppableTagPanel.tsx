@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { randomUUID } from 'crypto'
-import { useEditorStore } from '@/store/editor'
+import { useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
 import { useUIStore } from '@/store/ui'
 import type { ProductTag } from '@/lib/commerce/ShoppableExport'
 
@@ -24,7 +24,7 @@ const EMPTY_DRAFT: DraftTag = {
 interface EmbedResult { embedId: string; shareUrl: string; html: string }
 
 export function ShoppableTagPanel() {
-  const recipe = useEditorStore((s) => s.recipe)
+  const recipe = useEditorRecipeView()
   const addToast = useUIStore((s) => s.addToast)
 
   const [videoUrl, setVideoUrl] = useState('')
@@ -82,6 +82,8 @@ export function ShoppableTagPanel() {
       setEmbedResult(data as unknown as EmbedResult)
       addToast('Shoppable embed created!', 'success')
     } catch (e: unknown) {
+      console.warn("[caught] src/components/editor/ShoppableTagPanel.tsx:84", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       setError(e instanceof Error ? e.message : 'Network error')
     } finally {
       setGenerating(false)

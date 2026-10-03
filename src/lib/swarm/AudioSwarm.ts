@@ -1,3 +1,4 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { redis } from '../redis'
 import { uploadToR2 } from '../storage/r2'
 import { generateVoiceBuffer } from '@/lib/elevenlabs/client'
@@ -108,6 +109,7 @@ export class AudioSwarm {
           stability: 0.5,
           similarityBoost: 0.85,
           style: 0.3,
+          source: 'audio.voice',
         })
         audioUrl = await uploadToR2(
           audioBuffer,
@@ -124,7 +126,7 @@ export class AudioSwarm {
       }
 
       case 'audiocraft_foley': {
-        const result = await runFal('fal-ai/stable-audio', {
+        const result = await runFal(falEndpoint('stable-audio'), {
             prompt: task.foley_description ?? '',
             seconds_total: task.duration_seconds,
           }) as { audio_file?: { url: string }; audio_url?: string }
@@ -230,34 +232,13 @@ export class AudioSwarm {
   }
 
   private async generateSunoMusic(style: string): Promise<string> {
-    const sunoRes = await fetch('https://studio-api.suno.ai/api/generate/v2/', {
-      method: 'POST',
-      headers: {
-        Cookie: `__stripe_mid=${process.env.SUNO_SESSION_ID}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        prompt: style,
-        make_instrumental: true,
-        mv: 'chirp-v3-5',
-      }),
+    const { generateMusic } = await import('@/lib/audio/providers')
+    const result = await generateMusic({
+      prompt: style,
+      instrumental: true,
+      targetSeconds: 30,
+      source: 'audio.music',
     })
-    const sunoData = await sunoRes.json() as { clips?: Array<{ id: string }> }
-    const clipId = sunoData.clips?.[0]?.id
-    if (!clipId) throw new Error('Suno: no clip ID returned')
-    return this.pollSuno(clipId)
-  }
-
-  private async pollSuno(clipId: string): Promise<string> {
-    for (let i = 0; i < 60; i++) {
-      await new Promise(r => setTimeout(r, 3000))
-      const res = await fetch(`https://studio-api.suno.ai/api/feed/?ids=${clipId}`, {
-        headers: { Cookie: `__stripe_mid=${process.env.SUNO_SESSION_ID}` },
-      })
-      const data = await res.json() as Array<{ status: string; audio_url?: string }>
-      if (data[0]?.status === 'complete' && data[0]?.audio_url) return data[0].audio_url
-      if (data[0]?.status === 'error') throw new Error('Suno generation failed')
-    }
-    throw new Error('Suno timeout')
+    return result.url
   }
 }

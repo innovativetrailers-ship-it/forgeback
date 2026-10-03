@@ -89,7 +89,9 @@ export function broadcastGrade(event: GradeSyncEvent): void {
   for (const controller of subs) {
     try {
       controller.enqueue(payload)
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/collab/GradeSync.ts:92", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       subs.delete(controller)
     }
   }

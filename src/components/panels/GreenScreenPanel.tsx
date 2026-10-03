@@ -2,10 +2,9 @@
 
 import { useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { Layers, Upload, Image, RefreshCw, Sliders, ChevronDown, ChevronRight } from 'lucide-react'
-import { useStudioStore } from '@/store/editor'
+import { Layers, Upload, ChevronDown, ChevronRight } from 'lucide-react'
 
-type BackgroundType = 'image' | 'video' | 'gradient' | 'solid' | 'location' | 'ai_generate'
+type BackgroundType = 'image' | 'video' | 'gradient' | 'solid' | 'location'
 type KeyingMethod = 'luma' | 'chroma_green' | 'chroma_blue' | 'ai_rembg' | 'depth'
 
 const LOCATION_PRESETS = [
@@ -31,15 +30,7 @@ export function GreenScreenPanel() {
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null)
   const [bgUrl, setBgUrl] = useState<string | null>(null)
   const [methodsOpen, setMethodsOpen] = useState(true)
-  const [showGenerate, setShowGenerate] = useState(false)
-  const [genPrompt, setGenPrompt] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
-  const { selectedClipId } = useStudioStore()
-
-  const handleApply = () => {
-    // TODO: wire to fal BiRefNet / chromakey API
-    console.info('[GreenScreen] Apply:', { keyMethod, bgType, tolerance, feather, spill, selectedPreset, bgUrl })
-  }
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -106,7 +97,7 @@ export function GreenScreenPanel() {
       <div className="panel-section">
         <p className="panel-label mb-2">Background Source</p>
         <div className="pill-group mb-3">
-          {(['location', 'ai_generate', 'image', 'video', 'gradient', 'solid'] as BackgroundType[]).map((t) => (
+          {(['location', 'image', 'video', 'gradient', 'solid'] as BackgroundType[]).map((t) => (
             <button key={t} onClick={() => setBgType(t)}
               className={cn('pill capitalize', bgType === t && 'active')}
             >{t.replace('_', ' ')}</button>
@@ -127,22 +118,6 @@ export function GreenScreenPanel() {
                 )}
               >{p}</button>
             ))}
-          </div>
-        )}
-
-        {bgType === 'ai_generate' && (
-          <div>
-            <textarea
-              value={genPrompt}
-              onChange={(e) => setGenPrompt(e.target.value)}
-              placeholder="Describe the background scene…"
-              rows={3}
-              className="cinema-textarea mb-2"
-            />
-            <button className="w-full py-1.5 rounded text-[11px] font-medium border border-[var(--teal-border)] text-[var(--teal-bright)] hover:bg-[var(--teal-glow)] transition-colors">
-              <RefreshCw size={10} className="inline mr-1" />
-              Generate Background
-            </button>
           </div>
         )}
 
@@ -168,20 +143,6 @@ export function GreenScreenPanel() {
         )}
       </div>
 
-      {/* Apply */}
-      <div className="panel-section">
-        <button
-          onClick={handleApply}
-          disabled={!selectedClipId}
-          className="w-full py-2 rounded-md text-[11px] font-semibold bg-[var(--teal-bright)] text-[#03080e] hover:bg-[#00f0d5] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <Layers size={12} className="inline mr-1.5" />
-          Apply to Clip
-        </button>
-        {!selectedClipId && (
-          <p className="text-[9px] text-[var(--text-tertiary)] text-center mt-1">Select a clip in timeline first</p>
-        )}
-      </div>
     </div>
   )
 }

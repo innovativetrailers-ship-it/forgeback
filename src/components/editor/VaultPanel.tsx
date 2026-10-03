@@ -13,6 +13,7 @@ interface Character {
   name: string
   referenceUrls: string[]
   loraStatus: string
+  loraError?: string | null
   modelFamily?: string | null
   renderCount: number
 }
@@ -54,8 +55,16 @@ export function VaultPanel({ projectId, characters, onCharacterAdded }: Props) {
       fd.append('triggerWord', data.triggerWord)
       fd.append('modelFamily', data.modelFamily)
       fd.append('trainLora', data.trainLora ? 'true' : 'false')
+      if (data.trainLora) {
+        const { primaryCastTrainer, trainingCostUsd } = await import('@cinema/core')
+        fd.append('confirmedCostUsd', String(trainingCostUsd(primaryCastTrainer(), 1000)))
+        fd.append('subjectConsent', 'true')
+      }
       data.referenceImages.forEach((f) => fd.append('images', f))
-      await fetch('/api/vault/character/create', { method: 'POST', body: fd, credentials: 'include' }).catch(() => null)
+      await fetch('/api/vault/character/create', { method: 'POST', body: fd, credentials: 'include' }).catch((err) => {
+        console.warn("[caught] src/components/editor/VaultPanel.tsx:63", err instanceof Error ? { name: err.name, message: err.message } : err)
+        return (null)
+      })
     }
     toast.success(`${data.name} added to vault`)
     onCharacterAdded()
@@ -110,6 +119,9 @@ export function VaultPanel({ projectId, characters, onCharacterAdded }: Props) {
                   {statusCfg.icon}
                   {statusCfg.label}
                 </div>
+                {c.loraStatus === 'FAILED' && c.loraError && (
+                  <p className="text-[9px] text-[var(--text-tertiary)] line-clamp-2" title={c.loraError}>{c.loraError}</p>
+                )}
               </div>
               {c.modelFamily && (
                 <span className="text-[9px] text-[var(--text-tertiary)] shrink-0">{c.modelFamily}</span>

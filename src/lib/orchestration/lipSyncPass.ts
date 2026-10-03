@@ -1,15 +1,68 @@
+import { readFileSync } from 'node:fs'
 import pLimit from 'p-limit'
 import { db } from '@/lib/db'
 import { runFal, extractVideoUrl } from '@/lib/fal/client'
+import { exec } from '@/lib/media/ffmpegExec'
+import { downloadToTmp } from '@/lib/media/download'
+import { uploadToR2 } from '@/lib/storage/r2'
 import { loadCheckpoint, saveCheckpoint } from './checkpoints'
 import {
   LIP_SYNC_ENGINES,
   lipSyncEngineForMode,
+  type AlignmentWord,
   type LipSyncEngineKey,
 } from './lipSyncRegistry'
 import type { GeneratedSegment } from './types'
 
 const limit = pLimit(3)
+
+export function readAlignmentWords(value: unknown): AlignmentWord[] {
+  if (!Array.isArray(value)) return []
+  const words: AlignmentWord[] = []
+  for (const row of value) {
+    if (!row || typeof row !== 'object') continue
+    const rec = row as Record<string, unknown>
+    const text = typeof rec.text === 'string' ? rec.text.trim() : ''
+    const start = typeof rec.start === 'number' ? rec.start : Number.NaN
+    const end = typeof rec.end === 'number' ? rec.end : Number.NaN
+    if (!text || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue
+    words.push({ text, start, end })
+  }
+  return words
+}
+
+function logLipSyncAlignment(clipId: string, words: AlignmentWord[]): void {
+  console.log('[lipsync_alignment]', {
+    clipId,
+    words: words.map((word) => ({ text: word.text, start: word.start, end: word.end })),
+  })
+}
+
+/** LatentSync and Sync accept only video_url/audio_url. The word list trims the audio those engines hear. */
+async function audioUrlAlignedToWords(
+  audioUrl: string,
+  words: AlignmentWord[],
+  projectId: string,
+  clipId: string,
+): Promise<string> {
+  logLipSyncAlignment(clipId, words)
+  if (words.length === 0) return audioUrl
+  const start = words[0]!.start
+  const end = words[words.length - 1]!.end
+  try {
+    const local = await downloadToTmp(audioUrl, 'mp3')
+    const trimmed = `${local}.aligned.mp3`
+    await exec('ffmpeg', ['-y', '-i', local, '-ss', String(start), '-to', String(end), '-c', 'copy', trimmed])
+    return await uploadToR2(
+      readFileSync(trimmed),
+      `audio/lipsync/${projectId}/${clipId}-aligned.mp3`,
+      'audio/mpeg',
+    )
+  } catch (err) {
+    console.warn('[lipsync_alignment] using full dialogue', err instanceof Error ? err.message : err)
+    return audioUrl
+  }
+}
 
 export async function runLipSyncPass(
   clips: GeneratedSegment[],
@@ -22,6 +75,10 @@ export async function runLipSyncPass(
   const out = [...clips]
 
   await Promise.all(out.map((clip, i) => limit(async () => {
+    if (!clip.videoUrl?.trim()) {
+      console.warn(`[lipsync] shot ${clip.shotIndex} skipped: no video`)
+      return
+    }
     const studioClip = clip.shotId
       ? await db.studioClip.findUnique({ where: { id: clip.shotId } })
       : await findClipByShotIndex(projectId, clip.shotIndex)
@@ -54,10 +111,13 @@ export async function runLipSyncPass(
     const engine = LIP_SYNC_ENGINES[engineKey] ?? LIP_SYNC_ENGINES.latentsync
 
     try {
+      const alignmentWords = readAlignmentWords(line.alignmentWords)
+      const audioUrl = await audioUrlAlignedToWords(line.url, alignmentWords, projectId, studioClip?.id ?? String(clip.shotIndex))
       const result = await runFal(engine.endpoint, engine.payload({
         videoUrl: clip.videoUrl,
-        audioUrl: line.url,
+        audioUrl,
         syncMode: 'cut_off',
+        alignmentWords,
       }))
       const syncedUrl = extractVideoUrl(result)
       if (!syncedUrl) throw new Error('Lip sync returned no video')
@@ -128,10 +188,13 @@ export async function applyLipSyncToShot(
   const engineKey = (clip.lipSyncModel as LipSyncEngineKey | null) ?? lipSyncEngineForMode(mode)
   const engine = LIP_SYNC_ENGINES[engineKey] ?? LIP_SYNC_ENGINES.latentsync
 
+  const alignmentWords = readAlignmentWords(line.alignmentWords)
+  const audioUrl = await audioUrlAlignedToWords(line.url, alignmentWords, projectId, clipId)
   const result = await runFal(engine.endpoint, engine.payload({
     videoUrl: clip.rawVideoUrl ?? clip.videoUrl,
-    audioUrl: line.url,
+    audioUrl,
     syncMode: 'cut_off',
+    alignmentWords,
   }))
   const syncedUrl = extractVideoUrl(result)
   if (!syncedUrl) throw new Error('Lip sync returned no video')

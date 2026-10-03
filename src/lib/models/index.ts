@@ -93,7 +93,7 @@ export async function generateKling30(payload: SwarmPayload): Promise<string> {
 }
 
 // ── Runway Gen-4.5 ───────────────────────────────────────────
-import * as runwayClient from './runway'
+import * as runwayClient from '@/lib/providers/runway'
 export async function generateRunway(payload: SwarmPayload): Promise<string> {
   const job = await runwayClient.generateVideo({
     prompt: payload.prompt,

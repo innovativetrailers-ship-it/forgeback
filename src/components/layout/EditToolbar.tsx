@@ -7,6 +7,7 @@ import {
 import { useUIStore, type ToolId } from '@/store/ui'
 import { useEditorStore } from '@/store/editor'
 import { RoughCutButton } from '@/components/editor/RoughCutButton'
+import { usePlaybackStore } from '@/store/playbackStore'
 
 const TOOLS: Array<{ id: ToolId; icon: React.ReactNode; label: string; shortcut: string }> = [
   { id: 'select',       icon: <MousePointer2 size={14} />, label: 'Select',       shortcut: 'V' },
@@ -44,14 +45,14 @@ export function EditToolbar() {
 
       {/* Undo / Redo */}
       <button
-        onClick={() => document.execCommand('undo')}
+        onClick={() => usePlaybackStore.getState().undo()}
         title="Undo (Cmd+Z)"
         className="w-7 h-6 rounded flex items-center justify-center text-[var(--text-tertiary)] hover:text-white hover:bg-white/5"
       >
         <Undo2 size={13} />
       </button>
       <button
-        onClick={() => document.execCommand('redo')}
+        onClick={() => usePlaybackStore.getState().redo()}
         title="Redo (Cmd+Shift+Z)"
         className="w-7 h-6 rounded flex items-center justify-center text-[var(--text-tertiary)] hover:text-white hover:bg-white/5"
       >

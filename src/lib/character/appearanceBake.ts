@@ -1,4 +1,6 @@
-import { fal } from '@/lib/fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('lib.character.appearanceBake')
 import type { FCCCharacter } from './fccSchema'
 import { buildModificationPrompt } from './identityLock'
 
@@ -39,12 +41,14 @@ export async function bakeAppearancePreview(char: FCCCharacter): Promise<string>
 
   let outUrl: string | null = null
   try {
-    const result = await fal.subscribe('fal-ai/flux/dev/image-to-image', {
+    const result = await falSubscribe(falEndpoint('flux/dev/image-to-image'), {
       input: { image_url: sourceUrl, prompt, strength: 0.55, num_images: 1 },
     })
     outUrl = extractImageUrl(result.data)
-  } catch {
-    const fallback = await fal.subscribe('fal-ai/flux/dev', { input: { prompt } })
+  } catch (err) {
+    console.warn("[caught] src/lib/character/appearanceBake.ts:47", err instanceof Error ? { name: err.name, message: err.message } : err)
+
+    const fallback = await falSubscribe(falEndpoint('flux/dev'), { input: { prompt } })
     outUrl = extractImageUrl(fallback.data)
   }
   if (!outUrl) throw new Error('Appearance bake returned no image.')

@@ -4,6 +4,7 @@ export interface MusicRequest {
   lyrics?: string
   instrumental: boolean
   targetSeconds: number
+  source: string
 }
 
 export interface MusicResult {

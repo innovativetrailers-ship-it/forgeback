@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid'
 
 export type PanelId =
   | 'generate' | 'vault' | 'library' | 'location' | 'cast'
+  | 'training'
   | 'makeup' | 'sfx_makeup' | 'greenscreen' | 'cgi' | 'vfx' | 'transitions'
   | 'audio' | 'stock' | 'script' | 'storyboard' | 'avatar'
   | 'translate' | 'highlight' | 'highlights' | 'brandkit' | 'brand_kit' | 'settings'

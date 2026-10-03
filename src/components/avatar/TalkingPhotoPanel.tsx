@@ -28,6 +28,8 @@ export function TalkingPhotoPanel() {
       if (!res.ok || !data.url) throw new Error(data.error ?? 'Upload failed')
       setPhotoUrl(data.url)
     } catch (err) {
+      console.warn("[caught] src/components/avatar/TalkingPhotoPanel.tsx:30", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
       setIsUploading(false)
@@ -48,6 +50,8 @@ export function TalkingPhotoPanel() {
       if (!res.ok || !data.jobId) throw new Error(data.error ?? 'Generation failed')
       setJobId(data.jobId)
     } catch (err) {
+      console.warn("[caught] src/components/avatar/TalkingPhotoPanel.tsx:50", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError(err instanceof Error ? err.message : 'Generation failed')
     } finally {
       setIsGenerating(false)

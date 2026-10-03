@@ -122,7 +122,9 @@ export async function fetchBranchConfig(embedId: string): Promise<BranchingConfi
       }
     }).branchingEmbed.findUnique({ where: { embedId } })
     if (row && isBranchingConfig(row.config)) return row.config
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/export/BranchingExport.ts:125", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     // Model not migrated yet
   }
   return null

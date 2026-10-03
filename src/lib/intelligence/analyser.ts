@@ -151,7 +151,9 @@ Return structured JSON only.`,
     try {
       const { extractVideoFrameSamples } = await import('@/lib/fal/frameExtract')
       return await extractVideoFrameSamples(videoUrl, 3)
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/intelligence/analyser.ts:154", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       return [videoUrl]
     }
   }
@@ -186,7 +188,9 @@ Assess this probe result.`,
         strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
         notes: String(parsed.notes ?? ''),
       }
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/intelligence/analyser.ts:189", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       return { quality_score: 5, issues: ['Assessment failed'], strengths: [], notes: '' }
     }
   }

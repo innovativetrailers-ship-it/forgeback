@@ -9,6 +9,10 @@ export interface PresenceState {
   color: string
   playheadTime: number
   selectedClipId: string | null
+  role?: string
+  typing?: boolean
+  editing?: { kind: string; id: string } | null
+  cursor?: { x: number; y: number } | null
   lastSeen: number
 }
 
@@ -52,6 +56,10 @@ export async function updatePresence(
       patch.selectedClipId !== undefined
         ? patch.selectedClipId
         : (prev.selectedClipId ?? null),
+    role: patch.role ?? prev.role,
+    typing: patch.typing ?? prev.typing,
+    editing: patch.editing !== undefined ? patch.editing : (prev.editing ?? null),
+    cursor: patch.cursor !== undefined ? patch.cursor : (prev.cursor ?? null),
     lastSeen: Date.now(),
   }
 

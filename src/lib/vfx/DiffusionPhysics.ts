@@ -2,7 +2,9 @@
  * Diffusion-based physics simulation for VFX (E09).
  * Calls fal.ai video-to-video with physics-conditioned prompts.
  */
-import { fal } from '@/lib/fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('lib.vfx.DiffusionPhysics')
 import { randomUUID } from 'crypto'
 import { uploadToR2 } from '@/lib/storage/r2'
 
@@ -51,7 +53,7 @@ export async function applyDiffusionPhysics(params: PhysicsParams): Promise<Phys
 
   let falResult: unknown
   try {
-    falResult = await fal.subscribe('fal-ai/wan/v2.2/a14b/video-to-video', {
+    falResult = await falSubscribe(falEndpoint('wan/v2.2/a14b/video-to-video'), {
       input: {
         video_url: videoUrl,
         prompt: physicsPrompt,

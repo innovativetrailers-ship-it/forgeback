@@ -78,7 +78,9 @@ export function ActivityFeed({ projectId }: { projectId: string }) {
       const newMap = new Map<string, PresenceState>()
       currentPeers.forEach((p) => newMap.set(p.userId, p))
       prevPeersRef.current = newMap
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn("[caught] src/components/editor/ActivityFeed.tsx:81", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore */ }
   }, [projectId, addActivity])
 
   useEffect(() => {

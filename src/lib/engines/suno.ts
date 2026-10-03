@@ -1,4 +1,7 @@
-const SUNO_BASE = 'https://api.suno.ai/v1'
+import { requireCallerSource } from '@cinema/core'
+import { assertGenerationNotPaused } from '@/lib/generation/pause'
+
+import { SUNO_V1_BASE as SUNO_BASE } from '@/lib/audio/suno'
 
 export interface SunoParams {
   prompt:        string
@@ -11,6 +14,7 @@ export interface SunoParams {
 export async function generateMusic(
   params: SunoParams
 ): Promise<{ audioUrl: string; jobId: string }> {
+  assertGenerationNotPaused(requireCallerSource('audio.music'))
   const res = await fetch(`${SUNO_BASE}/generate`, {
     method:  'POST',
     headers: {
@@ -40,6 +44,7 @@ export async function generateMusicWithProgress(
   params:      SunoParams,
   onProgress?: (pct: number, message: string) => void
 ): Promise<{ audioUrl: string; jobId: string }> {
+  assertGenerationNotPaused(requireCallerSource('audio.music'))
   const res = await fetch(`${SUNO_BASE}/generate`, {
     method:  'POST',
     headers: { Authorization: `Bearer ${process.env.SUNO_API_KEY}`, 'Content-Type': 'application/json' },

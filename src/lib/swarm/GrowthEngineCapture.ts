@@ -40,7 +40,9 @@ export class GrowthEngineCapture {
           },
           isProcessed: false,
         },
-      }).catch(() => { /* non-fatal */ })
+      }).catch((err) => {
+        console.warn("[caught] src/lib/swarm/GrowthEngineCapture.ts:43", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal */ })
     }
 
     // Prompt enhancement pairs — teaches Art Director to improve
@@ -60,7 +62,9 @@ export class GrowthEngineCapture {
           },
           isProcessed: false,
         },
-      }).catch(() => { /* non-fatal */ })
+      }).catch((err) => {
+        console.warn("[caught] src/lib/swarm/GrowthEngineCapture.ts:63", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal */ })
     }
 
     // Cross-model quality comparison — which model wins per scene type
@@ -80,7 +84,9 @@ export class GrowthEngineCapture {
         },
         isProcessed: false,
       },
-    }).catch(() => { /* non-fatal */ })
+    }).catch((err) => {
+      console.warn("[caught] src/lib/swarm/GrowthEngineCapture.ts:83", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal */ })
 
     // Repaint delta — highest value training signal
     const repaintedShots = results.filter(r => r.needs_repaint && r.repaint_regions.length)
@@ -100,7 +106,9 @@ export class GrowthEngineCapture {
           })),
           isProcessed: false,
         },
-      }).catch(() => { /* non-fatal */ })
+      }).catch((err) => {
+        console.warn("[caught] src/lib/swarm/GrowthEngineCapture.ts:103", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal */ })
     }
   }
 
@@ -128,6 +136,8 @@ export class GrowthEngineCapture {
           user_action: params.user_action,
         },
       },
-    }).catch(() => { /* non-fatal */ })
+    }).catch((err) => {
+      console.warn("[caught] src/lib/swarm/GrowthEngineCapture.ts:131", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal */ })
   }
 }

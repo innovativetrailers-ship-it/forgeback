@@ -2,7 +2,9 @@
  * Speaker separation engine (F09).
  * Calls fal.ai audio-separator to decompose mixed audio into stems.
  */
-import { fal } from '@/lib/fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('lib.audio.SpeakerSeparator')
 import { randomUUID } from 'crypto'
 import { uploadToR2 } from '@/lib/storage/r2'
 
@@ -42,7 +44,7 @@ export async function separateSpeakers(audioUrl: string, userId: string): Promis
 
   let falResult: unknown
   try {
-    falResult = await fal.subscribe('fal-ai/audio-separator', {
+    falResult = await falSubscribe(falEndpoint('audio-separator'), {
       input: { audio_url: audioUrl },
       pollInterval: 2000,
     })

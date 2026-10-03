@@ -1,0 +1,11 @@
+---
+description: SPEC-08 style, look, and genre. Read before changing style chips, LUT packs, film stock, grain, halation, or denoise.
+globs: ["src/components/ultimate/AIDirectorPanel.tsx", "src/lib/color/LUTLoader.ts", "cinematic-forge-v3/src/renderer/components/EffectsPanel.tsx"]
+alwaysApply: false
+---
+
+# SPEC-08 — Style / look / genre
+
+Contract: `docs/spec-references/SPEC-08-style-look.md`. Inherits SPEC-00. Do not build from it until the user feeds this spec.
+
+A selected style chip must stay in the director prompt even when notes are empty. Film-stock buttons write grade and grain. The 20 cube LUT list is unused until a panel calls it. AI grade suggestion is a model call and must stay gated.

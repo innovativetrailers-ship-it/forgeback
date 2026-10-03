@@ -1,3 +1,4 @@
+import { buildWhisperSttInput, falEndpoint } from '@cinema/core/endpoints'
 import { runFal } from './client'
 
 export interface LipSyncInput {
@@ -16,7 +17,7 @@ export async function lipSync(input: LipSyncInput): Promise<string> {
     throw new Error('LipSync requires either audioUrl or text')
   }
 
-  const result = await runFal<SadTalkerResult>('fal-ai/sadtalker', {
+  const result = await runFal<SadTalkerResult>(falEndpoint('sadtalker'), {
     source_image_url: input.videoUrl,
     driven_audio_url: input.audioUrl ?? '',
   })
@@ -33,11 +34,10 @@ export async function transcribeAudio(audioUrl: string): Promise<{
     chunks?: Array<{ timestamp: [number, number]; text: string }>
   }
 
-  const result = await runFal<WhisperResult>('fal-ai/whisper', {
-    audio_url: audioUrl,
-    task: 'transcribe',
-    chunk_level: 'segment',
-  })
+  const result = await runFal<WhisperResult>(falEndpoint('whisper'), buildWhisperSttInput({
+    audioUrl,
+    chunkLevel: 'segment',
+  }))
 
   return {
     text: result.text ?? '',

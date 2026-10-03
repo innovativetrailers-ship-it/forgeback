@@ -1,7 +1,10 @@
+import { logCaught } from '@/lib/diagnostics/caught'
+import { humanStatusText } from '@/lib/jobs/humanStatus'
 export interface JobStreamEvent {
   status: string
   progress?: number
   message?: string
+  userMessage?: string
   outputUrl?: string
   error?: string
 }
@@ -10,6 +13,7 @@ type Handlers = {
   onProgress?: (data: JobStreamEvent) => void
   onComplete?: (outputUrl: string, data: JobStreamEvent) => void
   onFailed?: (error: string, data: JobStreamEvent) => void
+  onPaused?: (message: string, data: JobStreamEvent) => void
   onClose?: () => void
 }
 
@@ -22,22 +26,42 @@ function mapStatusJob(row: {
   statusMessage?: string | null
   outputUrl?: string | null
   errorMessage?: string | null
+  userMessage?: string | null
 }): JobStreamEvent {
   const status = row.status === 'COMPLETE' ? 'complete'
     : row.status === 'FAILED' ? 'failed'
     : row.status === 'QUEUED' ? 'queued'
+    : row.status === 'NEEDS_ATTENTION' ? 'needs_attention'
     : 'processing'
+  const userMessage = humanStatusText(row.userMessage, undefined)
+  const failed = status === 'failed'
   return {
     status,
     progress: row.progressPct ?? undefined,
-    message: row.statusMessage ?? undefined,
+    userMessage,
+    message: failed
+      ? (userMessage ?? humanStatusText(undefined, row.errorMessage) ?? humanStatusText(undefined, row.statusMessage))
+      : humanStatusText(undefined, row.statusMessage),
     outputUrl: row.outputUrl ?? undefined,
-    error: row.errorMessage ?? undefined,
+    error: failed ? (userMessage ?? humanStatusText(undefined, row.errorMessage) ?? row.errorMessage ?? undefined) : (row.errorMessage ?? undefined),
   }
 }
 
-function handleEvent(data: JobStreamEvent, handlers: Handlers, cleanup: () => void): void {
-  handlers.onProgress?.(data)
+function eventKey(data: JobStreamEvent): string {
+  return `${data.status}|${data.progress ?? ''}|${data.message ?? ''}|${data.outputUrl ?? ''}|${data.error ?? ''}`
+}
+
+function handleEvent(
+  data: JobStreamEvent,
+  handlers: Handlers,
+  cleanup: () => void,
+  seen: { key: string },
+): void {
+  const key = eventKey(data)
+  if (key !== seen.key) {
+    seen.key = key
+    handlers.onProgress?.(data)
+  }
 
   if (TERMINAL_COMPLETE.has(data.status) && data.outputUrl) {
     handlers.onComplete?.(data.outputUrl, data)
@@ -46,6 +70,11 @@ function handleEvent(data: JobStreamEvent, handlers: Handlers, cleanup: () => vo
   }
   if (TERMINAL_FAILED.has(data.status)) {
     handlers.onFailed?.(data.error ?? 'Generation failed', data)
+    cleanup()
+    return
+  }
+  if (data.status === 'needs_attention') {
+    handlers.onPaused?.(data.message ?? 'Awaiting you', data)
     cleanup()
   }
 }
@@ -60,6 +89,7 @@ export function subscribeJobStream(jobId: string, handlers: Handlers): () => voi
   let errorTimer: ReturnType<typeof setTimeout> | null = null
   let lastEventId = 0
   let closed = false
+  const seen = { key: '' }
 
   const cleanup = () => {
     if (closed) return
@@ -83,9 +113,9 @@ export function subscribeJobStream(jobId: string, handlers: Handlers): () => voi
         .then((res) => (res.ok ? res.json() : null))
         .then((row) => {
           if (!row || closed) return
-          handleEvent(mapStatusJob(row), handlers, cleanup)
+          handleEvent(mapStatusJob(row), handlers, cleanup, seen)
         })
-        .catch(() => {})
+        .catch((err) => logCaught('lib/jobs/subscribeJobStream', err))
     }, 5_000)
   }
 
@@ -103,8 +133,10 @@ export function subscribeJobStream(jobId: string, handlers: Handlers): () => voi
         const data = JSON.parse(e.data) as JobStreamEvent
         const parsedId = parseInt(e.lastEventId || '0', 10)
         if (parsedId > lastEventId) lastEventId = parsedId
-        handleEvent(data, handlers, cleanup)
-      } catch {
+        handleEvent(data, handlers, cleanup, seen)
+      } catch (err) {
+        console.warn("[caught] src/lib/jobs/subscribeJobStream.ts:122", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         // ignore malformed payloads
       }
     }

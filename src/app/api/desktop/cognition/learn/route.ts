@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import { type NextRequest, NextResponse } from 'next/server'
 import { learn } from '@/lib/cognition'
 import { validateDesktopCloudRequest } from '@/lib/desktop/cloudAuth'
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     jobId: body.jobId,
     result: body.result ?? {},
     brief: body.brief ?? null,
-  }).catch(() => {})
+  }).catch((err) => logCaught('app/api/desktop/cognition/learn/route', err))
 
   return NextResponse.json({ ok: true })
 }

@@ -1,3 +1,5 @@
+import { falEndpoint } from '@cinema/core/endpoints'
+import { logCaught } from '@/lib/diagnostics/caught'
 import { runFal } from '../fal/client'
 import { extractVideoFrame } from '../fal/frameExtract'
 import { relightImage } from '../fal/lighting'
@@ -125,7 +127,7 @@ export class GreenScreenEngine {
       return { alphaVideoUrl: alphaUrl, lightingInfo: lighting }
 
     } else if (job.extractionMode === 'ai_matting') {
-      const result = await runFal('fal-ai/birefnet-general', {
+      const result = await runFal(falEndpoint('birefnet-general'), {
           image_url: job.sourceVideoUrl,
           model: 'General Use (Heavy)',
           operating_resolution: '1024x1024',
@@ -133,15 +135,15 @@ export class GreenScreenEngine {
           refine_foreground: true,
         }) as unknown as { image: { url: string } }
 
-      const depth = await runFal('fal-ai/imageutils/depth', { image_url: job.sourceVideoUrl }) as unknown as { image_url: string }
+      const depth = await runFal(falEndpoint('imageutils/depth'), { image_url: job.sourceVideoUrl }) as unknown as { image_url: string }
 
       const lighting = await this.extractLightingInfo(job.sourceVideoUrl)
       return { alphaVideoUrl: result.image.url, depthMapUrl: depth.image_url, lightingInfo: lighting }
 
     } else {
-      const depth = await runFal('fal-ai/imageutils/depth', { image_url: job.sourceVideoUrl }) as unknown as { image_url: string }
+      const depth = await runFal(falEndpoint('imageutils/depth'), { image_url: job.sourceVideoUrl }) as unknown as { image_url: string }
 
-      const rembgResult = await runFal('fal-ai/imageutils/rembg', { image_url: job.sourceVideoUrl }) as unknown as { image: { url: string } }
+      const rembgResult = await runFal(falEndpoint('imageutils/rembg'), { image_url: job.sourceVideoUrl }) as unknown as { image: { url: string } }
 
       const lighting = await this.extractLightingInfo(job.sourceVideoUrl)
       return { alphaVideoUrl: rembgResult.image.url, depthMapUrl: depth.image_url, lightingInfo: lighting }
@@ -233,7 +235,7 @@ export class GreenScreenEngine {
 
     await Promise.all([
       this.downloadFile(foregroundAlphaUrl, fgPath),
-      this.downloadFile(backdropUrl, bgPath).catch(() => {}),
+      this.downloadFile(backdropUrl, bgPath).catch((err) => logCaught('lib/greenscreen/GreenScreenEngine', err)),
     ])
 
     await new Promise<void>((res, rej) => {

@@ -61,6 +61,17 @@ export async function advanceChain(
     }
     if (shot.status === 'GENERATING') return
 
+    if (shot.chainFrom === currentClipId) {
+      await tx.studioClip.update({
+        where: { id: shot.id },
+        data: {
+          status: 'AWAITING_DIRECTION',
+          ...(shot.anchorSource === 'MANUAL' ? {} : { anchorFrameUrl: null, anchorSource: 'NONE' }),
+        },
+      })
+      return
+    }
+
     const anchor = resolveDefaultAnchor(shot, carryFrame)
     const preserveManual = shot.anchorSource === 'MANUAL' && shot.anchorFrameUrl
 

@@ -23,7 +23,9 @@ export function startHeartbeat(workerName: string): () => void {
         'EX',
         TTL
       )
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/queue/heartbeat.ts:26", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // Non-fatal — health endpoint will report worker as offline
     }
   }

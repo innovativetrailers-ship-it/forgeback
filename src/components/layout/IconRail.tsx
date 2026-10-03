@@ -6,7 +6,7 @@ import {
   Wand2, Folder, Library, MapPin, Users, Sparkles,
   Layers, Video, Film, Music, Image, FileText,
   Clapperboard, Star, Globe, Palette, BarChart2,
-  Settings, ChevronUp,
+  Settings, Boxes,
 } from 'lucide-react'
 
 type RailItem = { id: PanelId; icon: React.ReactNode; label: string; dividerBefore?: boolean }
@@ -17,6 +17,7 @@ const TOP_ITEMS: RailItem[] = [
   { id: 'library',     icon: <Library size={16} />,      label: 'Library' },
   { id: 'location',    icon: <MapPin size={16} />,        label: 'Locations' },
   { id: 'cast',        icon: <Users size={16} />,         label: 'Cast' },
+  { id: 'training',    icon: <Boxes size={16} />,         label: 'Training Studio' },
   { id: 'makeup',      icon: <Sparkles size={16} />,      label: 'Makeup/SFX', dividerBefore: true },
   { id: 'greenscreen', icon: <Layers size={16} />,        label: 'Green Screen' },
   { id: 'cgi',         icon: <Video size={16} />,         label: 'CGI Insert' },

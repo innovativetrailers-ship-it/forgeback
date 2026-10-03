@@ -29,7 +29,9 @@ const EMPTY: ContinuityState = {
   environment: { timeOfDay: '', weather: '', lighting: '' },
 }
 
-const SYSTEM = 'Track film continuity state. Update the prior state with anything new this shot establishes. Return ONLY JSON.'
+const SYSTEM = `Track film continuity state. Update the prior state with anything new this shot establishes.
+Use the subject name written in the shot. Do not rename them and do not invent a character.
+Return ONLY JSON.`
 
 export const continuityAgent: CognitiveAgent<ContinuityInput, ContinuityState> = {
   name: 'continuity',
@@ -37,6 +39,7 @@ export const continuityAgent: CognitiveAgent<ContinuityInput, ContinuityState> =
   async execute({ shotPrompt, prior }) {
     const text = await callAgentLLM({
       system: SYSTEM,
+      source: 'cognitive.continuity',
       maxTokens: 500,
       fast: true,
       user: `Prior continuity: ${JSON.stringify(prior ?? {})}
@@ -52,7 +55,7 @@ Return updated ContinuityState JSON:
 
 // Inject continuity into a shot prompt so the model keeps state consistent.
 export function applyContinuity(prompt: string, state: ContinuityState): string {
-  const wardrobe = Object.entries(state.characters ?? {})
+  const wardrobe = Object.entries(state?.characters ?? {})
     .map(([name, c]) => {
       const items = Array.isArray(c?.wardrobe) ? c.wardrobe.filter(Boolean) : []
       const worn = items.length ? ` wearing ${items.join(', ')}` : ''
@@ -61,6 +64,7 @@ export function applyContinuity(prompt: string, state: ContinuityState): string 
     })
     .filter(Boolean)
     .join('; ')
-  const env = `${state.environment.timeOfDay} ${state.environment.weather} ${state.environment.lighting}`.trim()
+  const setting = state?.environment
+  const env = `${setting?.timeOfDay ?? ''} ${setting?.weather ?? ''} ${setting?.lighting ?? ''}`.trim()
   return `${prompt}${wardrobe ? ` [Continuity: ${wardrobe}]` : ''}${env ? ` [Setting: ${env}]` : ''}`
 }

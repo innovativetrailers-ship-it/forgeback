@@ -1,4 +1,6 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '../fal/client'
+const falSubscribe = falSubscribeBound('lib.avatar.AvatarEngine')
 import { uploadToR2 } from '../storage/r2'
 import { db } from '../db'
 import { cloneVoice, synthesiseSpeech } from '../audio/elevenlabs'
@@ -37,7 +39,9 @@ export async function createInstantAvatar(params: {
         audioSamples: [recordingUrl],
       })
       voiceId = cloneResult.voiceId
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/avatar/AvatarEngine.ts:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // Voice cloning optional
     }
 
@@ -78,7 +82,7 @@ export async function scriptToAvatarVideo(params: {
   })
 
   // Drive the avatar with SadTalker + LivePortrait
-  const sadTalkerResult = await fal.subscribe('fal-ai/sadtalker', {
+  const sadTalkerResult = await falSubscribe(falEndpoint('sadtalker'), {
     input: {
       source_image_url: avatar.thumbnailUrl,
       driven_audio_url: audioUrl,
@@ -124,7 +128,7 @@ export async function talkingPhoto(params: {
 }): Promise<{ videoUrl: string }> {
   const { photoUrl, audioUrl } = params
 
-  const result = await fal.subscribe('fal-ai/sadtalker', {
+  const result = await falSubscribe(falEndpoint('sadtalker'), {
     input: {
       source_image_url: photoUrl,
       driven_audio_url: audioUrl,

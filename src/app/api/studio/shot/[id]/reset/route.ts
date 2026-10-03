@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getOrderedClips, resolveDefaultAnchor } from '@/lib/studio/advanceChain'
@@ -59,7 +60,7 @@ export async function POST(
 
     const downstream = ordered.filter((s) => s.shotNumber > card.shotNumber)
     const demotedShotIds = downstream
-      .filter((s) => ['AWAITING_DIRECTION', 'PENDING', 'FAILED', 'COMPLETED'].includes(s.status))
+      .filter((s) => ['AWAITING_DIRECTION', 'PENDING', 'FAILED'].includes(s.status))
       .map((s) => s.id)
 
     await tx.studioClip.updateMany({
@@ -73,7 +74,7 @@ export async function POST(
       where: {
         scene: { projectId },
         anchorSource: 'AUTO',
-        id: { in: downstream.map((s) => s.id) },
+        id: { in: demotedShotIds },
       },
       data: { anchorFrameUrl: null, anchorSource: 'NONE' },
     })
@@ -86,6 +87,11 @@ export async function POST(
       { error: 'Shot cannot be reset in its current state', currentStatus: existing.status },
       { status: 409 },
     )
+  }
+
+  if (existing.status === 'COMPLETED' || existing.status === 'MANUAL') {
+    const { recordShotOutcome } = await import('@/lib/cognition/learnOutcomes')
+    await recordShotOutcome({ userId, shotId: id, signal: 'regenerate' }).catch((err) => logCaught('app/api/studio/shot/[id]/reset/route', err))
   }
 
   return NextResponse.json({ ok: true, demotedShotIds: result.demotedShotIds })

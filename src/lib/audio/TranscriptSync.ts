@@ -3,7 +3,9 @@
  * Powers A09: transcript-based editing where deleting text removes the matching audio/video.
  */
 
-import { fal } from '@/lib/fal/client'
+import { buildWhisperSttInput, falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('lib.audio.TranscriptSync')
 
 export interface TranscriptWord {
   word:       string
@@ -40,12 +42,8 @@ export interface TranscriptEdit {
 
 /** Transcribe audio using Whisper via fal.ai — returns word-level timestamps */
 export async function transcribeAudio(audioUrl: string): Promise<TranscriptResult> {
-  const result = await fal.subscribe('fal-ai/whisper', {
-    input: {
-      audio_url:  audioUrl,
-      task:       'transcribe',
-      chunk_level: 'word',
-    },
+  const result = await falSubscribe(falEndpoint('whisper'), {
+    input: buildWhisperSttInput({ audioUrl, chunkLevel: 'word' }),
   })
 
   const data = result.data as {

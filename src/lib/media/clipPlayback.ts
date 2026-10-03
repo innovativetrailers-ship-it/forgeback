@@ -19,20 +19,16 @@ export function needsMediaProxy(url: string): boolean {
   return /^https?:\/\//i.test(url)
 }
 
-/** Browser-safe playback URL — R2 direct or same-origin proxy. */
+/** Browser-safe playback URL. Any non-origin provider URL goes through /api/media. */
 export function publicPlaybackUrlForClip(
   clipId: string,
   videoUrl: string | null | undefined,
   rawVideoUrl?: string | null,
 ): string | undefined {
-  const stored = videoUrl?.trim()
+  const stored = videoUrl?.trim() || rawVideoUrl?.trim()
   if (!stored) return undefined
-  if (stored.startsWith('/api/')) return stored
-  if (isR2PublicUrl(stored) && !needsMediaProxy(stored)) return stored
-  if (needsMediaProxy(stored) || (rawVideoUrl && needsMediaProxy(rawVideoUrl))) {
-    return clipMediaPath(clipId)
-  }
-  return stored
+  if (stored.startsWith('/')) return stored
+  return clipMediaPath(clipId)
 }
 
 /** Client reconcile helper when shot card already has resolved videoUrl. */
@@ -40,7 +36,5 @@ export function shotPlaybackUrl(shotId: string, videoUrl: string | undefined): s
   const raw = videoUrl?.trim() ?? ''
   if (!raw) return ''
   if (raw.startsWith('/')) return raw
-  if (isR2PublicUrl(raw) && !needsMediaProxy(raw)) return raw
-  if (needsMediaProxy(raw)) return clipMediaPath(shotId)
-  return raw
+  return clipMediaPath(shotId)
 }

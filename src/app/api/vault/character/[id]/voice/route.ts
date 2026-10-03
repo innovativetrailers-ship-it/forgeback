@@ -24,7 +24,7 @@ export async function PATCH(
 
   await db.vaultCharacter.update({
     where: { id },
-    data: { voiceId, voiceProvider: 'elevenlabs' },
+    data: { voiceId, voiceProvider: 'elevenlabs', voiceSource: 'library' },
   })
 
   return NextResponse.json({ ok: true })

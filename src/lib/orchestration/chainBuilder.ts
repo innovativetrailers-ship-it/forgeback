@@ -1,4 +1,5 @@
 import { MODEL_COSTS } from '@/lib/routing/engineRegistry'
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 import type { ChainedClip, StructuredShot } from './types'
 import type { AnchorPolicy } from './types'
 
@@ -29,7 +30,7 @@ function pickModel(shot: StructuredShot, selectedModels: string[]): string {
   const suggested = shot.suggestedModel
   if (suggested && selectedModels.includes(suggested)) return suggested
   return [...selectedModels]
-    .sort((a, b) => (MODEL_COSTS[a] ?? 99) - (MODEL_COSTS[b] ?? 99))[0] ?? 'wan-2.6'
+    .sort((a, b) => (MODEL_COSTS[a] ?? 99) - (MODEL_COSTS[b] ?? 99))[0] ?? refuseSilentModelSwap('pool', 'ltx-2.3-fast')
 }
 
 export function buildChainForScene(
@@ -63,7 +64,7 @@ export function buildChainForScene(
       visualPrompt:   shot.visualPrompt,
       hasDialogue:    shot.hasDialogue,
       hasFaces:       shot.hasFaces,
-      charactersPresent: shot.charactersPresent,
+      charactersPresent: shot.charactersPresent ?? [],
       lighting:       shot.lighting,
     }
   })

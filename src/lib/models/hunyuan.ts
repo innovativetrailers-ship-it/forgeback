@@ -1,4 +1,4 @@
-import { buildFalVideoInput } from '@/lib/fal/videoPayloads'
+import { buildPayload } from '@/lib/fal/videoPayloads'
 import { resolveHunyuanEndpoint } from '@/lib/fal/hunyuanEndpoints'
 import { falGenerateJob, falPollJob } from '@/lib/fal/modelQueue'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
@@ -9,7 +9,7 @@ export async function generateVideo(
   const isI2V = Boolean(input.startFrameUrl)
   const model = resolveHunyuanEndpoint(isI2V)
 
-  const falInput = await buildFalVideoInput(model, 'hunyuan-video-1.5', {
+  const falInput = await buildPayload(model, 'hunyuan-video-1.5', {
     prompt: input.prompt,
     duration: input.duration ?? 5,
     aspectRatio: input.aspectRatio ?? '16:9',

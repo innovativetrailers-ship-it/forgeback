@@ -1,4 +1,3 @@
-import { fal } from '../fal/client'
 import { uploadToR2 } from '../storage/r2'
 import { execSync } from 'child_process'
 import { existsSync, mkdirSync, rmSync } from 'fs'
@@ -22,39 +21,24 @@ export async function trackPlanarRegion(params: {
   videoUrl: string
   regionOfInterest: { x: number; y: number; width: number; height: number }
   trackingMethod: 'translation' | 'affine' | 'perspective'
-}): Promise<{ trackData: TrackData }> {
-  const { videoUrl, regionOfInterest: roi, trackingMethod } = params
-
-  // Use fal.ai CoTracker for robust point tracking
-  const result = await fal.subscribe('fal-ai/cotracker', {
-    input: {
-      video_url: videoUrl,
-      points: [
-        [roi.x, roi.y],
-        [roi.x + roi.width, roi.y],
-        [roi.x + roi.width, roi.y + roi.height],
-        [roi.x, roi.y + roi.height],
-      ],
-      tracking_method: trackingMethod,
-    },
-  }) as unknown as {
-    tracks: Array<{
-      frame: number
-      points: Array<[number, number]>
-      confidences: number[]
-    }>
+}): Promise<{ trackData: TrackData; held: true }> {
+  void params.videoUrl
+  void params.trackingMethod
+  const { x, y, width, height } = params.regionOfInterest
+  console.warn('[planar] point tracker is not on the gateway (OpenAPI 404). Holding the selected region. Nothing submitted.')
+  const corners: [Point, Point, Point, Point] = [
+    { x, y },
+    { x: x + width, y },
+    { x: x + width, y: y + height },
+    { x, y: y + height },
+  ]
+  return {
+    held: true,
+    trackData: [
+      { frame: 0, corners, confidence: 1 },
+      { frame: 30 * 60, corners, confidence: 1 },
+    ],
   }
-
-  const trackData: TrackData = result.tracks.map((t) => ({
-    frame: t.frame,
-    corners: t.points.map((p, i) => ({
-      x: p[0],
-      y: p[1],
-    })) as [Point, Point, Point, Point],
-    confidence: Math.min(...t.confidences),
-  }))
-
-  return { trackData }
 }
 
 export async function replaceTrackedSurface(params: {

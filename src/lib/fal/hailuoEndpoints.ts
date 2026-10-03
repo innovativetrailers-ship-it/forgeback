@@ -1,16 +1,19 @@
-/** Hailuo 2.3 — replaces shared stale fal-ai/minimax-video path. */
+import { falEndpoint } from '@cinema/core/endpoints'
+import { hailuoDuration } from '@cinema/core'
+
+/** Hailuo 2.3 — replaces shared stale minimax-video path. */
 
 export const HAILUO_T2V_BY_REGISTRY: Record<string, string> = {
-  'hailuo-2.3':  'fal-ai/minimax/hailuo-2.3/standard/text-to-video',
-  'minimax-2.3': 'fal-ai/minimax/hailuo-2.3/pro/text-to-video',
+  'hailuo-2.3':  falEndpoint('minimax/hailuo-2.3/standard/text-to-video'),
+  'minimax-2.3': falEndpoint('minimax/hailuo-2.3/pro/text-to-video'),
   /** SkyReels has no live FAL T2V — emotional/longform rerouted to Hailuo standard. */
-  'skyreels-v3': 'fal-ai/minimax/hailuo-2.3/standard/text-to-video',
+  'skyreels-v3': falEndpoint('minimax/hailuo-2.3/standard/text-to-video'),
 }
 
 export const HAILUO_I2V_BY_REGISTRY: Record<string, string> = {
-  'hailuo-2.3':  'fal-ai/minimax/hailuo-2.3/standard/image-to-video',
-  'minimax-2.3': 'fal-ai/minimax/hailuo-2.3/pro/image-to-video',
-  'skyreels-v3': 'fal-ai/minimax/hailuo-2.3/standard/image-to-video',
+  'hailuo-2.3':  falEndpoint('minimax/hailuo-2.3/standard/image-to-video'),
+  'minimax-2.3': falEndpoint('minimax/hailuo-2.3/pro/image-to-video'),
+  'skyreels-v3': falEndpoint('minimax/hailuo-2.3/standard/image-to-video'),
 }
 
 export function resolveHailuoEndpoint(registryKey: string, isI2V: boolean): string {

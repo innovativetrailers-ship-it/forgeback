@@ -18,6 +18,54 @@ export function canPlaySrc(src?: string): boolean {
   return /^https?:\/\//i.test(src)
 }
 
+function errorName(err: unknown): string {
+  if (err instanceof DOMException) return err.name
+  if (err && typeof err === 'object' && 'name' in err && typeof err.name === 'string') return err.name
+  return ''
+}
+
+const inFlightPlay = new WeakMap<HTMLMediaElement, Promise<void>>()
+
+/** Await the in-flight play() before pause so a src swap does not abort it. */
+export async function pauseAfterPlay(el: HTMLMediaElement): Promise<void> {
+  const pending = inFlightPlay.get(el)
+  if (pending) {
+    try { await pending } catch (err) {
+      console.warn("[caught] src/lib/timeline/playback.ts:33", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* play already settled */ }
+  }
+  el.pause()
+}
+
+/**
+ * play() only when the src is usable.
+ * AbortError is expected across clip boundaries. NotSupportedError is a bad src.
+ */
+export function playMedia(el: HTMLMediaElement, src?: string): 'ok' | 'unsupported' {
+  const candidate = src ?? el.currentSrc
+  if (!canPlaySrc(candidate)) {
+    console.warn('play_not_supported', { src: candidate })
+    return 'unsupported'
+  }
+  const pending = el.play().then(
+    () => undefined,
+    (err: unknown) => {
+      const name = errorName(err)
+      if (name === 'AbortError') {
+        console.debug('play_aborted', { src: candidate })
+        return
+      }
+      if (name === 'NotSupportedError') {
+        console.warn('play_not_supported', { src: candidate })
+        return
+      }
+      console.error('video.play rejected', err)
+    },
+  )
+  inFlightPlay.set(el, pending)
+  return 'ok'
+}
+
 /** Clamp clip duration — real shots are seconds, not hours. */
 export function sanitizeClipDuration(raw: number, fallback = 5): number {
   if (!Number.isFinite(raw) || raw <= 0) return fallback

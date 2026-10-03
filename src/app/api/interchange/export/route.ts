@@ -12,7 +12,9 @@ export async function POST(req: NextRequest) {
   let body: { projectId?: string; format?: string }
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/interchange/export/route.ts:15", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -40,6 +42,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, costMap[format] ?? 'export_interchange_native')
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/interchange/export/route.ts:42", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Insufficient credits'
     return NextResponse.json({ error: msg }, { status: 402 })
   }
@@ -83,6 +87,8 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/interchange/export/route.ts:85", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Export failed'
     return NextResponse.json({ error: msg }, { status: 500 })
   }

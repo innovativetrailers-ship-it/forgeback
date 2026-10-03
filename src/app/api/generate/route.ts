@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 // src/app/api/generate/route.ts
 // Fast path — never waits for rendering. Returns jobId in <2s.
 
@@ -7,7 +8,10 @@ import { fastEstimateCost, estimateRenderSeconds } from '@/lib/orchestration/fas
 import { calculateSimpleCost }                     from '@/lib/credits'
 import { checkAccess, deductUserCredits }          from '@/lib/access/guard'
 import { MODEL_COUNCIL_DISPLAY, MODEL_COSTS, TIER_ENGINE_MAP } from '@/lib/routing/engineRegistry'
-import { after }                                   from 'next/server'
+import { parseQualityTier } from '@/lib/orchestration/tierPolicy'
+import { parseCreativeLicense } from '@/lib/cognition/license'
+import { defaultWizard, parseWizard, type DirectorRunMode } from '@/lib/orchestration/wizardState'
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 import { db }                                      from '@/lib/db'
 
 export async function POST(req: Request) {
@@ -23,10 +27,15 @@ export async function POST(req: Request) {
     generationMode?:   string
     source?:           string
     tier?:             string
+    qualityTier?:      string
+    creativeLicense?:  string
     projectId?:        string
     characterId?:      string
     musicUrl?:         string
     ambienceUrl?:      string
+    directorMode?:     string
+    wizard?:           unknown
+    templateShots?:    unknown
   }
 
   const rawPrompt = (body.prompt ?? body.script)?.trim()
@@ -36,6 +45,14 @@ export async function POST(req: Request) {
   const generationMode = (body.generationMode === 'production' ? 'production' : 'draft') as 'draft' | 'production'
   const source         = body.source ?? (mode === 'director' ? 'director' : 'simple')
   const tier           = body.tier ?? 'standard'
+  const qualityTier    = parseQualityTier(body.qualityTier)
+  const creativeLicense = parseCreativeLicense(body.creativeLicense)
+  const directorMode: DirectorRunMode = body.directorMode === 'auto' || body.directorMode === 'hybrid' || body.directorMode === 'wizard'
+    ? body.directorMode
+    : 'wizard'
+  const wizard = mode === 'director'
+    ? (parseWizard(body.wizard) ?? defaultWizard(directorMode))
+    : undefined
   const { projectId, characterId, musicUrl, ambienceUrl } = body
 
   if (!rawPrompt || rawPrompt.length < 10) {
@@ -96,7 +113,7 @@ export async function POST(req: Request) {
   }
 
   const etaSeconds = estimateRenderSeconds(selectedModels, duration)
-  const engine     = TIER_ENGINE_MAP[tier] ?? 'ltx-2.3-fast'
+  const engine     = TIER_ENGINE_MAP[tier] ?? refuseSilentModelSwap(tier, 'ltx-2.3-fast')
 
   const job = await db.renderJob.create({
     data: {
@@ -113,6 +130,8 @@ export async function POST(req: Request) {
       metadata: {
         selectedModels,
         generationMode,
+        qualityTier,
+        creativeLicense,
         source,
         tier,
         engine,
@@ -124,6 +143,8 @@ export async function POST(req: Request) {
         loraId: typeof enriched.loraId === 'string' ? enriched.loraId : undefined,
         musicUrl: typeof musicUrl === 'string' ? musicUrl : undefined,
         ambienceUrl: typeof ambienceUrl === 'string' ? ambienceUrl : undefined,
+        wizard: wizard ? JSON.parse(JSON.stringify(wizard)) : undefined,
+        templateShots: Array.isArray(body.templateShots) ? JSON.parse(JSON.stringify(body.templateShots)) : undefined,
       },
     },
   })
@@ -135,7 +156,7 @@ export async function POST(req: Request) {
         ...(typeof musicUrl === 'string' ? { musicUrl } : {}),
         ...(typeof ambienceUrl === 'string' ? { ambienceUrl } : {}),
       },
-    }).catch(() => {})
+    }).catch((err) => logCaught('app/api/generate/route', err))
   }
 
   const queuePayload = {
@@ -145,6 +166,8 @@ export async function POST(req: Request) {
     duration,
     selectedModels,
     generationMode,
+    qualityTier,
+    creativeLicense,
     source,
     tier,
     engine,
@@ -154,48 +177,20 @@ export async function POST(req: Request) {
     projectId,
   }
 
-  if (process.env.VERCEL) {
-    after(async () => {
-      try {
-        if (mode === 'director') {
-          const { processOrchestrateJobWithRefund } = await import('@/lib/jobs/processOrchestrateJob')
-          await processOrchestrateJobWithRefund({ ...queuePayload, creditCost })
-        } else {
-          const { processRenderSimpleJob } = await import('@/lib/jobs/processOrchestrateJob')
-          await processRenderSimpleJob({
-            jobId: job.id,
-            userId,
-            prompt,
-            duration,
-            engine,
-          })
-        }
-      } catch (err) {
-        console.error('[generate] inline job failed:', err instanceof Error ? err.message : err)
-      }
+  try {
+    const { renderQueue } = await import('@/lib/queue')
+    await renderQueue.add(
+      mode === 'director' ? 'orchestrate' : 'render-simple',
+      queuePayload,
+      { attempts: 1, removeOnComplete: 200, removeOnFail: 500 },
+    )
+  } catch (err) {
+    console.warn('[generate] queue failed', err instanceof Error ? err.message : err)
+    await db.renderJob.update({
+      where: { id: job.id },
+      data:  { status: 'FAILED', errorMessage: 'Queue unavailable — check REDIS_URL', statusMessage: 'Queue unavailable' },
     })
-  } else {
-    try {
-      const { renderQueue } = await import('@/lib/queue')
-      await renderQueue.add(
-        mode === 'director' ? 'orchestrate' : 'render-simple',
-        queuePayload,
-        mode === 'director'
-          ? {
-              attempts: 2,
-              backoff: { type: 'fixed', delay: 5_000 },
-              removeOnComplete: 200,
-              removeOnFail: 500,
-            }
-          : { attempts: 1, removeOnComplete: 200, removeOnFail: 500 },
-      )
-    } catch {
-      await db.renderJob.update({
-        where: { id: job.id },
-        data:  { status: 'FAILED', errorMessage: 'Queue unavailable — check REDIS_URL' },
-      })
-      return Response.json({ error: 'Render queue unavailable. Try again shortly.' }, { status: 503 })
-    }
+    return Response.json({ error: 'Render queue unavailable. Try again shortly.' }, { status: 503 })
   }
 
   if (mode !== 'director') {

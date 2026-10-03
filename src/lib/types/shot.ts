@@ -26,6 +26,6 @@ export interface DirectShotArgs {
   prompt: string
   anchorSource?: AnchorSourceUI
   anchorFrameUrl?: string
-  modelOverride?: string
+  modelOverride?: string | null
   directionNotes?: string
 }

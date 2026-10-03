@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import { NextRequest, NextResponse } from 'next/server'
 import { applyGarment } from '@/lib/character/apparel'
 import { getFCCCharacter, saveWardrobe } from '@/lib/character/fccManager'
@@ -34,6 +35,8 @@ export async function POST(
   try {
     await checkAndDeductCredits(userId, 'character_wardrobe')
   } catch (e) {
+    console.warn("[caught] src/app/api/vault/character/[id]/wardrobe/route.ts:37", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     return NextResponse.json({ error: (e as Error).message }, { status: 402 })
   }
 
@@ -47,7 +50,7 @@ export async function POST(
     const view = await saveWardrobe(id, userId, character.wardrobe, tryOnImageUrl)
     return NextResponse.json(view)
   } catch (e) {
-    await refundCredits(userId, WARDROBE_CREDITS, 'character_wardrobe').catch(() => {})
+    await refundCredits(userId, WARDROBE_CREDITS, 'character_wardrobe').catch((err) => logCaught('app/api/vault/character/[id]/wardrobe/route', err))
     const message = e instanceof Error ? e.message : 'Wardrobe apply failed'
     return NextResponse.json({ error: message }, { status: 500 })
   }

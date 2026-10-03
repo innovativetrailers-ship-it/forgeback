@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { useEditorStore } from '@/store/editor'
+import { useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
 import { useUIStore } from '@/store/ui'
 import type { BlendMode } from '@/lib/vfx/ObjectRemoval'
 
@@ -16,7 +17,7 @@ const QUICK_OBJECTS = ['Person', 'Microphone', 'Logo', 'Vehicle', 'Sign', 'Water
 type Phase = 'idle' | 'processing' | 'done' | 'error'
 
 export function ObjectRemovalPanel() {
-  const recipe = useEditorStore((s) => s.recipe)
+  const recipe = useEditorRecipeView()
   const selectedClipId = useEditorStore((s) => s.selectedClipId)
   const addToast = useUIStore((s) => s.addToast)
 
@@ -56,7 +57,9 @@ export function ObjectRemovalPanel() {
           setPhase('error')
           setErrorMsg('Removal failed. Try a simpler scene (less shadows).')
         }
-      } catch { /* ignore poll errors */ }
+      } catch (err) {
+        console.warn("[caught] src/components/editor/ObjectRemovalPanel.tsx:60", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore poll errors */ }
     }, 5000)
   }, [stopPolling, addToast, selectedClipId, recipe])
 
@@ -88,6 +91,8 @@ export function ObjectRemovalPanel() {
       setJobId(jid)
       startPolling(jid)
     } catch (e: unknown) {
+      console.warn("[caught] src/components/editor/ObjectRemovalPanel.tsx:91", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       setPhase('error')
       setErrorMsg(e instanceof Error ? e.message : 'Network error')
     }

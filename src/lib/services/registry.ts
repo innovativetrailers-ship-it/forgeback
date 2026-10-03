@@ -22,7 +22,7 @@ export const SERVICE_REGISTRY: Record<string, ServiceConfig> = {
 
   // ── Video — direct ────────────────────────────────────────────
   runway:     { name: 'Runway Gen-4',  category: 'video', access: 'direct', envVar: 'RUNWAY_API_KEY',
-                engineFile: 'src/lib/routing/MediaRouter.ts',  apiRoute: 'src/app/api/generate/route.ts' },
+                engineFile: 'src/lib/jobs/submitEngineVideo.ts',  apiRoute: 'src/app/api/generate/route.ts' },
   grokVideo:  { name: 'Grok Video',    category: 'video', access: 'direct', envVar: 'XAI_API_KEY',
                 apiRoute: 'src/app/api/generate/route.ts' },
 
@@ -36,8 +36,8 @@ export const SERVICE_REGISTRY: Record<string, ServiceConfig> = {
   suno:       { name: 'Suno',          category: 'audio', access: 'direct', envVar: 'SUNO_API_KEY',
                 engineFile: 'src/lib/engines/suno.ts',         apiRoute: 'src/app/api/audio/music/route.ts' },
 
-  // ── LLM — Claude direct, others via FAL OpenRouter ───────────
-  claude:     { name: 'Claude',        category: 'llm', access: 'direct',         envVar: 'ANTHROPIC_API_KEY',
+  // ── LLM — one FAL OpenRouter router ──────────────────────────
+  claude:     { name: 'Claude',        category: 'llm', access: 'fal-openrouter', envVar: 'FAL_KEY',
                 engineFile: 'src/lib/engines/llm.ts', apiRoute: 'src/app/api/llm/route.ts' },
   groq:       { name: 'Groq',          category: 'llm', access: 'fal-openrouter', envVar: 'FAL_KEY' },
   xai:        { name: 'xAI Grok',      category: 'llm', access: 'fal-openrouter', envVar: 'FAL_KEY' },

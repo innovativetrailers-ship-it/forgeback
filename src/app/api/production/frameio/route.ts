@@ -29,7 +29,9 @@ export async function POST(req: NextRequest) {
   let body: FrameIOBody
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/production/frameio/route.ts:32", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -78,6 +80,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Unknown action: ${body.action}` }, { status: 400 })
     }
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/production/frameio/route.ts:80", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Frame.io operation failed'
     return NextResponse.json({ error: msg }, { status: 500 })
   }

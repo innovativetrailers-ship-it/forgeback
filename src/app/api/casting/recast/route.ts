@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, creditKey)
   } catch (err) {
+    console.warn("[caught] src/app/api/casting/recast/route.ts:36", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -91,6 +93,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ outputUrl })
   } catch (err) {
+    console.warn("[caught] src/app/api/casting/recast/route.ts:93", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     await refundOperationCredits(userId, creditKey)
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Recast failed' }, { status: 500 })
   }

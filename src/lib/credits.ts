@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MODEL_COSTS, TIER_ENGINE_MAP } from './routing/engineRegistry'
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 // deductUserCredits is the single source of truth for credit deduction.
 // deductCredits below is kept for backward compatibility and additionally performs Stripe sync.
 export { deductUserCredits } from '@/lib/access/guard'
@@ -11,17 +12,72 @@ export class CreditError extends Error {
   }
 }
 
-export function calculateGenerationCost(model: string, durationSeconds: number): number {
-  const ratePerFiveSeconds = MODEL_COSTS[model]
-  if (!ratePerFiveSeconds) {
-    console.warn(`[credits] Unknown model "${model}", defaulting to ltx-2.3-fast`)
-    return Math.ceil((MODEL_COSTS['ltx-2.3-fast'] / 5) * durationSeconds)
+export class MissingPriceError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MissingPriceError'
   }
-  return Math.ceil((ratePerFiveSeconds / 5) * durationSeconds)
+}
+
+function asPositive(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n) || n <= 0) return null
+  return n
+}
+
+/** Duration used for both the displayed estimate and the credit hold. */
+export function resolveListedDurations(
+  shots: Array<{ duration?: unknown; startSeconds?: unknown; endSeconds?: unknown }>,
+  filmSeconds?: number,
+): number[] {
+  const own = shots.map((shot) =>
+    asPositive(shot.duration) ?? asPositive(Number(shot.endSeconds) - Number(shot.startSeconds)),
+  )
+  const film = asPositive(filmSeconds)
+  const missing = own.filter((n) => n == null).length
+  const share = missing > 0 && missing === shots.length && film != null ? film / shots.length : null
+  return own.map((seconds, index) => {
+    if (seconds != null) return seconds
+    if (share != null) {
+      console.log('[cost_inputs]', JSON.stringify({ shot: index + 1, durationSeconds: share, source: 'film' }))
+      return share
+    }
+    throw new MissingPriceError(`duration unresolved for shot ${index + 1}`)
+  })
+}
+
+export function calculateGenerationCost(
+  model: string,
+  durationSeconds: number,
+  shotNumber?: number,
+): number {
+  const ratePerFiveSeconds = MODEL_COSTS[model]
+  const seconds = asPositive(durationSeconds)
+  console.log('[cost_inputs]', JSON.stringify({
+    model,
+    durationSeconds,
+    ratePerFiveSeconds,
+    shot: shotNumber ?? null,
+  }))
+  if (typeof ratePerFiveSeconds !== 'number' || !Number.isFinite(ratePerFiveSeconds) || ratePerFiveSeconds <= 0) {
+    throw new MissingPriceError(`no price for model ${model}`)
+  }
+  if (seconds == null) {
+    throw new MissingPriceError(
+      shotNumber == null
+        ? `duration unresolved for shot priced with ${model}`
+        : `duration unresolved for shot ${shotNumber}`,
+    )
+  }
+  const credits = Math.ceil((ratePerFiveSeconds / 5) * seconds)
+  if (!Number.isFinite(credits) || credits <= 0) {
+    throw new MissingPriceError(`no price for model ${model}`)
+  }
+  return credits
 }
 
 export function calculateSimpleCost(tier: string, durationSeconds: number): number {
-  const engine = TIER_ENGINE_MAP[tier] ?? 'ltx-2.3-fast'
+  const engine = TIER_ENGINE_MAP[tier] ?? refuseSilentModelSwap(tier, 'ltx-2.3-fast')
   return calculateGenerationCost(engine, durationSeconds)
 }
 

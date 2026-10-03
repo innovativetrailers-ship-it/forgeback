@@ -1,10 +1,13 @@
 // V2 — photo / text ingestion for VaultCharacter (FAL schemas aligned to fal.ai docs).
 
+import { falEndpoint } from '@cinema/core/endpoints'
+import { hasFalKey } from '@/lib/config/keys'
+import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
 import { runFal, uploadToFal } from '@/lib/fal/client'
 import { generateImage } from '@/lib/engines/imageGen'
 import { defaultAppearance, type CharacterAppearance } from './fccSchema'
 
-const INSTANT_CHARACTER_ENDPOINT = 'fal-ai/instant-character'
+const INSTANT_CHARACTER_ENDPOINT = falEndpoint('instant-character')
 
 export class CharacterIngestionError extends Error {
   readonly code = 'INGESTION_FAILED' as const
@@ -42,42 +45,37 @@ export async function ensureFalImageUrl(
     const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(15_000) })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return uploadToFal(Buffer.from(await res.arrayBuffer()))
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/character/ingestion.ts:46", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return sourceUrl
   }
 }
 
 async function analyseAppearanceWithClaude(imageUrl: string): Promise<CharacterAppearance> {
-  if (!process.env.ANTHROPIC_API_KEY) return defaultAppearance()
+  if (!hasFalKey()) return defaultAppearance()
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'content-type': 'application/json',
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'image', source: { type: 'url', url: imageUrl } },
-              {
-                type: 'text',
-                text: "Analyse appearance. Return JSON: skinTone, melanin, structuralAge, muscularityPct, bodyFatIndex, hairLength, wrinkleFreq. Only JSON.",
-              },
-            ],
-          },
-        ],
-      }),
-    })
-    const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> }
-    const text = json.content?.find((c) => c.type === 'text')?.text ?? '{}'
+    const message = await claudeCall({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'url', url: imageUrl } },
+            {
+              type: 'text',
+              text: "Analyse appearance. Return JSON: skinTone, melanin, structuralAge, muscularityPct, bodyFatIndex, hairLength, wrinkleFreq. Only JSON.",
+            },
+          ],
+        },
+      ],
+    }, { source: 'character.ingest' })
+    const text = claudeText(message) || '{}'
     return { ...defaultAppearance(), ...JSON.parse(text.replace(/```json|```/g, '').trim()) }
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/character/ingestion.ts:72", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return defaultAppearance()
   }
 }
@@ -97,16 +95,18 @@ export async function generateCharacterPlate(input: {
   name: string
   description: string
   referencePhotoUrl?: string
-}): Promise<string> {
+}): Promise<{ url: string; seed: number }> {
   const desc = input.description.trim()
   if (!desc) {
     throw new CharacterIngestionError('Character description is required for text-only creation')
   }
 
+  const seed = Math.floor(Math.random() * 2_147_483_647)
+
   if (input.referencePhotoUrl) {
     const falUrl = await ensureFalImageUrl(input.referencePhotoUrl)
     try {
-      const result = await runFal<{ images?: Array<{ url: string }> }>(
+      const result = await runFal<{ images?: Array<{ url: string }>; seed?: number }>(
         INSTANT_CHARACTER_ENDPOINT,
         {
           prompt: `${desc}, character reference sheet, neutral pose, studio lighting, ${input.name}`,
@@ -114,11 +114,11 @@ export async function generateCharacterPlate(input: {
           image_size: 'portrait_4_3',
           negative_prompt: 'blur, distortion, multiple people, watermark',
           num_images: 1,
+          seed,
         },
       )
       const sheetUrl = result.images?.[0]?.url
-      if (sheetUrl) return sheetUrl
-      return falUrl
+      return { url: sheetUrl ?? falUrl, seed: typeof result.seed === 'number' ? result.seed : seed }
     } catch (err) {
       const details = err instanceof Error ? err.message : err
       throw new CharacterIngestionError(
@@ -131,12 +131,12 @@ export async function generateCharacterPlate(input: {
   const [plateUrl] = await generateImage(
     `Character reference: ${input.name}. ${desc}. Full body, neutral pose, ` +
     'studio lighting, plain background, character sheet style.',
-    { quality: 'production', aspectRatio: '3:4' },
+    { quality: 'production', aspectRatio: '3:4', seed },
   )
   if (!plateUrl) {
     throw new CharacterIngestionError('Failed to generate character reference plate from description')
   }
-  return plateUrl
+  return { url: plateUrl, seed }
 }
 
 export async function ingestPhotoReferences(
@@ -170,7 +170,7 @@ function extractImageUrl(data: unknown): string | null {
 
 /** Video URL → appearance + embeddings (uses middle frame as portrait proxy). */
 export async function ingestVideoReference(videoUrl: string): Promise<PhotoIngestResult & { frameUrl: string }> {
-  const frame = await runFal('fal-ai/ffmpeg-api/extract-frame', {
+  const frame = await runFal(falEndpoint('ffmpeg-api/extract-frame'), {
     video_url: videoUrl,
     frame_type: 'middle',
   })
@@ -187,18 +187,22 @@ export async function ingestSketchReference(
   const list = prompts.length > 0 ? prompts : ['photorealistic character portrait']
   let portraitUrl = sketchDataUrl
   try {
-    const gen = await runFal('fal-ai/flux/dev', { prompt: list[0] })
+    const gen = await runFal(falEndpoint('flux/dev'), { prompt: list[0] })
     portraitUrl = extractImageUrl(gen) ?? sketchDataUrl
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/character/ingestion.ts:186", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     portraitUrl = sketchDataUrl
   }
   for (let i = 1; i < list.length; i++) {
     try {
-      const refined = await runFal('fal-ai/flux/dev', {
+      const refined = await runFal(falEndpoint('flux/dev'), {
         prompt: `${list[i]}, maintain exact same character`,
       })
       portraitUrl = extractImageUrl(refined) ?? portraitUrl
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/character/ingestion.ts:195", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // keep last good portrait
     }
   }

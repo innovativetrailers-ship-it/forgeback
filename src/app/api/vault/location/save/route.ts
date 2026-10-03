@@ -20,7 +20,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl : ''
     type     = typeof body.type === 'string' ? body.type : 'satellite'
     location = (body.location as LocationMeta | undefined) ?? undefined
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/vault/location/save/route.ts:23", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
@@ -47,6 +49,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         displayName: location?.displayName,
         city:        location?.city,
         country:     location?.country,
+      },
+    })
+    const label = location?.displayName || location?.city || type
+    await db.asset.create({
+      data: {
+        ownerId: userId,
+        kind: 'location',
+        sourcePrompt: label,
+        sourceRefs: [r2Url],
+        generatedImage: r2Url,
+        usableAsReference: true,
+        isPrimary: true,
+        label,
+        mediaKind: 'image',
       },
     })
 

@@ -3,4 +3,4 @@
  */
 
 export type { AudioPolicy, FalVideoIntent } from './videoPayloadAdapters'
-export { buildFalVideoInput, buildFalVideoInputWithHeal, klingV3Duration, wantsNativeAudio } from './videoPayloadAdapters'
+export { buildPayload, buildPayloadWithHeal, klingV3Duration, wantsNativeAudio } from './videoPayloadAdapters'

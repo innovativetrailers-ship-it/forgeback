@@ -28,6 +28,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     })
     return NextResponse.json(brief)
   } catch (e) {
+    console.warn("[caught] src/app/api/desktop/cognition/think/route.ts:30", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     const message = e instanceof Error ? e.message : 'Cognition failed'
     return NextResponse.json({ error: message }, { status: 500 })
   }

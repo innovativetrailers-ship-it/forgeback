@@ -1,5 +1,6 @@
-// Phase 6: concatenate segments into the final film + RIFE boundary interpolation
+// Phase 6: concatenate discrete shots. Cuts are edits, not interpolated morphs.
 
+import { falEndpoint } from '@cinema/core/endpoints'
 import { runFal, extractVideoUrl } from '@/lib/fal/client'
 import { stripGeneratedClipAudio } from '@/lib/fal/stripVideoAudio'
 import { uploadToR2 }        from '@/lib/storage/r2'
@@ -9,38 +10,27 @@ export async function stitchSegments(
   segments: GeneratedSegment[],
   userId:   string
 ): Promise<string> {
-  const ordered   = [...segments].sort((a, b) => a.shotIndex - b.shotIndex)
+  const ordered = segments
+    .filter((segment) => Boolean(segment.videoUrl?.trim()))
+    .sort((a, b) => a.shotIndex - b.shotIndex)
+  if (ordered.length === 0) {
+    throw new Error('No completed shots to assemble')
+  }
+  if (ordered.length === 1) return ordered[0].videoUrl
   const videoUrls = ordered.map(s => s.videoUrl)
-
-  const transitions: string[] = []
-  for (let i = 0; i < ordered.length - 1; i++) {
-    try {
-      const trans = await runFal<{ video?: { url: string } }>('fal-ai/rife-interpolation', {
-        video_a: ordered[i].videoUrl,
-        video_b: ordered[i + 1].videoUrl,
-        frames:  4,
-        mode:    'boundary',
-      })
-      const url = extractVideoUrl(trans)
-      if (url) transitions[i] = url
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.warn(`[stitching] RIFE skipped for boundary ${i}:`, msg)
-    }
-  }
-
-  const concatList: string[] = []
-  for (let i = 0; i < videoUrls.length; i++) {
-    concatList.push(videoUrls[i])
-    if (transitions[i]) concatList.push(transitions[i])
-  }
+  console.log('[assembly]', JSON.stringify({
+    shots: ordered.length,
+    boundaries: 'cut',
+    note: 'discrete clips concatenated; dissolves and fades are editor transitions, not a morph',
+  }))
+  const concatList = videoUrls
 
   const silentClips: string[] = []
   for (const url of concatList) {
     silentClips.push(await stripGeneratedClipAudio(url))
   }
 
-  const result = await runFal<{ video?: { url: string }; output_url?: string }>('fal-ai/ffmpeg', {
+  const result = await runFal<{ video?: { url: string }; output_url?: string }>(falEndpoint('ffmpeg'), {
     command:       'concat',
     video_urls:    silentClips,
     output_format: 'mp4',

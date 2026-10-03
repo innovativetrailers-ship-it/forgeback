@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { useUIStore } from '@/store/ui'
 import { useCollabStore } from '@/store/collabStore'
 import type { ConflictRecord } from '@/lib/collab/conflict'
@@ -13,8 +13,10 @@ const POLL_INTERVAL_MS = 10000
 
 export function ConflictToast({ projectId }: ConflictToastProps) {
   const addToast = useUIStore((s) => s.addToast)
-  const { setActiveConflictCount } = useCollabStore()
-  const seenConflictIds = useCollabStore(() => new Set<string>())
+  const setActiveConflictCount = useCollabStore((s) => s.setActiveConflictCount)
+  // Seen ids stay in a ref. A Zustand selector that returns `new Set()` every
+  // call makes useSyncExternalStore re-render forever (React error #185).
+  const seenConflictIds = useRef(new Set<string>())
 
   const checkConflicts = useCallback(async () => {
     try {
@@ -28,8 +30,8 @@ export function ConflictToast({ projectId }: ConflictToastProps) {
       setActiveConflictCount(conflicts.length)
 
       for (const conflict of conflicts) {
-        if (seenConflictIds.has(conflict.id)) continue
-        seenConflictIds.add(conflict.id)
+        if (seenConflictIds.current.has(conflict.id)) continue
+        seenConflictIds.current.add(conflict.id)
 
         const clipLabel = conflict.clipId.slice(-6)
         const resolutionLabel = conflict.resolution
@@ -41,10 +43,12 @@ export function ConflictToast({ projectId }: ConflictToastProps) {
           'warning' as Parameters<typeof addToast>[1],
         )
       }
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/editor/ConflictToast.tsx:44", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // silently ignore
     }
-  }, [projectId, addToast, setActiveConflictCount, seenConflictIds])
+  }, [projectId, addToast, setActiveConflictCount])
 
   useEffect(() => {
     checkConflicts()

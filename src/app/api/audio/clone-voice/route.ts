@@ -2,15 +2,29 @@ import { cloneVoice }                                from '@/lib/engines/elevenL
 import { deductCredits, OPERATION_COSTS }            from '@/lib/credits'
 import { db }                                        from '@/lib/db'
 import { checkAccess, checkTierAccess }              from '@/lib/access/guard'
+import { isGenerationPaused }                        from '@/lib/generation/pause'
 
 export async function POST(req: Request) {
   const userId = req.headers.get('x-user-id')
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  if (isGenerationPaused()) {
+    return Response.json(
+      { error: 'Generation is paused. Voice clone is a paid call.' },
+      { status: 503 },
+    )
+  }
 
-  const { name, description, audioUrls } = await req.json() as {
+  const { name, description, audioUrls, subjectConsent } = await req.json() as {
     name:        string
     description: string
     audioUrls:   string[]
+    subjectConsent?: boolean
+  }
+  if (subjectConsent !== true) {
+    return Response.json(
+      { error: 'Confirm the subject consents to a voice clone before training' },
+      { status: 403 },
+    )
   }
 
   // Tier check — voice cloning requires Studio or above

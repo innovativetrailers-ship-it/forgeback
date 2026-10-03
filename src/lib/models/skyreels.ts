@@ -1,5 +1,5 @@
 import { runFal } from '@/lib/fal/client'
-import { buildFalVideoInput } from '@/lib/fal/videoPayloads'
+import { buildPayload } from '@/lib/fal/videoPayloads'
 import { resolveHailuoEndpoint } from '@/lib/fal/hailuoEndpoints'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
@@ -19,7 +19,7 @@ export interface SkyReelsPayload {
 export async function generateSkyReels(payload: SkyReelsPayload): Promise<string> {
   const isI2V = Boolean(payload.startFrameUrl)
   const model = resolveHailuoEndpoint(REGISTRY_KEY, isI2V)
-  const input = await buildFalVideoInput(model, REGISTRY_KEY, {
+  const input = await buildPayload(model, REGISTRY_KEY, {
     prompt: payload.prompt,
     duration: payload.duration,
     aspectRatio: payload.aspectRatio,
@@ -47,6 +47,8 @@ export async function generateVideo(input: GenerateVideoInput): Promise<Generate
     })
     return { jobId: `skyreels-${Date.now()}`, status: 'complete', videoUrl }
   } catch (err) {
+    console.warn("[caught] src/lib/models/skyreels.ts:49", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return {
       jobId: `skyreels-${Date.now()}`,
       status: 'failed',

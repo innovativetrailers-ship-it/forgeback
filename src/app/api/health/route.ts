@@ -17,6 +17,8 @@ async function checkDb(): Promise<ServiceStatus> {
     await db.$queryRaw`SELECT 1`
     return { ok: true, latencyMs: Date.now() - start }
   } catch (err) {
+    console.warn("[caught] src/app/api/health/route.ts:19", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return { ok: false, error: (err as Error).message }
   }
 }
@@ -27,6 +29,8 @@ async function checkRedis(): Promise<ServiceStatus> {
     await redis.ping()
     return { ok: true, latencyMs: Date.now() - start }
   } catch (err) {
+    console.warn("[caught] src/app/api/health/route.ts:29", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return { ok: false, error: (err as Error).message }
   }
 }

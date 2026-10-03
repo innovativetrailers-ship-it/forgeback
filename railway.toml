@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm install && npx prisma generate"
+buildCommand = "npm install && npx prisma generate && node scripts/verify-static.mjs"
 
 # NOTE: no startCommand here — each service sets its own (worker:render,
 # worker:export, worker:training, worker:das, worker:intelligence, py-*).

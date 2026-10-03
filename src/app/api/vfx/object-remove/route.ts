@@ -17,7 +17,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let raw: unknown
-  try { raw = await req.json() } catch {
+  try { raw = await req.json() } catch (err) {
+    console.warn("[caught] src/app/api/vfx/object-remove/route.ts:20", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -39,7 +41,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     await checkAndDeductCredits(userId, 'object_removal_per_clip', CREDIT_COST, 'Object removal')
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/vfx/object-remove/route.ts:42", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: `Insufficient credits. Object removal costs ${CREDIT_COST} credits.` }, { status: 402 })
   }
 

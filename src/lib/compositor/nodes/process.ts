@@ -1,12 +1,30 @@
 import type { CompositorNode } from '../schema'
 import type { CompositorFrame, NodeInputs } from '../frame'
 import { loadEXRFromURL } from '../EXRLoader'
+import { applyOfx, applyParallax, applyParticles, applyRoto, ofxParams, type RotoPoint } from '../vfx'
 
 type SharpFactory = (input?: import('sharp').SharpOptions | Buffer) => import('sharp').Sharp
 
 async function sharp(): Promise<SharpFactory> {
   const mod = await import('sharp')
   return (mod as unknown as { default: SharpFactory }).default
+}
+
+async function decodeRaw(encoded: Buffer): Promise<{ data: Buffer; width: number; height: number }> {
+  const s = await sharp()
+  const raw = s(encoded).ensureAlpha().raw() as {
+    toBuffer(options: { resolveWithObject: true }): Promise<{ data: Buffer; info: { width: number; height: number } }>
+  }
+  const decoded = await raw.toBuffer({ resolveWithObject: true })
+  return { data: decoded.data, width: decoded.info.width, height: decoded.info.height }
+}
+
+async function encodePng(raw: Buffer, width: number, height: number): Promise<Buffer> {
+  const s = await sharp() as (
+    input: Buffer,
+    options: { raw: { width: number; height: number; channels: 4 } },
+  ) => import('sharp').Sharp
+  return s(raw, { raw: { width, height, channels: 4 } }).png().toBuffer()
 }
 
 function num(v: unknown, fallback: number): number {
@@ -227,8 +245,60 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
     case 'LumaKeyer':
     case 'DifferenceKey':
     case 'SpillSuppress':
+      return { video }
+
     case 'Roto':
-    case 'Mask':
+    case 'Mask': {
+      if (!video) return { video }
+      const points = Array.isArray(p.points) ? p.points as RotoPoint[] : []
+      try {
+        const decoded = await decodeRaw(video.rgba)
+        const masked = applyRoto(
+          decoded.data,
+          decoded.width,
+          decoded.height,
+          points,
+          p.combine === 'subtract' ? 'subtract' : 'add',
+        )
+        const png = await encodePng(masked, decoded.width, decoded.height)
+        return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
+      } catch (err) {
+        console.warn('[compositor]', err instanceof Error ? err.message : err)
+        return { video }
+      }
+    }
+
+    case 'Particle': {
+      if (!video) return { video }
+      const decoded = await decodeRaw(video.rgba)
+      const painted = applyParticles(decoded.data, decoded.width, decoded.height, num(p.rate, 40), num(p.seed, 1))
+      const png = await encodePng(painted, decoded.width, decoded.height)
+      return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
+    }
+
+    case 'Layer3D':
+    case 'Camera3D': {
+      if (!video) return { video }
+      const decoded = await decodeRaw(video.rgba)
+      const shifted = applyParallax(decoded.data, decoded.width, decoded.height, num(p.cameraX ?? p.x, 0))
+      const png = await encodePng(shifted, decoded.width, decoded.height)
+      return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
+    }
+
+    case 'OfxPlugin': {
+      if (!video) return { video }
+      const safe = ofxParams(String(p.pluginId ?? ''), num(p.amount, 1))
+      try {
+        const decoded = await decodeRaw(video.rgba)
+        const graded = applyOfx(decoded.data, safe.amount)
+        const png = await encodePng(graded, decoded.width, decoded.height)
+        return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
+      } catch (err) {
+        console.warn('[compositor]', err instanceof Error ? err.message : err)
+        return { video }
+      }
+    }
+
     case 'Transform':
     case 'Tracker':
     case 'Tracker2D':
@@ -236,7 +306,6 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
     case 'CornerPin':
     case 'Premult':
     case 'Text3D':
-    case 'Particle':
     case 'TimeOffset':
     case 'Shuffle':
     case 'MixChannels':

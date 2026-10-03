@@ -11,6 +11,7 @@ const schema = z.object({
   script: z.string().min(10),
   selectedModels: z.array(z.string()).min(1),
   duration: z.number().int().min(5).max(600).optional(),
+  qualityTier: z.enum(['Draft', 'Studio', 'Blockbuster', 'draft', 'standard', 'blockbuster']).optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -27,6 +28,8 @@ export async function POST(req: NextRequest) {
   try {
     assertModelsResolvable(selectedModels)
   } catch (err) {
+    console.warn("[caught] src/app/api/studio/parse/route.ts:30", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Invalid model in council selection'
     return NextResponse.json({ error: msg }, { status: 400 })
   }
@@ -39,14 +42,18 @@ export async function POST(req: NextRequest) {
 
   const { dag } = await parseScriptToShotPlan({
     projectId: body.projectId,
+    userId,
     script: body.script,
     selectedModels,
     duration: body.duration,
+    qualityTier: body.qualityTier,
   })
 
   try {
     assertModelsResolvable(dag.map((n) => n.assignedModel))
   } catch (err) {
+    console.warn("[caught] src/app/api/studio/parse/route.ts:51", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Invalid model in shot plan'
     return NextResponse.json({ error: msg }, { status: 400 })
   }

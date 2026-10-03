@@ -1,13 +1,16 @@
+import { falEndpoint } from '@cinema/core/endpoints'
+import { pixverseDuration } from '@cinema/core'
+
 /** Live FAL PixVerse paths — always include task suffix (/text-to-video, /image-to-video). */
 
 export const PIXVERSE_T2V_BY_REGISTRY: Record<string, string> = {
-  'pixverse-c1': 'fal-ai/pixverse/v5.5/text-to-video',
-  'pixverse-v6': 'fal-ai/pixverse/v4.5/text-to-video',
+  'pixverse-c1': falEndpoint('pixverse/v5.5/text-to-video'),
+  'pixverse-v6': falEndpoint('pixverse/v4.5/text-to-video'),
 }
 
 export const PIXVERSE_I2V_BY_REGISTRY: Record<string, string> = {
-  'pixverse-c1': 'fal-ai/pixverse/v5.5/image-to-video',
-  'pixverse-v6': 'fal-ai/pixverse/v4/image-to-video',
+  'pixverse-c1': falEndpoint('pixverse/v5.5/image-to-video'),
+  'pixverse-v6': falEndpoint('pixverse/v4/image-to-video'),
 }
 
 export function resolvePixverseEndpoint(registryKey: string, isI2V: boolean): string {

@@ -1,9 +1,8 @@
 import type { SceneSegment } from './types'
-import * as models from '../models'
 import type { SwarmPayload } from '../models'
-import { generateVideo as generateLuma, pollStatus as pollLuma } from '../models/luma'
 import { extractTailFrame } from '../orchestration/bridgedGeneration'
 import { continuityAgent, applyContinuity, type ContinuityState } from '@/lib/cognition/agents/continuityAgent'
+import { resolveModel } from '@cinema/core'
 
 type SegmentResult = { segmentId: string; videoUrl: string }
 
@@ -11,45 +10,51 @@ type GenerateFn = (payload: SwarmPayload) => Promise<string>
 
 const MAX_PARALLEL_CHAINS = 4
 
-async function generateLumaVideo(payload: SwarmPayload): Promise<string> {
-  const started = await generateLuma({
+async function generatePool(id: string, payload: SwarmPayload): Promise<string> {
+  const def = resolveModel(id)
+  if (def.provider === 'runway') {
+    const { runwayVideo } = await import('@/lib/providers/runway')
+    return runwayVideo(def, {
+      prompt: payload.prompt,
+      duration: payload.duration,
+      imageUrl: payload.startFrameUrl,
+    })
+  }
+  const { falVideo } = await import('@/lib/providers/falVideo')
+  return falVideo(def, def.canonicalId, {
+    registryModel: def.canonicalId,
     prompt: payload.prompt,
     duration: payload.duration,
-    aspectRatio: payload.aspectRatio,
-    startFrameUrl: payload.startFrameUrl,
+    imageUrl: payload.startFrameUrl,
   })
-  for (let i = 0; i < 120; i++) {
-    await new Promise((r) => setTimeout(r, 5000))
-    const status = await pollLuma(started.jobId)
-    if (status.status === 'complete' && status.videoUrl) return status.videoUrl
-    if (status.status === 'failed') throw new Error(status.error ?? 'Luma generation failed')
-  }
-  throw new Error('Luma generation timed out')
 }
 
 const ENGINE_GENERATORS: Record<string, GenerateFn> = {
-  kling_pro:      models.generateKling30,
-  kling_standard: models.generateKling30,
-  kling:          models.generateKling30,
-  veo3:           models.generateVeo3,
-  veo_3_1:        models.generateVeo3,
-  seedance:       models.generateSeedance20,
-  runway:         models.generateRunway,
-  luma:           generateLumaVideo,
-  pika:           models.generatePika,
-  minimax:        models.generateMinimax,
-  wan:            models.generateWan22,
-  wan_2_2:        models.generateWan22,
-  skyreels:       models.generateSkyReelsSwarm,
-  ltx:            models.generateLTXSwarm,
-  hunyuan:        models.generateHunyuan,
-  pixverse:       (p) => models.generatePixverse(p, 'pixverse-v6'),
-  pixverse_c1:    (p) => models.generatePixverse(p, 'pixverse-c1'),
-  'pixverse-c1':  (p) => models.generatePixverse(p, 'pixverse-c1'),
+  'veo-3.1': (p) => generatePool('veo-3.1', p),
+  veo3: (p) => generatePool('veo-3.1', p),
+  veo_3_1: (p) => generatePool('veo-3.1', p),
+  'kling-3.0': (p) => generatePool('kling-3.0', p),
+  kling: (p) => generatePool('kling-3.0', p),
+  kling_pro: (p) => generatePool('kling-3.0', p),
+  kling_standard: (p) => generatePool('kling-3.0', p),
+  'seedance-2.0': (p) => generatePool('seedance-2.0', p),
+  seedance: (p) => generatePool('seedance-2.0', p),
+  'runway-gen4': (p) => generatePool('runway-gen4', p),
+  runway: (p) => generatePool('runway-gen4', p),
+  'grok-imagine-video': (p) => generatePool('grok-imagine-video', p),
+  grok: (p) => generatePool('grok-imagine-video', p),
+  'wan-2.7': (p) => generatePool('wan-2.7', p),
+  'ltx-2.3-fast': (p) => generatePool('ltx-2.3-fast', p),
+  ltx: (p) => generatePool('ltx-2.3-fast', p),
+  'gemini-omni': (p) => generatePool('gemini-omni', p),
+  omni: (p) => generatePool('gemini-omni', p),
+  'gemini-omni-flash': (p) => generatePool('gemini-omni', p),
 }
 
 function resolveGenerator(engineId: string): GenerateFn {
-  return ENGINE_GENERATORS[engineId] ?? models.generateWan22
+  const fn = ENGINE_GENERATORS[engineId]
+  if (!fn) throw new Error(`Unknown model '${engineId}'. It is not in the pool.`)
+  return fn
 }
 
 async function getCharacterRefs(characterIds?: string[]): Promise<string[]> {
@@ -92,7 +97,9 @@ async function dispatchChain(
     try {
       continuity = await continuityAgent.execute({ shotPrompt: seg.prompt, prior: continuity })
       prompt = applyContinuity(prompt, continuity)
-    } catch { /* best-effort */ }
+    } catch (err) {
+      console.warn("[caught] src/lib/routing/MediaDispatcher.ts:100", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* best-effort */ }
 
     const startFrameUrl = anchorFrameUrl ?? seg.anchorStartFrameUrl ?? seg.styleReferenceUrl
 
@@ -112,7 +119,9 @@ async function dispatchChain(
     if (!isLast) {
       try {
         anchorFrameUrl = await extractTailFrame(videoUrl)
-      } catch {
+      } catch (err) {
+        console.warn("[caught] src/lib/routing/MediaDispatcher.ts:120", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         anchorFrameUrl = undefined
       }
     }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useEditorStore } from '@/store/editor'
+import { useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
 import { useUIStore } from '@/store/ui'
 
 interface SessionState {
@@ -10,7 +10,7 @@ interface SessionState {
 }
 
 export function CameraIngestPanel() {
-  const recipe = useEditorStore((s) => s.recipe)
+  const recipe = useEditorRecipeView()
   const addToast = useUIStore((s) => s.addToast)
 
   const [session, setSession] = useState<SessionState | null>(null)
@@ -35,6 +35,8 @@ export function CameraIngestPanel() {
       setSession({ sessionId: data.sessionId as string, broadcastUrl: data.broadcastUrl as string })
       addToast('Camera session started', 'success')
     } catch (e: unknown) {
+      console.warn("[caught] src/components/editor/CameraIngestPanel.tsx:37", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       setError(e instanceof Error ? e.message : 'Network error')
     } finally {
       setLoading(false)
@@ -48,7 +50,9 @@ export function CameraIngestPanel() {
       setSession(null)
       setChunkCount(0)
       addToast('Camera session stopped', 'info')
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn("[caught] src/components/editor/CameraIngestPanel.tsx:51", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore */ }
   }, [session, addToast])
 
   const copyLink = useCallback(async () => {

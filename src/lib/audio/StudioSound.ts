@@ -1,4 +1,6 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '../fal/client'
+const falSubscribe = falSubscribeBound('lib.audio.StudioSound')
 import { uploadToR2 } from '../storage/r2'
 import { execSync } from 'child_process'
 import { existsSync, mkdirSync, rmSync } from 'fs'
@@ -23,11 +25,13 @@ export async function enhanceDialogue(params: {
     if (mode === 'noise_reduction' || mode === 'all') {
       // Use fal.ai audio enhancement
       try {
-        const result = await fal.subscribe('fal-ai/audio-enhancement', {
+        const result = await falSubscribe(falEndpoint('audio-enhancement'), {
           input: { audio_url: processedUrl, noise_reduction_strength: strength },
         }) as unknown as { audio: { url: string } }
         processedUrl = result.audio.url
-      } catch {
+      } catch (err) {
+        console.warn("[caught] src/lib/audio/StudioSound.ts:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         // Fallback: FFmpeg noise gate + high-pass filter
         const outputPath = join(tmpDir, 'denoised.wav')
         execSync(

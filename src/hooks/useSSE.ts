@@ -32,7 +32,9 @@ export function useSSE(jobId: string | null) {
           if (data.status === 'complete' || data.status === 'failed') {
             es.close()
           }
-        } catch {
+        } catch (err) {
+          console.warn("[caught] src/hooks/useSSE.ts:35", err instanceof Error ? { name: err.name, message: err.message } : err)
+
           // ignore parse errors
         }
       }

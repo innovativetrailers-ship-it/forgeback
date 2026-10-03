@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 // Post-render learning loop: procedural routing policy + outcome episode +
 // occasional episodic→semantic consolidation. Entirely non-fatal.
 
@@ -28,7 +29,7 @@ export async function runLearningLoop(params: {
   const avgQuality = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0.7
 
   for (const seg of result.segments ?? []) {
-    await updateRoutingPolicy(seg.contentType ?? 'unknown', seg.model, seg.qualityScore ?? avgQuality, 60).catch(() => {})
+    await updateRoutingPolicy(seg.contentType ?? 'unknown', seg.model, seg.qualityScore ?? avgQuality, 60).catch((err) => logCaught('lib/cognition/learn', err))
   }
 
   await recordEpisode({
@@ -39,7 +40,7 @@ export async function runLearningLoop(params: {
     brief,
     outcome: { qualityScores: result.qualityScores, avgQuality },
     importance: avgQuality,
-  }).catch(() => {})
+  }).catch((err) => logCaught('lib/cognition/learn', err))
 
-  if (Math.random() < 0.1) await consolidateMemory(userId).catch(() => {})
+  if (Math.random() < 0.1) await consolidateMemory(userId).catch((err) => logCaught('lib/cognition/learn', err))
 }

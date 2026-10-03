@@ -13,9 +13,9 @@ export interface QualityPill {
 
 export const QUALITY_PILLS: QualityPill[] = [
   { id: 'draft', label: 'Quick Draft', credits: 2, model: 'ltx-2.3-fast', description: '~8s • Budget' },
-  { id: 'standard', label: 'Standard', credits: 8, model: 'kling_standard', description: '~15s • Quality' },
-  { id: 'cinematic', label: 'Cinematic', credits: 25, model: 'kling_pro', description: '~30s • Pro' },
-  { id: 'film_grade', label: 'Film Grade', credits: 40, model: 'veo3', description: '~60s • Cinema' },
+  { id: 'standard', label: 'Standard', credits: 20, model: 'seedance-2.0', description: '~15s • Performance' },
+  { id: 'cinematic', label: 'Cinematic', credits: 17, model: 'kling-3.0', description: '~30s • Motion' },
+  { id: 'film_grade', label: 'Film Grade', credits: 23, model: 'veo-3.1', description: '~60s • Cinema' },
 ]
 
 export const DURATION_OPTIONS: Array<{ value: Duration; label: string }> = [
@@ -35,10 +35,9 @@ export const ASPECT_RATIOS: Array<{ value: AspectRatio; label: string; icon: str
 ]
 
 export const ALL_MODELS = [
-  { group: 'Budget', models: ['ltx-2.3-fast', 'wan'] },
-  { group: 'Standard', models: ['luma', 'pika', 'minimax'] },
-  { group: 'Professional', models: ['kling_standard', 'kling_pro', 'seedance'] },
-  { group: 'Cinema', models: ['runway', 'veo3'] },
+  { group: 'Draft', models: ['ltx-2.3-fast', 'wan-2.7'] },
+  { group: 'Performance', models: ['seedance-2.0', 'kling-3.0'] },
+  { group: 'Cinema', models: ['gemini-omni', 'runway-gen4', 'veo-3.1', 'grok-imagine-video'] },
 ]
 
 export interface GeneratedClip {
@@ -55,10 +54,16 @@ export interface GeneratedClip {
   status: 'queued' | 'processing' | 'complete' | 'failed'
   progress?: number
   progressMessage?: string
+  userMessage?: string
   phase?: string
   etaSeconds?: number | null
   error?: string
   createdAt: Date
+  folderId?: string | null
+  libraryKind?: 'video' | 'imported' | 'music' | 'voice'
+  mediaId?: string
+  variationOf?: string | null
+  label?: string
 }
 
 export const MODEL_FAMILY_COLOURS: Record<string, string> = {

@@ -1,7 +1,9 @@
 // Model 2 — Mochi-1 video generation model used for internal quality evaluation
 // and training signal generation. Not user-facing.
 
-import { fal } from '@/lib/fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('lib.brain.model2')
 
 export interface Model2Input {
   prompt: string
@@ -19,7 +21,7 @@ export interface Model2Output {
 export async function runModel2(input: Model2Input): Promise<Model2Output> {
   const start = Date.now()
 
-  const result = await fal.subscribe('fal-ai/mochi-v1', {
+  const result = await falSubscribe(falEndpoint('mochi-v1'), {
     input: {
       prompt: input.prompt,
       seed: input.seed,
@@ -58,7 +60,9 @@ Be concise. Score 0.8+ means production-ready. Score below 0.5 means needs repai
 
   try {
     return JSON.parse(result.content) as { score: number; issues: string[]; strengths: string[] }
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/brain/model2.ts:62", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return { score: 0.7, issues: [], strengths: ['Unable to evaluate'] }
   }
 }

@@ -16,7 +16,9 @@ export async function POST(req: NextRequest) {
   }
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/upscale/image/route.ts:19", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -33,6 +35,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, creditKey)
   } catch (e) {
+    console.warn("[caught] src/app/api/upscale/image/route.ts:35", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     return NextResponse.json({ error: (e as Error).message }, { status: 402 })
   }
 
@@ -40,6 +44,8 @@ export async function POST(req: NextRequest) {
     const result = await upscaleImage({ imageUrl, factor, contentType, faceEnhance })
     return NextResponse.json(result)
   } catch (e) {
+    console.warn("[caught] src/app/api/upscale/image/route.ts:42", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     await refundCredits(userId, OPERATION_COSTS[creditKey] ?? 0, 'Image upscale failed')
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }

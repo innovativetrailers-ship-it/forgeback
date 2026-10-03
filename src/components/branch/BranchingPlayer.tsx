@@ -1,5 +1,7 @@
 'use client'
 
+
+import { logCaught } from '@/lib/diagnostics/caught'
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import type { BranchingConfig, BranchNode, BranchChoice } from '@/lib/export/BranchingExport'
 
@@ -40,7 +42,7 @@ export function BranchingPlayer({ config }: Props) {
       setCurrentNodeId(choice.nextNodeId as string)
       setPlayerState('playing')
       const video = videoRef.current
-      if (video) { video.currentTime = 0; video.play().catch(() => {}) }
+      if (video) { video.currentTime = 0; video.play().catch((err) => logCaught('components/branch/BranchingPlayer', err)) }
       setTimeout(() => setOpacity(1), 50)
     }, 400)
   }, [])
@@ -67,7 +69,7 @@ export function BranchingPlayer({ config }: Props) {
     setPlayerState('playing')
     setOpacity(1)
     const video = videoRef.current
-    if (video) { video.currentTime = 0; video.play().catch(() => {}) }
+    if (video) { video.currentTime = 0; video.play().catch((err) => logCaught('components/branch/BranchingPlayer', err)) }
   }, [config.startNodeId])
 
   if (!currentNode) return (

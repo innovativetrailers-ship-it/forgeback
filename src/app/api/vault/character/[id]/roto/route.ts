@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import { NextRequest, NextResponse } from 'next/server'
 import { rotoAndOverlay } from '@/lib/character/roto'
 import { ROTO_OVERLAY_CREDITS, type FccRotoRequest } from '@/lib/character/characterMotion'
@@ -25,6 +26,8 @@ export async function POST(
   try {
     await checkAndDeductCredits(userId, 'character_roto')
   } catch (e) {
+    console.warn("[caught] src/app/api/vault/character/[id]/roto/route.ts:28", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     return NextResponse.json({ error: (e as Error).message }, { status: 402 })
   }
 
@@ -32,7 +35,7 @@ export async function POST(
     const videoUrl = await rotoAndOverlay(body.videoUrl, body.mode, character ?? undefined)
     return NextResponse.json({ videoUrl })
   } catch (e) {
-    await refundCredits(userId, ROTO_OVERLAY_CREDITS, 'character_roto').catch(() => {})
+    await refundCredits(userId, ROTO_OVERLAY_CREDITS, 'character_roto').catch((err) => logCaught('app/api/vault/character/[id]/roto/route', err))
     const message = e instanceof Error ? e.message : 'Roto failed'
     return NextResponse.json({ error: message }, { status: 500 })
   }

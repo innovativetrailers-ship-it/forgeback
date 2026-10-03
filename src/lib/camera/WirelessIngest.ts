@@ -62,7 +62,9 @@ export async function getCameraSession(sessionId: string): Promise<CameraSession
   const raw = await redis.get(sessionKey(sessionId))
   if (!raw) return null
   let parsed: unknown
-  try { parsed = JSON.parse(raw) } catch { return null }
+  try { parsed = JSON.parse(raw) } catch (err) {
+    console.warn("[caught] src/lib/camera/WirelessIngest.ts:65", err instanceof Error ? { name: err.name, message: err.message } : err)
+ return null }
   return isCameraSession(parsed) ? parsed : null
 }
 
@@ -97,7 +99,9 @@ export async function getSessionChunks(sessionId: string): Promise<ChunkMetadata
       const raw = await redis.get(chunkKey(id))
       if (!raw) return null
       let parsed: unknown
-      try { parsed = JSON.parse(raw) } catch { return null }
+      try { parsed = JSON.parse(raw) } catch (err) {
+        console.warn("[caught] src/lib/camera/WirelessIngest.ts:100", err instanceof Error ? { name: err.name, message: err.message } : err)
+ return null }
       return isChunkMetadata(parsed) ? parsed : null
     }),
   )

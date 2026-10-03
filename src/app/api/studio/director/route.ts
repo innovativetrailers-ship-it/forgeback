@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { runAIDirector, queueDirectorGenerations } from '@/lib/studio/director'
+import { runAIDirector } from '@/lib/studio/director'
 import { checkAndDeductCredits } from '@/lib/credits'
 import { db } from '@/lib/db'
 
@@ -29,6 +29,8 @@ export async function POST(request: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'ai_director')
   } catch (err) {
+    console.warn("[caught] src/app/api/studio/director/route.ts:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -43,26 +45,10 @@ export async function POST(request: NextRequest) {
     style,
     targetDuration,
     projectId,
-    availableCharacters: characters.map((c) => ({
-      id: c.id,
-      name: c.name,
-      modelFamily: c.modelFamily,
-      loraModelId: c.loraModelId,
-      loraStatus: c.loraStatus,
-      referenceUrls: c.referenceUrls as string[],
-    })),
-    availableLocations: locations.map((l) => ({
-      id: l.id,
-      name: l.name,
-      generativePrompt: l.generativePrompt,
-      source: l.source,
-    })),
+    userId,
+    availableCharacters: characters.map((c) => ({ id: c.id, name: c.name })),
+    availableLocations: locations.map((l) => ({ id: l.id, name: l.name })),
   })
 
-  if (autoQueue) {
-    const queuedRecipe = await queueDirectorGenerations(recipe, userId)
-    return NextResponse.json({ recipe: queuedRecipe, directorNotes, queued: true })
-  }
-
-  return NextResponse.json({ recipe, directorNotes, queued: false })
+  return NextResponse.json({ recipe, directorNotes, queued: false, autoQueue })
 }

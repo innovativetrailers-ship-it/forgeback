@@ -30,6 +30,9 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[ErrorBoundary]', error, info.componentStack)
     this.props.onError?.(error, info)
+    void import('@/components/diagnostics/CodeErrorBridge').then(({ reportBrowserCodeError }) =>
+      reportBrowserCodeError(`${error.stack || error.message}\n${info.componentStack ?? ''}`, 'error-boundary'),
+    )
   }
 
   reset = () => this.setState({ hasError: false, error: null })

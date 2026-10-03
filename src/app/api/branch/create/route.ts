@@ -11,7 +11,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let raw: unknown
   try {
     raw = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/branch/create/route.ts:14", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -24,7 +26,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     await checkAndDeductCredits(userId, 'branching_export', CREDIT_COST, 'Interactive branching video export')
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/branch/create/route.ts:27", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: `Insufficient credits. Branching export costs ${CREDIT_COST} credits.` }, { status: 402 })
   }
 
@@ -33,6 +37,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const embed = await generateBranchingEmbed(raw, baseUrl)
     return NextResponse.json({ embedId: embed.embedId, embedUrl: embed.embedUrl, iframeHtml: embed.iframeHtml })
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/branch/create/route.ts:35", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     await refundCredits(userId, CREDIT_COST, 'Branching export failed')
     const message = err instanceof Error ? err.message : 'Branching export failed'
     return NextResponse.json({ error: message }, { status: 500 })

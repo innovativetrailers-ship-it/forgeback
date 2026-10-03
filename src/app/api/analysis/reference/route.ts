@@ -29,6 +29,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, analysisCreditKey)
   } catch (err) {
+    console.warn("[caught] src/app/api/analysis/reference/route.ts:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -50,13 +52,17 @@ export async function POST(req: NextRequest) {
           format: body.format ?? 'short_film',
           targetRuntime: body.targetRuntime ?? 5,
         })
-      } catch {
+      } catch (err) {
+        console.warn("[caught] src/app/api/analysis/reference/route.ts:53", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         // Script generation skipped when credits insufficient
       }
     }
 
     return NextResponse.json({ styleDNA, ...(script ? { script } : {}) })
   } catch (err) {
+    console.warn("[caught] src/app/api/analysis/reference/route.ts:59", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     await refundOperationCredits(userId, analysisCreditKey)
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Analysis failed' }, { status: 500 })
   }

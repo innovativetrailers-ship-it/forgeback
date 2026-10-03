@@ -82,7 +82,9 @@ export class LongFormOrchestrator {
         onShotComplete: (r) => {
           redis.publish(channelKey(`swarm:${projectId}`), JSON.stringify({
             event: 'shot_complete', batch: i + 1, shot_id: r.shot_id,
-          })).catch(() => { /* non-fatal */ })
+          })).catch((err) => {
+            console.warn("[caught] src/lib/swarm/LongFormOrchestrator.ts:85", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal */ })
         },
       })
 
@@ -145,8 +147,10 @@ export class LongFormOrchestrator {
       try {
         const { extractVideoFrame } = await import('@/lib/fal/frameExtract')
         const lastFrame = await extractVideoFrame(lastResult.output_url, { frameType: 'last' }).catch(
-          () => lastResult.output_url,
-        )
+          (err) => {
+          console.warn("[caught] src/lib/swarm/LongFormOrchestrator.ts:147", err instanceof Error ? { name: err.name, message: err.message } : err)
+          return lastResult.output_url
+        })
 
         lastShot.character_ids.forEach(charId => {
           const existing = newContext.establishedCharacters.findIndex(c => c.characterId === charId)
@@ -171,7 +175,9 @@ export class LongFormOrchestrator {
           if (locIdx >= 0) newContext.establishedLocations[locIdx] = locRecord
           else newContext.establishedLocations.push(locRecord)
         }
-      } catch { /* continuity degrades gracefully */ }
+      } catch (err) {
+        console.warn("[caught] src/lib/swarm/LongFormOrchestrator.ts:174", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* continuity degrades gracefully */ }
     }
 
     return newContext

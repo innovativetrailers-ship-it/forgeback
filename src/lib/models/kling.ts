@@ -1,5 +1,5 @@
 // Kling routes through fal queue API with URL-based polling.
-import { buildFalVideoInput } from '@/lib/fal/videoPayloads'
+import { buildPayload } from '@/lib/fal/videoPayloads'
 import { resolveKlingEndpoint } from '@/lib/fal/klingEndpoints'
 import { falGenerateJob, falPollJob } from '@/lib/fal/modelQueue'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
@@ -21,7 +21,7 @@ export async function generateVideo(
   const isI2V = Boolean(input.startFrameUrl)
   const model = endpointFor(tier, isI2V)
 
-  const falInput = await buildFalVideoInput(model, tier === 'pro' ? 'kling-3.0' : 'kling-standard', {
+  const falInput = await buildPayload(model, tier === 'pro' ? 'kling-3.0' : 'kling-standard', {
     prompt,
     duration: input.duration ?? 5,
     aspectRatio: input.aspectRatio ?? '16:9',

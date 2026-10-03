@@ -1,5 +1,7 @@
 'use client'
 
+
+import { logCaught } from '@/lib/diagnostics/caught'
 import { useState, useCallback, useEffect } from 'react'
 import { subscribeJobStream } from '@/lib/jobs/subscribeJobStream'
 import { Music, Mic, Volume2, VolumeX, Sliders, Zap, Loader2 } from 'lucide-react'
@@ -119,7 +121,7 @@ export function AudioMixingBoard({ projectId, projectDuration, onTracksApplied }
     fetch(`/api/audio/track?projectId=${projectId}`, { credentials: 'include' })
       .then((r) => r.json())
       .then((d: { tracks?: DbAudioTrack[] }) => setDbTracks(d.tracks ?? []))
-      .catch(() => {})
+      .catch((err) => logCaught('components/ultimate/AudioMixingBoard', err))
   }, [projectId])
 
   useEffect(() => { reloadTracks() }, [reloadTracks])
@@ -188,7 +190,9 @@ export function AudioMixingBoard({ projectId, projectDuration, onTracksApplied }
           })
       }, 3000)
       setTimeout(() => { clearInterval(poll); setIsGenerating(null) }, 300_000)
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/ultimate/AudioMixingBoard.tsx:193", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setIsGenerating(null)
     }
   }

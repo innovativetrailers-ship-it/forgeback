@@ -3,7 +3,7 @@
  */
 
 import { probeEndpoint } from '@/lib/fal/probeEndpoint'
-import { buildFalVideoInput } from '@/lib/fal/videoPayloads'
+import { buildPayload } from '@/lib/fal/videoPayloads'
 import { calculateGenerationCost } from '@/lib/credits'
 import { shotExpectedUsesI2V } from './anchorPolicy'
 import { resolveFalVideoEndpoint, resolveVideoEndpoint, isExternallyRoutedModel } from './falEndpoints'
@@ -93,7 +93,6 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
   const perShot: Record<string, number> = {}
   for (const node of dag) {
     const shotId = String(node.shot.shotIndex)
-    perShot[shotId] = node.estimatedCost
 
     if (isExternallyRoutedModel(node.assignedModel)) continue
 
@@ -122,7 +121,7 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
     }
 
     try {
-      const payload = await buildFalVideoInput(ep, node.assignedModel, {
+      const payload = await buildPayload(ep, node.assignedModel, {
         prompt: vp,
         duration: node.shot.duration,
         aspectRatio: '16:9',
@@ -133,6 +132,8 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
         errors.push({ stage: 'payload', shotId, detail: 'Empty prompt after adapter' })
       }
     } catch (err) {
+      console.warn("[caught] src/lib/orchestration/preflight.ts:135", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       errors.push({
         stage: 'payload',
         shotId,
@@ -143,7 +144,7 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
 
   const assetUrls = [
     ...shots.map((s) => s.storyboardUrl).filter(Boolean) as string[],
-    ...patientZero.characters.map((c) => c.imageUrl),
+    ...(patientZero.characters ?? []).map((c) => c.imageUrl),
   ]
   const uniqueAssets = [...new Set(assetUrls)]
   const assetChecks = await Promise.all(
@@ -151,7 +152,9 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
       try {
         const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8_000) })
         return { url, ok: res.ok }
-      } catch {
+      } catch (err) {
+        console.warn("[caught] src/lib/orchestration/preflight.ts:154", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         return { url, ok: false }
       }
     }),
@@ -160,12 +163,33 @@ export async function preflight(input: PreflightInput): Promise<PreflightResult>
     warnings.push(`Asset HEAD check failed (may still work via FAL): ${a.url}`)
   }
 
-  const totalCredits = Math.ceil(
-    dag.reduce((sum, n) => sum + calculateGenerationCost(n.assignedModel, n.shot.duration), 0)
-    + dag.length * keyframeOverheadPerShot,
-  )
+  let shotCredits = 0
+  for (const [index, node] of dag.entries()) {
+    const shotId = String(node.shot.shotIndex)
+    try {
+      const cost = calculateGenerationCost(node.assignedModel, node.shot.duration, index + 1)
+      if (!Number.isFinite(cost) || cost <= 0) {
+        throw new Error('Cost estimate was not a finite credit number')
+      }
+      perShot[shotId] = cost
+      shotCredits += cost
+    } catch (err) {
+      console.warn('[cost_inputs]', err instanceof Error ? err.message : err)
+      errors.push({
+        stage: 'credits',
+        shotId,
+        detail: err instanceof Error ? err.message : 'Cost estimate was not a finite credit number',
+      })
+    }
+  }
+  const totalCredits = shotCredits + dag.length * keyframeOverheadPerShot
 
-  if (userCredits < totalCredits * 1.2) {
+  if (!Number.isFinite(totalCredits) || totalCredits <= 0) {
+    errors.push({
+      stage: 'credits',
+      detail: 'Cost estimate was not a finite credit number',
+    })
+  } else if (userCredits < totalCredits * 1.2) {
     errors.push({
       stage: 'credits',
       detail: `Run needs ~${totalCredits} credits (+20% buffer); balance is ${userCredits}`,

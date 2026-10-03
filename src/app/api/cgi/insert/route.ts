@@ -1,3 +1,4 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { runFal } from '@/lib/fal/client'
@@ -27,7 +28,10 @@ async function downloadFile(url: string, dest: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     protocol.get(url, (res) => {
       if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return }
-      pipeline(res, createWriteStream(dest)).then(resolve).catch(reject)
+      pipeline(res, createWriteStream(dest)).then(resolve).catch((err) => {
+        console.warn("[caught] src/app/api/cgi/insert/route.ts:30", err instanceof Error ? { name: err.name, message: err.message } : err)
+        reject(err)
+      })
     }).on('error', reject)
   })
 }
@@ -47,6 +51,8 @@ export async function POST(request: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'cgi_generate_3d')
   } catch (err) {
+    console.warn("[caught] src/app/api/cgi/insert/route.ts:49", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -81,7 +87,7 @@ export async function POST(request: NextRequest) {
     video?: { url: string }
   }
 
-  const tripoResult = await runFal<TripoResult>('fal-ai/triposg', { prompt })
+  const tripoResult = await runFal<TripoResult>(falEndpoint('triposg'), { prompt })
 
   // ── 3. Extract depth map and match lighting ────────────────────────────
   const [depthResult, lightResult] = await Promise.allSettled([
@@ -97,7 +103,7 @@ export async function POST(request: NextRequest) {
     video?: { url: string }
   }
 
-  const compResult = await runFal<CompResult>('fal-ai/kling-video/v1.5/pro/image-to-video', {
+  const compResult = await runFal<CompResult>(falEndpoint('kling-video/v1.5/pro/image-to-video'), {
     image_url: relitUrl ?? frameToAnalyse,
     prompt: `${prompt}, photorealistic CGI composite, depth-aware, matched lighting`,
     duration: (Math.min(Math.ceil(insertDuration), 5) <= 5 ? '5' : '10') as '5' | '10',
@@ -147,7 +153,9 @@ export async function POST(request: NextRequest) {
 
   // Cleanup
   for (const f of [inputPath, framePath, segmentAPath, compositePath, segmentBPath, outputPath, concatFile]) {
-    try { unlinkSync(f) } catch { /* ignore */ }
+    try { unlinkSync(f) } catch (err) {
+      console.warn("[caught] src/app/api/cgi/insert/route.ts:150", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore */ }
   }
 
   return NextResponse.json({

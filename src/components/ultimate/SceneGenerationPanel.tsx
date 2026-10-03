@@ -30,7 +30,10 @@ export function SceneGenerationPanel({ projectId, selectedModels, mode }: Props)
         setScenes(d.scenes ?? [])
         setLoading(false)
       })
-      .catch(() => setLoading(false))
+      .catch((err) => {
+        console.warn("[caught] src/components/ultimate/SceneGenerationPanel.tsx:33", err instanceof Error ? { name: err.name, message: err.message } : err)
+        return (setLoading(false))
+      })
   }, [projectId])
 
   useEffect(() => { reload() }, [reload])

@@ -1,3 +1,4 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { runFal } from '../fal/client'
 import ffmpeg from 'fluent-ffmpeg'
 import fs from 'fs/promises'
@@ -138,7 +139,7 @@ export class SeamlessBlender {
             targetIdx > anchorIdx ? 'first' : 'last',
           )
 
-          const adjusted = await runFal('fal-ai/iclight-v2', {
+          const adjusted = await runFal(falEndpoint('iclight-v2'), {
               image_url: targetFrame,
               prompt: 'match lighting temperature and colour tone of reference',
             }) as unknown as { images?: Array<{ url?: string }> }
@@ -150,7 +151,9 @@ export class SeamlessBlender {
             tmpDir,
             normalised[targetIdx].shot_id
           )
-        } catch { /* non-fatal — boundary normalisation degrades gracefully */ }
+        } catch (err) {
+          console.warn("[caught] src/lib/swarm/SeamlessBlender.ts:153", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal — boundary normalisation degrades gracefully */ }
       }
     }
   }
@@ -257,7 +260,9 @@ export class SeamlessBlender {
       return await extractVideoFrame(tempUrl, {
         frameType: position === 'first' ? 'first' : 'last',
       })
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/swarm/SeamlessBlender.ts:260", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       return tempUrl
     }
   }

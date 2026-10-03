@@ -3,7 +3,7 @@
  * Pre/post deploy health — OpenAPI schema fetch + buildPayload validation only.
  * NO generation submits. NO billable FAL/Runway/xAI calls.
  */
-import { buildFalVideoInput } from '../src/lib/fal/videoPayloadAdapters'
+import { buildPayload } from '../src/lib/fal/videoPayloadAdapters'
 import {
   listRegistryVideoEndpoints,
   SAMPLE_SHOT,
@@ -42,7 +42,7 @@ async function validatePayload(
   mode: 't2v' | 'i2v',
 ): Promise<PayloadProbeResult> {
   try {
-    const sample = await buildFalVideoInput(endpoint, registryKey, {
+    const sample = await buildPayload(endpoint, registryKey, {
       prompt: SAMPLE_SHOT.prompt,
       duration: SAMPLE_SHOT.duration,
       aspectRatio: SAMPLE_SHOT.aspectRatio,

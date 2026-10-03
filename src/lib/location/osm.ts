@@ -1,6 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
 
 interface NominatimResult {
   place_id: number
@@ -58,7 +56,7 @@ export async function buildGenerativeLocationPrompt(
     locationContext = `${placeDescription} — ${parts.join(', ')}`
   }
 
-  const response = await client.messages.create({
+  const response = await claudeCall({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 400,
     messages: [
@@ -71,9 +69,9 @@ Include: lighting conditions, architectural materials, atmosphere, time of day, 
 Write only the prompt text, no explanations. 2-3 sentences maximum.`,
       },
     ],
-  })
+  }, { source: 'location.osm' })
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : placeDescription
+  const text = claudeText(response) || placeDescription
   return text.trim()
 }
 

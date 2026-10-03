@@ -1,3 +1,4 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { runFal } from './client'
 
 export interface RelightInput {
@@ -13,7 +14,7 @@ export interface RelightOutput {
   normalMapUrl?: string
 }
 
-export const ICLIGHT_ENDPOINT = 'fal-ai/iclight-v2' as const
+export const ICLIGHT_ENDPOINT = falEndpoint('iclight-v2')
 
 const PRESET_PROMPTS: Record<string, string> = {
   studio: 'studio lighting, soft boxes, professional photography',
@@ -46,7 +47,7 @@ export async function generateDepthMap(imageUrl: string): Promise<string> {
     image?: { url: string }
   }
 
-  const result = await runFal<DepthResult>('fal-ai/imageutils/depth', {
+  const result = await runFal<DepthResult>(falEndpoint('imageutils/depth'), {
     image_url: imageUrl,
   })
 
@@ -58,7 +59,7 @@ export async function generateNormalMap(imageUrl: string): Promise<string> {
     image?: { url: string }
   }
 
-  const result = await runFal<NormalResult>('fal-ai/normal-bae', {
+  const result = await runFal<NormalResult>(falEndpoint('normal-bae'), {
     image_url: imageUrl,
   })
 

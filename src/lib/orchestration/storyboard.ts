@@ -5,7 +5,7 @@ import { uploadToR2 } from '@/lib/storage/r2'
 import { loadKeyframeCheckpoint, saveKeyframeCheckpoint } from './checkpoints'
 import type { StructuredShot, PatientZeroAssets } from './types'
 
-const KEYFRAME_MAX_ATTEMPTS = 2
+const KEYFRAME_MAX_ATTEMPTS = 1
 
 export interface StoryboardOptions {
   jobId?:      string
@@ -14,10 +14,16 @@ export interface StoryboardOptions {
 }
 
 function buildKeyframePrompt(shot: StructuredShot): string {
-  return `Cinematic storyboard keyframe, opening composition of this shot.
-${shot.visualPrompt}
-Camera: ${shot.cameraMove}. Lighting: ${shot.lighting}. Mood: ${shot.mood}.
-Film still, photorealistic, composed exactly as the first frame of the shot.`
+  const subjects = [...(shot.charactersPresent ?? []), ...(shot.locationsPresent ?? [])].filter(Boolean)
+  const present = subjects.length ? `Already in frame: ${subjects.join(', ')}.` : 'Every subject named below is already visible.'
+  return `Single film still, the first frame of this shot. ${present} One lighting state. No before-and-after.
+${shot.visualPrompt ?? ''}
+Camera: ${shot.cameraMove ?? 'static'}. Lighting: ${shot.lighting ?? 'natural'}. Mood: ${shot.mood ?? 'calm'}.`
+}
+
+function nameList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
 }
 
 async function generateSingleKeyframe(
@@ -32,11 +38,13 @@ async function generateSingleKeyframe(
     if (cached) return { ...shot, storyboardUrl: cached }
   }
 
-  const charRef = shot.charactersPresent
-    .map((name) => assets.characters.find((c) => c.name === name)?.imageUrl)
+  const characters = assets?.characters ?? []
+  const locations = assets?.locations ?? []
+  const charRef = nameList(shot.charactersPresent)
+    .map((name) => characters.find((c) => c.name === name)?.imageUrl)
     .filter(Boolean)[0]
-  const locRef = shot.locationsPresent
-    .map((name) => assets.locations.find((l) => l.name === name)?.imageUrl)
+  const locRef = nameList(shot.locationsPresent)
+    .map((name) => locations.find((l) => l.name === name)?.imageUrl)
     .filter(Boolean)[0]
 
   const prompt = buildKeyframePrompt(shot)
@@ -87,11 +95,12 @@ export async function generateStoryboard(
     ? { onProgress: options }
     : options
 
-  const total = shots.length
+  const list = Array.isArray(shots) ? shots : []
+  const total = list.length
   let done = 0
 
   const results = await Promise.allSettled(
-    shots.map(async (shot) => {
+    list.map(async (shot) => {
       const result = await generateSingleKeyframe(shot, assets, opts)
       done++
       opts.onProgress?.(done, total, `Keyframe ${done}/${total}`)
@@ -99,13 +108,19 @@ export async function generateStoryboard(
     }),
   )
 
-  const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+  const failed: string[] = []
+  const settled = results.map((result, index) => {
+    if (result.status === 'fulfilled') return result.value
+    const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
+    failed.push(`shot ${list[index]?.shotIndex ?? index}: ${reason}`)
+    return list[index]
+  })
+
   if (failed.length > 0) {
-    const detail = failed
-      .map((f) => (f.reason instanceof Error ? f.reason.message : String(f.reason)))
-      .join('; ')
-    throw new Error(`${failed.length} keyframe(s) failed after retries: ${detail}`)
+    console.warn(
+      `[storyboard] ${failed.length} keyframe(s) skipped; those shots continue as text-to-video: ${failed.join('; ')}`,
+    )
   }
 
-  return results.map((r) => (r as PromiseFulfilledResult<StructuredShot>).value)
+  return settled
 }

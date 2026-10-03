@@ -4,7 +4,12 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 import { Volume2, VolumeX, Lock, Unlock, Eye } from 'lucide-react'
 import { TRACK_LABEL_WIDTH, RULER_HEIGHT, TRACK_HEIGHT, MODEL_CLIP_COLOURS, TRACK_COLOURS } from './constants'
 import type { TimelineRecipe, Track, Clip } from '@/lib/timeline/schema'
+import { recipeForTimeline, videoTrackCount } from '@/lib/timeline/reconcileTimeline'
+import { usePlaybackStore } from '@/store/playbackStore'
 import { clipPosterUrl, computeTimelineDuration, isVideoMediaUrl } from '@/lib/timeline/playback'
+import { ClipContextMenu } from '@/components/editor/ClipContextMenu'
+import { placeDraggedLibraryItem } from '@/lib/library/placeOnTimeline'
+import { toast } from '@/lib/toast'
 
 interface ActiveJob { jobId: string; clipId: string; progress?: number }
 
@@ -22,6 +27,8 @@ interface Props {
   onTrackToggleMute: (trackId: string) => void
   onZoomChange: (zoom: number) => void
   onScrollChange: (offset: number) => void
+  razor?: boolean
+  onClipSplit?: (clipId: string, atTime: number) => void
 }
 
 function timeToX(t: number, zoom: number, scroll: number): number {
@@ -52,6 +59,8 @@ export function Timeline({
   onTrackToggleMute,
   onZoomChange,
   onScrollChange,
+  razor = false,
+  onClipSplit,
 }: Props) {
   const rulerRef = useRef<HTMLDivElement>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -63,8 +72,15 @@ export function Timeline({
     trackId?: string
   } | null>(null)
   const [hoveredClipId, setHoveredClipId] = useState<string | null>(null)
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
 
-  const tracks = recipe?.tracks ?? []
+  const storeRecipe = usePlaybackStore((state) => state.recipe)
+  const rendered = recipeForTimeline(storeRecipe, recipe)
+  const tracks = rendered?.tracks ?? []
+
+  useEffect(() => {
+    console.log('[timeline_render]', { clips: videoTrackCount(rendered) })
+  }, [rendered])
   const totalDuration = computeTimelineDuration(tracks, recipe?.durationSeconds ?? 60)
 
   // Ruler tick marks
@@ -108,6 +124,13 @@ export function Timeline({
     e.preventDefault()
     e.stopPropagation()
     onClipSelect(clip.id)
+    if (razor && type === 'clip' && onClipSplit) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      const span = Math.max(0.1, clip.endTime - clip.startTime)
+      const ratio = rect.width > 0 ? Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)) : 0.5
+      onClipSplit(clip.id, clip.startTime + ratio * span)
+      return
+    }
     setDragging({
       type,
       clipId: clip.id,
@@ -115,7 +138,7 @@ export function Timeline({
       startTime: type === 'clip' ? clip.startTime : type === 'trim-start' ? clip.startTime : clip.endTime,
       trackId: clip.trackId,
     })
-  }, [onClipSelect])
+  }, [onClipSelect, onClipSplit, razor])
 
   useEffect(() => {
     if (!dragging) return
@@ -135,7 +158,18 @@ export function Timeline({
       }
     }
 
-    const handleMouseUp = () => setDragging(null)
+    const handleMouseUp = () => {
+      if (dragging.type === 'trim-end' && dragging.clipId && recipe) {
+        const clip = recipe.tracks.flatMap((track) => track.clips).find((row) => row.id === dragging.clipId)
+        const extra = clip ? clip.endTime - dragging.startTime : 0
+        if (extra > 0.4) {
+          window.dispatchEvent(new CustomEvent('cinema:extend-offer', {
+            detail: { clipId: dragging.clipId, seconds: Math.max(1, Math.round(extra)) },
+          }))
+        }
+      }
+      setDragging(null)
+    }
 
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
@@ -187,6 +221,15 @@ export function Timeline({
         </div>
       </div>
 
+      {menu && (
+        <ClipContextMenu
+          clipId={menu.id}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+        />
+      )}
+
       {/* Track rows */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
         {tracks.map((track) => (
@@ -203,6 +246,71 @@ export function Timeline({
             onMouseDown={handleMouseDown}
             onHover={setHoveredClipId}
             onToggleMute={() => onTrackToggleMute(track.id)}
+            onClipMenu={(id, x, y) => setMenu({ id, x, y })}
+            onLibraryDrop={(raw, x) => {
+              const hint = track.id === 't-music' ? 'music' : track.id === 't-voice' ? 'voice' : track.type === 'audio' ? 'voice' : 'video'
+              const startSec = Math.max(0, xToTime(x, zoomLevel, scrollOffset))
+              void (async () => {
+                let payload = raw
+                if (hint === 'video') {
+                  try {
+                    const item = JSON.parse(raw) as { id?: string; kind?: string; sourceUrl?: string }
+                    if (item.id && item.kind === 'video') {
+                      const infoRes = await fetch(`/api/studio/library/compose?itemId=${encodeURIComponent(item.id)}`)
+                      const info = await infoRes.json() as {
+                        dialogue?: boolean
+                        voiceReady?: boolean
+                        lipSyncReady?: boolean
+                        estimateCredits?: number
+                        voiceMediaId?: string | null
+                      }
+                      const needsCompose = Boolean(info.dialogue) && (!info.voiceReady || !info.lipSyncReady)
+                      if (needsCompose) {
+                        const credits = info.estimateCredits ?? 0
+                        const ok = window.confirm(`This shot has dialogue. Generate voice and lip-sync for ${credits} credit(s)? Cancel places the video silent.`)
+                        if (ok) {
+                          const composed = await fetch('/api/studio/library/compose', {
+                            method: 'POST',
+                            headers: { 'content-type': 'application/json' },
+                            body: JSON.stringify({ itemId: item.id, confirm: true }),
+                          })
+                          const body = await composed.json() as { error?: string; voiceMediaId?: string | null; videoUrl?: string | null }
+                          if (!composed.ok) toast.error(body.error || 'Voice was not generated. Placing the video silent.')
+                          else {
+                            if (body.videoUrl) payload = JSON.stringify({ ...item, sourceUrl: body.videoUrl })
+                            if (body.voiceMediaId) {
+                              placeDraggedLibraryItem(JSON.stringify({
+                                id: body.voiceMediaId,
+                                kind: 'voice',
+                                sourceUrl: `/api/media/${body.voiceMediaId}`,
+                                label: 'Voice',
+                                folderId: null,
+                                createdBy: 'generate',
+                                durationSec: 5,
+                              }), 'voice', startSec)
+                            }
+                          }
+                        }
+                      } else if (info.voiceMediaId) {
+                        placeDraggedLibraryItem(JSON.stringify({
+                          id: info.voiceMediaId,
+                          kind: 'voice',
+                          sourceUrl: `/api/media/${info.voiceMediaId}`,
+                          label: 'Voice',
+                          folderId: null,
+                          createdBy: 'generate',
+                          durationSec: 5,
+                        }), 'voice', startSec)
+                      }
+                    }
+                  } catch (err) {
+                    console.warn('[library] compose', err instanceof Error ? err.message : err)
+                  }
+                }
+                const rejected = placeDraggedLibraryItem(payload, hint, startSec)
+                if (rejected) toast.error(rejected)
+              })()
+            }}
           />
         ))}
       </div>
@@ -228,6 +336,8 @@ interface TrackRowProps {
   onMouseDown: (e: React.MouseEvent, type: 'clip' | 'trim-start' | 'trim-end', clip: Clip) => void
   onHover: (id: string | null) => void
   onToggleMute: () => void
+  onClipMenu: (id: string, x: number, y: number) => void
+  onLibraryDrop: (raw: string, x: number) => void
 }
 
 function TrackRow({
@@ -242,6 +352,8 @@ function TrackRow({
   onMouseDown,
   onHover,
   onToggleMute,
+  onClipMenu,
+  onLibraryDrop,
 }: TrackRowProps) {
   const colour = TRACK_COLOURS[track.label] ?? '#6b7280'
   const isAudio = track.type === 'audio'
@@ -268,7 +380,23 @@ function TrackRow({
       </div>
 
       {/* Clip area */}
-      <div className="flex-1 relative overflow-hidden" onClick={() => onClipSelect(null)}>
+      <div
+        className="flex-1 relative overflow-hidden"
+        onClick={() => onClipSelect(null)}
+        onDragOver={(event) => {
+          if (event.dataTransfer.types.includes('application/x-cinema-media')) {
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'copy'
+          }
+        }}
+        onDrop={(event) => {
+          const raw = event.dataTransfer.getData('application/x-cinema-media')
+          if (!raw) return
+          event.preventDefault()
+          const bounds = event.currentTarget.getBoundingClientRect()
+          onLibraryDrop(raw, event.clientX - bounds.left)
+        }}
+      >
         {track.clips.map((clip) => {
           const x = timeToX(clip.startTime, zoomLevel, scrollOffset)
           const w = (clip.endTime - clip.startTime) * zoomLevel
@@ -297,6 +425,12 @@ function TrackRow({
                 backgroundColor: clipColour,
               }}
               onMouseDown={(e) => onMouseDown(e, 'clip', clip)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onClipSelect(clip.id)
+                onClipMenu(clip.id, e.clientX, e.clientY)
+              }}
               onMouseEnter={() => onHover(clip.id)}
               onMouseLeave={() => onHover(null)}
             >

@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import { writeFileSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -20,6 +21,7 @@ export async function processAudioTrackJob(trackId: string): Promise<void> {
         if (!track.prompt || !track.voiceId) throw new Error('Dialogue track missing prompt or voiceId')
         buffer = await generateVoiceBuffer(track.prompt, track.voiceId, {
           modelId: 'eleven_multilingual_v2',
+          source: 'audio.voice',
         })
         break
       }
@@ -30,6 +32,7 @@ export async function processAudioTrackJob(trackId: string): Promise<void> {
           lyrics: track.sunoLyrics ?? undefined,
           instrumental: track.instrumental,
           targetSeconds: 120,
+          source: 'audio.music',
         })
         await db.audioTrack.update({
           where: { id: trackId },
@@ -55,6 +58,7 @@ export async function processAudioTrackJob(trackId: string): Promise<void> {
           track.prompt ?? 'ambient soundscape',
           track.type === 'AMBIENCE' ? 22 : 8,
           0.3,
+          'audio.sfx',
         )
         break
       }
@@ -87,7 +91,7 @@ export async function processAudioTrackJob(trackId: string): Promise<void> {
     await db.audioTrack.update({
       where: { id: trackId },
       data: { status: 'FAILED' },
-    }).catch(() => {})
+    }).catch((err) => logCaught('lib/jobs/processAudioTrackJob', err))
     throw err
   }
 }

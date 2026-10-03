@@ -17,7 +17,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let form: FormData
   try {
     form = await req.formData()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/branch/create-with-upload/route.ts:20", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Expected multipart form data' }, { status: 400 })
   }
 
@@ -29,7 +31,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let partial: unknown
   try {
     partial = JSON.parse(configRaw)
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/branch/create-with-upload/route.ts:32", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid config JSON' }, { status: 400 })
   }
 
@@ -84,7 +88,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     await checkAndDeductCredits(userId, 'branching_export', CREDIT_COST, 'Interactive branching video export')
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/branch/create-with-upload/route.ts:87", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json(
       { error: `Insufficient credits. Branching export costs ${CREDIT_COST} credits.` },
       { status: 402 },
@@ -100,6 +106,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       iframeHtml: embed.iframeHtml,
     })
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/branch/create-with-upload/route.ts:102", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     await refundCredits(userId, CREDIT_COST, 'Branching export failed')
     const message = err instanceof Error ? err.message : 'Branching export failed'
     return NextResponse.json({ error: message }, { status: 500 })

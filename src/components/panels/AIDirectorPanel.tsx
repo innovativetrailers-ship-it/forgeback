@@ -12,8 +12,7 @@ export function AIDirectorPanel() {
 
   const handleDirect = () => {
     if (!brief.trim()) { toast.error('Enter a creative brief first'); return }
-    setLoading(true)
-    setTimeout(() => { setLoading(false); toast.success('AI Director is analysing your brief…') }, 1200)
+    toast.error('Direct runs inside a project. Open the film and use Direct This Film there.')
   }
 
   return (

@@ -11,6 +11,7 @@ import {
   type CompositorNode,
   type NodeConnection,
 } from '@/lib/compositor'
+import { DESKTOP_VFX_NODES } from '@/lib/compositor/vfx'
 
 export type { NodeType, NodePort, CompositorNode, NodeConnection } from '@/lib/compositor'
 
@@ -55,6 +56,8 @@ export default function NodeCompositor() {
       if (!res.ok) throw new Error(data.error ?? 'Render failed')
       setRenderUrl(data.url ?? null)
     } catch (err) {
+      console.warn("[caught] src/components/studio/NodeCompositor.tsx:57", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       alert((err as Error).message)
     } finally {
       setRendering(false)
@@ -130,6 +133,7 @@ export default function NodeCompositor() {
       <div className="flex flex-1 min-h-0">
         <div className="w-48 flex-shrink-0 border-r border-white/10 overflow-y-auto p-3">
           <div className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-2">Nodes</div>
+          <p className="mb-2 text-[10px] text-white/40">Particles, 3D layers, and OFX plugins are desktop depth. This page runs the same graph.</p>
           {NODE_TYPES_LIST.map((type) => (
             <button
               key={type}
@@ -139,6 +143,7 @@ export default function NodeCompositor() {
             >
               <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: NODE_COLORS[type] }} />
               {type}
+              {DESKTOP_VFX_NODES.includes(type as (typeof DESKTOP_VFX_NODES)[number]) ? ' · desktop' : ''}
             </button>
           ))}
         </div>

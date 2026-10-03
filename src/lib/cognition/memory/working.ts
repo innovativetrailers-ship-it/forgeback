@@ -20,7 +20,9 @@ export async function getWorkingState<T = Record<string, unknown>>(jobId: string
   try {
     const v = await redis.get(KEY(jobId))
     return v ? (JSON.parse(v) as T) : null
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/cognition/memory/working.ts:23", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return null
   }
 }

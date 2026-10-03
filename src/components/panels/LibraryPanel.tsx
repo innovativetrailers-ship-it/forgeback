@@ -1,13 +1,14 @@
 'use client'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useUIStore } from '@/store/ui'
 import { loadProject } from '@/lib/projects/loadProject'
 import { toast } from '@/lib/toast'
 import { ImportProjectPanel } from './ImportProjectPanel'
+import { MediaBin } from './MediaBin'
+import { usePlaybackStore } from '@/store/playbackStore'
 import { FolderOpen, Film, Music, Image, Search, Loader2 } from 'lucide-react'
 
-type LibraryTab = 'projects' | 'media' | 'audio' | 'stock'
+type LibraryTab = 'projects' | 'media' | 'audio'
 
 interface Project {
   id: string
@@ -21,7 +22,7 @@ export function LibraryPanel() {
   const [search, setSearch] = useState('')
   const [showImport, setShowImport] = useState(false)
   const [loadingId, setLoadingId] = useState<string | null>(null)
-  const { openModal } = useUIStore()
+  const projectId = usePlaybackStore((state) => state.projectId) ?? ''
 
   const { data: projectsData } = useQuery<{ projects: Project[] }>({
     queryKey: ['projects'],
@@ -39,6 +40,8 @@ export function LibraryPanel() {
       const { project } = await loadProject(projectId)
       toast.success(`Opened ${project.name ?? projectName ?? 'project'}`)
     } catch (err) {
+      console.warn("[caught] src/components/panels/LibraryPanel.tsx:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       toast.error(err instanceof Error ? err.message : 'Failed to open project')
     } finally {
       setLoadingId(null)
@@ -49,7 +52,6 @@ export function LibraryPanel() {
     { id: 'projects', label: 'Projects', icon: <Film size={13} /> },
     { id: 'media', label: 'Media', icon: <Image size={13} /> },
     { id: 'audio', label: 'Audio', icon: <Music size={13} /> },
-    { id: 'stock', label: 'Stock', icon: <Search size={13} /> },
   ]
 
   return (
@@ -135,22 +137,10 @@ export function LibraryPanel() {
           </div>
         )}
 
-        {activeTab === 'media' && (
-          <div className="text-gray-500 text-xs text-center py-8">
-            Upload media via drag & drop to the timeline
-          </div>
-        )}
-
-        {activeTab === 'audio' && (
-          <div className="text-gray-500 text-xs text-center py-8">
-            Generate audio using the Audio panel
-          </div>
-        )}
-
-        {activeTab === 'stock' && (
-          <div className="text-gray-500 text-xs text-center py-8">
-            Stock library — coming soon
-          </div>
+        {(activeTab === 'media' || activeTab === 'audio') && (
+          projectId
+            ? <MediaBin projectId={projectId} />
+            : <div className="text-gray-500 text-xs text-center py-8">Open a project to see its library.</div>
         )}
       </div>
 

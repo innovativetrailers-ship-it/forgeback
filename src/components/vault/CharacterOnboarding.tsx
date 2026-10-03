@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { primaryCastTrainer, trainingCostUsd } from '@cinema/core'
 import { cn } from '@/lib/utils'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -90,6 +91,10 @@ export function CharacterOnboarding({ open, onOpenChange, onComplete, projectId 
       formData.append('projectId', projectId)
       formData.append('modelFamily', modelFamily)
       formData.append('trainLora', trainLora ? 'true' : 'false')
+      if (trainLora) {
+        formData.append('confirmedCostUsd', String(trainingCostUsd(primaryCastTrainer(), 1000)))
+        formData.append('subjectConsent', 'true')
+      }
       images.forEach((img) => formData.append('images', img))
 
       const res = await fetch('/api/vault/character/create', {
@@ -130,6 +135,8 @@ export function CharacterOnboarding({ open, onOpenChange, onComplete, projectId 
         setStep(6)
       }
     } catch (err) {
+      console.warn("[caught] src/components/vault/CharacterOnboarding.tsx:137", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setTrainingError(err instanceof Error ? err.message : 'Character creation failed')
       setIsTraining(false)
       setStep(6)
@@ -409,8 +416,10 @@ function StepLoRA({
 
       <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border)] mb-3">
         <div>
-          <p className="text-[12px] font-medium text-[var(--text-primary)]">Train LoRA fine-tune</p>
-          <p className="text-[10px] text-[var(--text-tertiary)]">Uses ~500 credits · ~15 min</p>
+          <p className="text-[12px] font-medium text-[var(--text-primary)]">Train character LoRA</p>
+          <p className="text-[10px] text-[var(--text-tertiary)]">
+            ${trainingCostUsd(primaryCastTrainer(), 1000).toFixed(2)} FAL + 50 credits. Needs 10 reference images. Turning this on confirms the subject consents.
+          </p>
         </div>
         <button
           onClick={() => onTrainChange(!trainLora)}

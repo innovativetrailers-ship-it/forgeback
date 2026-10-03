@@ -1,0 +1,28 @@
+---
+description: Wave 7 production workflow. Ingest a plan, optionally resolve entities, then direct. References never block a build.
+alwaysApply: true
+---
+
+# Wave 7 — production workflow
+
+Full text: `docs/spec-references/SPEC-production-workflow-preproduction.md`. Build prompt: `docs/spec-references/BUILD-WAVE-7-production-workflow.md`.
+
+This wave was fed. It is the permission to change the production-workflow path. `spec-reconciliation-overlay.md` still wins. It does not lift `GENERATION_PAUSED`.
+
+## Order
+
+W7-T0 data contracts. W7-T1 ingest through the one `orchestrate`. W7-T2 `resolveEntity` cached once per film. W7-T3 pre-production board, skippable. W7-T4 cost-confirmed batch auto-gen. W7-T5 director compile. W7-T6 three reference levels and the gates.
+
+## Holds
+
+1. No second planner. Ingest and direct are modes of `orchestrate`.
+2. New breakdown fields are optional. An old shot still loads.
+3. No hardcoded `fal-ai/` id. Image gen uses the registry and `buildPayload`.
+4. Batch auto-gen shows a credit estimate and waits for confirm. `checkAccess` and the guarded submit apply. Pause applies.
+5. Resolution chain ends in text-to-video. A missing reference never blocks.
+6. One resolution per (entity, variant), reused on every shot of that variant. A variation is derived from its primary. No parent reference means prompt-only, logged, and the shot still renders.
+7. LoRA and continuity video-ref are separate. If a family cannot do both, log the choice.
+8. Compiled shots merge onto the timeline. They do not delete other clips.
+9. Asset columns are additive. Never `migrate dev`. Never reset.
+
+On a paid-API task, run `node scripts/check-chokepoints.mjs` and report it.

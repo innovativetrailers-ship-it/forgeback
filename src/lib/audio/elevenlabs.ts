@@ -17,6 +17,7 @@ export async function synthesiseSpeech(params: {
     modelId: 'eleven_turbo_v2_5',
     stability: params.stability ?? 0.5,
     similarityBoost: params.similarityBoost ?? 0.75,
+    source: 'audio.voice',
   })
 
   const key = `audio/speech/${nanoid()}.mp3`

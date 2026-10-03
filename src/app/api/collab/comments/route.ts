@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { resolveCollabAccess, assertCanComment } from '@/lib/collab/access'
+import { broadcastCollab } from '@/lib/collab/hub'
 
-// GET — list comments for a clip
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const userId = req.headers.get('x-user-id')
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -10,6 +11,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const clipId = req.nextUrl.searchParams.get('clipId')
 
   if (!projectId?.trim()) return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
+
+  const access = await resolveCollabAccess(projectId.trim(), userId)
+  if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   try {
     const where = clipId?.trim()
@@ -22,19 +26,46 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ comments })
-  } catch {
+    const links = await db.reviewLink.findMany({
+      where: { projectId: projectId.trim() },
+      select: { id: true },
+    })
+    const reviewComments = links.length
+      ? await db.reviewComment.findMany({
+          where: {
+            reviewLinkId: { in: links.map((l) => l.id) },
+            ...(clipId?.trim() ? { clipId: clipId.trim() } : {}),
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+      : []
+
+    const live = reviewComments.map((c) => ({
+      id: c.id,
+      authorId: c.authorEmail,
+      timecode: c.timecode,
+      text: c.text,
+      resolved: c.resolved,
+      createdAt: c.createdAt,
+      replies: [] as never[],
+    }))
+
+    return NextResponse.json({ comments: [...live, ...comments] })
+  } catch (err) {
+    console.warn("[caught] src/app/api/collab/comments/route.ts:54", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ comments: [] })
   }
 }
 
-// POST — create a top-level comment or reply
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const userId = req.headers.get('x-user-id')
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let raw: unknown
-  try { raw = await req.json() } catch {
+  try { raw = await req.json() } catch (err) {
+    console.warn("[caught] src/app/api/collab/comments/route.ts:64", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -44,7 +75,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (typeof o.text !== 'string' || !o.text.trim()) return NextResponse.json({ error: 'text is required' }, { status: 400 })
   if (typeof o.timecode !== 'number') return NextResponse.json({ error: 'timecode is required' }, { status: 400 })
 
+  const access = await resolveCollabAccess(o.projectId.trim(), userId)
+  if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!assertCanComment(access)) {
+    return NextResponse.json({ error: 'Role cannot comment' }, { status: 403 })
+  }
+
   try {
+    const link = await db.reviewLink.findFirst({
+      where: { projectId: o.projectId.trim() },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (link) {
+      const user = await db.user.findUnique({ where: { id: userId }, select: { name: true, email: true } })
+      const comment = await db.reviewComment.create({
+        data: {
+          reviewLinkId: link.id,
+          authorName: user?.name ?? 'Collaborator',
+          authorEmail: user?.email ?? `${userId}@forge.local`,
+          timecode: o.timecode,
+          text: o.text.trim(),
+          clipId: o.clipId.trim(),
+        },
+      })
+      broadcastCollab(o.projectId.trim(), { type: 'review_comment', comment, projectId: o.projectId.trim() })
+      return NextResponse.json({ comment }, { status: 201 })
+    }
+
     const comment = await db.clipComment.create({
       data: {
         projectId: o.projectId.trim(),
@@ -56,6 +113,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
       include: { replies: true },
     })
+    broadcastCollab(o.projectId.trim(), { type: 'review_comment', comment, projectId: o.projectId.trim() })
     return NextResponse.json({ comment }, { status: 201 })
   } catch (err: unknown) {
     console.error('[collab/comments POST]', err instanceof Error ? err.message : err)
@@ -63,13 +121,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-// PATCH — resolve / unresolve a comment
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const userId = req.headers.get('x-user-id')
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let raw: unknown
-  try { raw = await req.json() } catch {
+  try { raw = await req.json() } catch (err) {
+    console.warn("[caught] src/app/api/collab/comments/route.ts:125", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
@@ -80,12 +139,22 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'resolved (boolean) is required' }, { status: 400 })
 
   try {
+    const review = await db.reviewComment.findUnique({ where: { id: o.commentId.trim() } })
+    if (review) {
+      const comment = await db.reviewComment.update({
+        where: { id: o.commentId.trim() },
+        data: { resolved: o.resolved },
+      })
+      return NextResponse.json({ comment })
+    }
     const comment = await db.clipComment.update({
       where: { id: o.commentId.trim() },
       data: { resolved: o.resolved },
     })
     return NextResponse.json({ comment })
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/collab/comments/route.ts:149", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
   }
 }

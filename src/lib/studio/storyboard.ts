@@ -1,7 +1,9 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { runFal } from '../fal/client'
 import { uploadToR2 } from '../storage/r2'
 import { nanoid } from 'nanoid'
-import { getOpenRouterClient } from '../brain/openai-client'
+import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
+import { isGenerationPausedError } from '@/lib/generation/pause'
 
 export interface StoryboardShot {
   id: string
@@ -31,13 +33,10 @@ export async function generateStoryboard(params: {
   const { scriptText, style, targetDuration } = params
 
   // Step 1: Parse script into shots with Claude
-  const parseResponse = await getOpenRouterClient().chat.completions.create({
-    model: 'anthropic/claude-sonnet-4-5',
+  const parseResponse = await claudeCall({
+    model: 'claude-sonnet-4-20250514',
     max_tokens: 4000,
-    messages: [
-      {
-        role: 'system',
-        content: `You are a professional storyboard artist and script supervisor. Parse scripts into shot lists.
+    system: `You are a professional storyboard artist and script supervisor. Parse scripts into shot lists.
     
 Output ONLY valid JSON with this schema:
 {
@@ -55,16 +54,16 @@ Output ONLY valid JSON with this schema:
     }
   ],
   "narrativeSummary": "one paragraph summary"
-}`
-      },
+}`,
+    messages: [
       {
         role: 'user',
         content: `Parse this script into a shot list. Style: ${style}. Target duration: ${targetDuration ?? 60}s.\n\nScript:\n${scriptText}`,
       },
     ],
-  })
+  }, { source: 'storyboard', tier: 'mechanical' })
 
-  const text = parseResponse.choices[0]?.message?.content ?? '{}'
+  const text = claudeText(parseResponse) || '{}'
   const jsonMatch = text.match(/\{[\s\S]*\}/)
   if (!jsonMatch) throw new Error('Storyboard parser returned no JSON')
 
@@ -121,12 +120,12 @@ export async function renderStoryboardFrames(
           image?: { url: string }
         }
 
-        const result = await runFal('fal-ai/flux/dev', {
+        const result = await runFal(falEndpoint('flux/dev'), {
             prompt: `${shot.generationPrompt}, storyboard illustration, cinematic composition, film still`,
             image_size: 'landscape_16_9' as const,
             num_inference_steps: 28,
             guidance_scale: 3.5,
-          }) as FluxResult
+          }, undefined, 120_000, undefined, undefined, 'storyboard.frame') as FluxResult
 
         const imageUrl = result.images?.[0]?.url ?? result.image?.url
 
@@ -139,7 +138,8 @@ export async function renderStoryboardFrames(
           onProgress?.(Math.round((done / total) * 100))
           return { ...shot, frameUrl: r2Url }
         }
-      } catch {
+      } catch (err) {
+        if (isGenerationPausedError(err)) throw err
         done++
         onProgress?.(Math.round((done / total) * 100))
       }

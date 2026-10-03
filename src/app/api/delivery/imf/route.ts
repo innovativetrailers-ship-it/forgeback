@@ -10,7 +10,9 @@ export async function POST(req: NextRequest) {
   let body: Partial<IMFPackageSpec> & { projectId?: string }
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/delivery/imf/route.ts:13", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -26,6 +28,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'imf_package')
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/delivery/imf/route.ts:28", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Insufficient credits'
     return NextResponse.json({ error: msg }, { status: 402 })
   }
@@ -82,6 +86,8 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/delivery/imf/route.ts:84", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'IMF packaging failed'
     if (msg.includes('ECONNREFUSED') || msg.includes('fetch')) {
       return NextResponse.json(

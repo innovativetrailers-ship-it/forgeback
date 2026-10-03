@@ -1,5 +1,7 @@
 // src/lib/orchestration/types.ts
 
+import type { CompiledFilm, ProductionBreakdown, ShotPurpose } from '@cinema/core'
+
 // Unified sub-progress callback — every vendor poller calls this
 export interface SubProgress {
   pct:     number   // 0-100 within this single segment
@@ -37,7 +39,16 @@ export interface PatientZeroAssets {
   }>
 }
 
+export const SHOT_TRANSITION_KINDS = ['cut', 'dissolve', 'fade-in', 'fade-out', 'match', 'flash', 'generative-bridge'] as const
+export type ShotTransitionKind = (typeof SHOT_TRANSITION_KINDS)[number]
+
+export interface ShotTransition {
+  kind: ShotTransitionKind
+  durationMs?: number
+}
+
 export interface StructuredShot {
+  id?:               string
   shotIndex:         number
   startSeconds:      number
   endSeconds:        number
@@ -45,6 +56,11 @@ export interface StructuredShot {
   contentType:       ContentType
   visualPrompt:      string
   cameraMove:        string
+  cameraAngle?:      string
+  shotSize?:         string
+  lensFeel?:         string
+  cameraSpeed?:      string
+  cameraPrecision?:  boolean
   motionLevel:       'static' | 'slow' | 'medium' | 'fast' | 'complex'
   hasDialogue:       boolean
   hasFaces:          boolean
@@ -56,6 +72,13 @@ export interface StructuredShot {
   mood:              string
   bridgeRequired:    boolean
   suggestedModel?:   string
+  modelOverride?:    string | null
+  moneyShot?:        boolean
+  consistencyNeed?:  number
+  cameraNeed?:       number
+  budget?:           number
+  delegationReason?: string
+  delegatedMode?:    string
 
   sceneNumber?:      number   // narrative scene (sequential across film)
   scriptBeatId?:     string   // links to script beat for dialogue extraction
@@ -64,6 +87,22 @@ export interface StructuredShot {
   isChainStart:      boolean  // true only for first clip of the entire film
   startsAtHardCut?:  boolean
   storyboardUrl?:    string
+  /** Premise element ids this shot serves. `story` means the locked action. */
+  premiseElementIds?: string[]
+  /** What the shot is for. Delegation reads this later. */
+  purpose?:          ShotPurpose
+  /** Previous shot id (`shot-<index>`) when this shot takes that shot's video as reference. */
+  chainFrom?:        string | null
+  /** Brain decision. `continuous` feeds the previous shot's video. `cut` starts fresh. */
+  continuity?:       'continuous' | 'cut'
+  /** Edit into this shot. A cut is two clips, never a morph inside one generation. */
+  transition?:       ShotTransition
+  chainLink?:        'video' | 'still' | 'none'
+  continuityPriority?: 'low' | 'normal'
+  isCut?:            boolean
+  playbookFragment?: string
+  genrePresetId?:    string | null
+  aspectRatio?:      string
 }
 
 /** Internal clip for sequential chain dispatch. */
@@ -106,12 +145,15 @@ export interface DAGNode {
   shotMemory:     string[]
   estimatedCost:  number
   priority:       'critical' | 'high' | 'normal'
+  reason?:        string
 }
 
 export interface GeneratedSegment {
   shotIndex:    number
   shotId?:      string
   videoUrl:     string
+  /** Durable playback path for the mirrored file. Chain feed uses this, not the provider CDN. */
+  mediaPath?:   string
   duration:     number
   model:        string
   contentType:  ContentType  // carried through so the learning loop can attribute reward per content type
@@ -128,4 +170,8 @@ export interface OrchestrationResult {
   qualityScores:  Record<number, number>
   modelBreakdown: Record<string, { duration: number; cost: number; shots: number[] }>
   patientZero:    PatientZeroAssets
+  /** Shots and assignments from the one planner. Present on plan-only runs. */
+  plannedShots?:  StructuredShot[]
+  productionBreakdown?: ProductionBreakdown
+  compiledPlan?: CompiledFilm
 }

@@ -1,0 +1,11 @@
+---
+description: SPEC-02 color and grading. Read before changing wheels, curves, HSL, power windows, LUTs, scopes, or micro color.
+globs: ["cinematic-forge-v3/src/renderer/components/EffectsPanel.tsx", "cinematic-forge-v3/src/main/export/colorFilter.ts", "src/lib/color/**", "src/components/editor/Scopes.tsx"]
+alwaysApply: false
+---
+
+# SPEC-02 — Color and grading
+
+Contract: `docs/spec-references/SPEC-02-color-grading.md`. Inherits SPEC-00. Do not build from it until the user feeds this spec.
+
+Desktop is the flagship. Grades are non-destructive clip effects burned in at export. Where the code range is coarser than the spec, that is a range change, not a new control. Do not add a slider that maps to a few buckets.

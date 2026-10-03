@@ -1,14 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+
+import { logCaught } from '@/lib/diagnostics/caught'
+import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CharacterOnboarding } from '@/components/vault/CharacterOnboarding'
 import { ForgeCastPanel } from '@/components/vault/ForgeCastPanel'
 import type { CharacterOnboardingData } from '@/components/vault/CharacterOnboarding'
 import { toast } from '@/lib/toast'
 import { Users, Plus, Loader2, Trash2 } from 'lucide-react'
-
-const PROJECT_ID = 'global'
+import { usePlaybackStore } from '@/store/playbackStore'
+import { ensureEditorProject } from '@/lib/projects/loadProject'
 
 interface ApiCharacter {
   id: string
@@ -21,13 +23,26 @@ interface ApiCharacter {
 export function CharacterCastPanel() {
   const queryClient = useQueryClient()
   const [onboardingOpen, setOnboardingOpen] = useState(false)
+  const [createProjectId, setCreateProjectId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [forgeCastId, setForgeCastId] = useState<string | null>(null)
 
+  const editorProjectId = usePlaybackStore((s) => s.projectId)
+
+  useEffect(() => {
+    if (!onboardingOpen) return
+    const current = editorProjectId || usePlaybackStore.getState().projectId
+    if (current) {
+      setCreateProjectId(current)
+      return
+    }
+    void ensureEditorProject().then(({ projectId }) => setCreateProjectId(projectId)).catch((err) => logCaught('components/panels/CharacterCastPanel', err))
+  }, [onboardingOpen, editorProjectId])
+
   const { data: characters = [], isLoading } = useQuery<ApiCharacter[]>({
-    queryKey: ['vault-characters', PROJECT_ID],
+    queryKey: ['vault-characters', 'user'],
     queryFn: async () => {
-      const res = await fetch(`/api/vault/character/list?projectId=${PROJECT_ID}`)
+      const res = await fetch('/api/vault/character/list', { credentials: 'include' })
       if (!res.ok) return []
       return res.json() as Promise<ApiCharacter[]>
     },
@@ -40,10 +55,16 @@ export function CharacterCastPanel() {
         const fd = new FormData()
         fd.append('name', data.name)
         if (data.description?.trim()) fd.append('description', data.description.trim())
-        fd.append('projectId', PROJECT_ID)
+        const projectId = editorProjectId || (await ensureEditorProject()).projectId
+        fd.append('projectId', projectId)
         fd.append('triggerWord', data.triggerWord)
         fd.append('modelFamily', data.modelFamily)
         fd.append('trainLora', data.trainLora ? 'true' : 'false')
+        if (data.trainLora) {
+          const { primaryCastTrainer, trainingCostUsd } = await import('@cinema/core')
+          fd.append('confirmedCostUsd', String(trainingCostUsd(primaryCastTrainer(), 1000)))
+          fd.append('subjectConsent', 'true')
+        }
         data.referenceImages.forEach((f) => fd.append('images', f))
         const res = await fetch('/api/vault/character/create', {
           method: 'POST',
@@ -51,13 +72,18 @@ export function CharacterCastPanel() {
           credentials: 'include',
         })
         if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { error?: string }
+          const body = await res.json().catch((err) => {
+            console.warn("[caught] src/components/panels/CharacterCastPanel.tsx:75", err instanceof Error ? { name: err.name, message: err.message } : err)
+            return (({}))
+          }) as { error?: string }
           throw new Error(body.error ?? 'Create failed')
         }
       }
-      await queryClient.invalidateQueries({ queryKey: ['vault-characters', PROJECT_ID] })
+      await queryClient.invalidateQueries({ queryKey: ['vault-characters', 'user'] })
       toast.success(`${data.name} added to vault`)
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/panels/CharacterCastPanel.tsx:81", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       toast.error('Could not create character')
     } finally {
       setCreating(false)
@@ -66,7 +92,7 @@ export function CharacterCastPanel() {
 
   const removeCharacter = async (id: string, name: string) => {
     await fetch(`/api/vault/character/${id}`, { method: 'DELETE' })
-    await queryClient.invalidateQueries({ queryKey: ['vault-characters', PROJECT_ID] })
+    await queryClient.invalidateQueries({ queryKey: ['vault-characters', 'user'] })
     toast.info(`${name} removed`)
   }
 
@@ -141,7 +167,7 @@ export function CharacterCastPanel() {
         open={onboardingOpen}
         onOpenChange={setOnboardingOpen}
         onComplete={handleOnboardingComplete}
-        projectId={PROJECT_ID}
+        projectId={createProjectId ?? editorProjectId ?? ''}
       />
 
       {forgeCastId && (

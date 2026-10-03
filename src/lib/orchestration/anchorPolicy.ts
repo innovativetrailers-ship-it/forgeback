@@ -4,11 +4,15 @@ export interface AnchorContext {
   isVeryFirstClipOfFilm: boolean
 }
 
+function opensOnItsKeyframe(shot: StructuredShot): boolean {
+  return shot.startsAtHardCut === true || shot.continuity === 'cut' || shot.isCut === true
+}
+
 export function resolveAnchorPolicy(
   shot: StructuredShot,
   ctx: AnchorContext,
 ): AnchorPolicy {
-  if (ctx.isVeryFirstClipOfFilm) {
+  if (opensOnItsKeyframe(shot) || ctx.isVeryFirstClipOfFilm) {
     return shot.storyboardUrl ? 'keyframe' : 'none'
   }
   return 'previous-frame'

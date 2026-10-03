@@ -35,6 +35,8 @@ export async function POST(
   try {
     await checkAndDeductCredits(userId, creditKey as Parameters<typeof checkAndDeductCredits>[1])
   } catch (err) {
+    console.warn("[caught] src/app/api/film/[id]/produce/route.ts:37", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -71,6 +73,8 @@ export async function POST(
         send({ status: 'complete', outputUrl })
         controller.close()
       } catch (err) {
+        console.warn("[caught] src/app/api/film/[id]/produce/route.ts:73", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         await refundOperationCredits(userId, creditKey)
         send({ status: 'error', error: err instanceof Error ? err.message : 'Production failed' })
         controller.close()

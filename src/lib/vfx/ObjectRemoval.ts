@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { claudeCall } from '@/lib/llm/anthropicClient'
 import { renderQueue } from '@/lib/queue'
 
 export type BlendMode = 'seamless' | 'conservative' | 'aggressive'
@@ -68,11 +68,7 @@ export async function analyzeObjectWithClaude(
   imageUrl: string,
   objectDescription: string,
 ): Promise<ObjectAnalysis> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not configured')
-
-  const client = new Anthropic({ apiKey })
-  const response = await client.messages.create({
+  const response = await claudeCall({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 512,
     system: `You are a video inpainting analyst. Analyse images and return JSON bounding box data for object removal.
@@ -86,12 +82,12 @@ Coordinates are normalised 0–1 (top-left origin). maskSuggestion should includ
         { type: 'text', text: `Find and return a bounding box mask for: "${objectDescription}". Include artifacts like shadows and reflections in your analysis.` },
       ],
     }],
-  })
+  }, { source: 'vfx.objremoval' })
 
   const textBlock = response.content.find((b) => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') throw new Error('No response from Claude')
 
-  let jsonText = textBlock.text.trim()
+  let jsonText = (textBlock.text ?? '').trim()
   const fence = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (fence) jsonText = fence[1].trim()
 

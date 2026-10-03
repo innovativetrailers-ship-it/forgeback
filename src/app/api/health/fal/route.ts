@@ -32,6 +32,8 @@ export async function GET() {
       })),
     }, { status: health.ok ? 200 : 503 })
   } catch (err) {
+    console.warn("[caught] src/app/api/health/fal/route.ts:34", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({
       ok: false,
       error: err instanceof Error ? err.message : String(err),

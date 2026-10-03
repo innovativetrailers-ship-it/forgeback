@@ -2,8 +2,9 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useEditorStore } from '@/store/editor'
+import { useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
 import { useUIStore } from '@/store/ui'
-import { applyRoughCutToRecipe, type CutStyle, type CutTone, type RoughCutResult } from '@/lib/editing/RoughCutCopilot'
+import { applyRoughCutToRecipe, type CutStyle, type CutTone, type RoughCutResult } from '@/lib/editing/roughCutShape'
 
 interface RoughCutDialogProps {
   open: boolean
@@ -28,7 +29,7 @@ const TONE_OPTIONS: Array<{ value: CutTone; label: string; icon: string }> = [
 ]
 
 export function RoughCutDialog({ open, onClose }: RoughCutDialogProps) {
-  const recipe = useEditorStore((s) => s.recipe)
+  const recipe = useEditorRecipeView()
   const setRecipe = useEditorStore((s) => s.setRecipe)
   const addToast = useUIStore((s) => s.addToast)
 
@@ -100,6 +101,8 @@ export function RoughCutDialog({ open, onClose }: RoughCutDialogProps) {
       setResult(body.result)
       setPhase('preview')
     } catch (err: unknown) {
+      console.warn("[caught] src/components/editor/RoughCutDialog.tsx:103", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       if (err instanceof DOMException && err.name === 'AbortError') return
       setErrorMessage(err instanceof Error ? err.message : 'Unknown error')
       setPhase('error')

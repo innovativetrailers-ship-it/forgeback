@@ -1,16 +1,13 @@
-import Anthropic from '@anthropic-ai/sdk'
-import type { TimelineRecipe, Clip, Track } from '@/store/editor'
+import { claudeCall } from '@/lib/llm/anthropicClient'
+import {
+  type CutStyle,
+  type CutTone,
+  type RoughCutClipSelection,
+  type RoughCutResult,
+} from '@/lib/editing/roughCutShape'
 
-// ─── Public types ─────────────────────────────────────────────────────────────
-
-export type CutStyle =
-  | 'fast-paced'
-  | 'cinematic'
-  | 'documentary'
-  | 'interview'
-  | 'music-video'
-
-export type CutTone = 'energetic' | 'serious' | 'humorous' | 'emotional'
+export type { CutStyle, CutTone, RoughCutClipSelection, RoughCutResult } from '@/lib/editing/roughCutShape'
+export { applyRoughCutToRecipe } from '@/lib/editing/roughCutShape'
 
 export interface RoughCutRequest {
   projectId: string
@@ -25,22 +22,6 @@ export interface RoughCutRequest {
   targetDuration: number
   style: CutStyle
   tone: CutTone
-}
-
-export interface RoughCutClipSelection {
-  clipId: string
-  startTime: number
-  duration: number
-  trimIn: number
-  trimOut: number
-  reason: string
-}
-
-export interface RoughCutResult {
-  selections: RoughCutClipSelection[]
-  totalDuration: number
-  styleNotes: string
-  brollGaps: Array<{ startTime: number; duration: number; suggestion: string }>
 }
 
 // ─── Pacing profiles ──────────────────────────────────────────────────────────
@@ -127,8 +108,6 @@ function isRoughCutResultPayload(v: unknown): v is RoughCutResult {
 // ─── Main: generate rough cut ─────────────────────────────────────────────────
 
 export async function generateRoughCut(req: RoughCutRequest): Promise<RoughCutResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not configured')
   if (req.clips.length === 0) throw new Error('Cannot generate rough cut: no clips in project')
 
   const totalAvailable = req.clips.reduce((sum, c) => sum + c.duration, 0)
@@ -175,20 +154,19 @@ ${totalAvailable < req.targetDuration ? `\n⚠ Material shorter than target by $
 
 Output ONLY the JSON object.`
 
-  const client = new Anthropic({ apiKey })
-  const response = await client.messages.create({
+  const response = await claudeCall({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 4096,
     system: systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
-  })
+  }, { source: 'editing.roughcut' })
 
   const textBlock = response.content.find((b) => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') {
     throw new Error('Anthropic returned no text content')
   }
 
-  let jsonText = textBlock.text.trim()
+  let jsonText = (textBlock.text ?? '').trim()
   const fenceMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (fenceMatch) jsonText = fenceMatch[1].trim()
 
@@ -235,45 +213,3 @@ Output ONLY the JSON object.`
   return parsed
 }
 
-// ─── Apply result to recipe ───────────────────────────────────────────────────
-
-export function applyRoughCutToRecipe(
-  recipe: TimelineRecipe,
-  result: RoughCutResult,
-): TimelineRecipe {
-  const clipLookup = new Map<string, Clip>()
-  for (const track of recipe.tracks) {
-    for (const clip of track.clips) {
-      clipLookup.set(clip.id, clip)
-    }
-  }
-
-  const videoTrackIndex = recipe.tracks.findIndex((t) => t.type === 'video')
-  const baseVideoTrack: Track =
-    videoTrackIndex >= 0
-      ? recipe.tracks[videoTrackIndex]
-      : {
-          id: 'track-video-roughcut',
-          type: 'video',
-          name: 'V1',
-          label: 'VIDEO 1',
-          height: 80,
-          muted: false,
-          locked: false,
-          solo: false,
-          clips: [],
-        }
-
-  const newClips: Clip[] = result.selections
-    .map((sel) => {
-      const original = clipLookup.get(sel.clipId)
-      if (!original) return null
-      return { ...original, startTime: sel.startTime, duration: sel.duration, trimIn: sel.trimIn, trimOut: sel.trimOut }
-    })
-    .filter((c): c is Clip => c !== null)
-
-  const newVideoTrack: Track = { ...baseVideoTrack, clips: newClips }
-  const otherTracks = recipe.tracks.filter((t) => t.type !== 'video')
-
-  return { ...recipe, tracks: [newVideoTrack, ...otherTracks] }
-}

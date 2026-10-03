@@ -18,6 +18,8 @@ export async function POST(request: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'harmonise')
   } catch (err) {
+    console.warn("[caught] src/app/api/timeline/harmonise/route.ts:20", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 

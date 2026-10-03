@@ -1,12 +1,14 @@
 'use client'
 
+
+import { logCaught } from '@/lib/diagnostics/caught'
 import { useEffect, useRef, useState } from 'react'
 import { Download, RefreshCw, Plus, Play, X, Loader2 } from 'lucide-react'
 import type { GeneratedClip } from './types'
 import { MODEL_FAMILY_COLOURS } from './types'
 import { jobPlaybackPath } from '@/lib/media/jobPlayback'
-import { probeDuration } from '@/lib/timeline/probeDuration'
-import { useTimelineStore } from '@/store/timeline'
+import { humanStatusText } from '@/lib/jobs/humanStatus'
+import { placeFinishedClip } from '@/lib/library/placeFinishedClip'
 import { toast } from '@/lib/toast'
 
 interface Props {
@@ -55,12 +57,10 @@ export function GenerationCard({
   onRegenerate,
   onAddToTimeline,
   onExpand,
-  onOpenEditor,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isHovered, setIsHovered] = useState(false)
   const [adding, setAdding] = useState(false)
-  const addClip = useTimelineStore((s) => s.addClip)
   const modelColour = MODEL_FAMILY_COLOURS[clip.model] ?? '#6b7280'
 
   const isGenerating = clip.status === 'queued' || clip.status === 'processing'
@@ -70,41 +70,27 @@ export function GenerationCard({
 
   useEffect(() => {
     if (isHovered && videoRef.current && isDone) {
-      videoRef.current.play().catch(() => {})
+      videoRef.current.play().catch((err) => logCaught('components/simple/GenerationCard', err))
     } else if (!isHovered && videoRef.current) {
       videoRef.current.pause()
       videoRef.current.currentTime = 0
     }
   }, [isHovered, isDone])
 
-  async function handleAddToTimeline(e: React.MouseEvent) {
+  async function handleAddToLibrary(e: React.MouseEvent) {
     e.stopPropagation()
-    const sourceUrl = playSrc ?? clip.videoUrl
-    if (!sourceUrl) {
+    if (!playSrc && !clip.videoUrl) {
       toast.error('This result has no video to add')
       return
     }
     setAdding(true)
     try {
-      const durationSec = clip.duration > 0
-        ? clip.duration
-        : await probeDuration(sourceUrl)
-
-      addClip({
-        id: clip.jobId,
-        sourceUrl,
-        posterUrl: clip.thumbnailUrl,
-        durationSec,
-        track: 'video',
-        label: clip.prompt.slice(0, 40),
-      })
-
+      await placeFinishedClip(clip)
       onAddToTimeline?.(clip)
-      toast.success('Added to timeline')
-      onOpenEditor?.()
+      toast.success('Added to the library')
     } catch (err) {
-      console.error('add_to_timeline_failed', err)
-      toast.error('Could not add to timeline')
+      console.warn('[library] placement failed', err instanceof Error ? err.message : err)
+      toast.error(err instanceof Error ? err.message : 'Could not add to the library')
     } finally {
       setAdding(false)
     }
@@ -145,7 +131,7 @@ export function GenerationCard({
               <Loader2 className="absolute inset-0 m-auto w-5 h-5 text-[#00e5c8] animate-spin" />
             </div>
             <p className="text-xs text-white/50 text-center px-3">
-              {clip.progressMessage ?? 'Generating…'}
+              {humanStatusText(clip.userMessage, clip.progressMessage) ?? 'Generating…'}
             </p>
             {clip.etaSeconds != null && clip.etaSeconds > 0 && (
               <p className="text-[10px] text-white/30">
@@ -158,7 +144,7 @@ export function GenerationCard({
         {isFailed && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
             <X className="w-8 h-8 text-red-400" />
-            <p className="text-xs text-red-400 text-center px-3">{clip.error ?? 'Generation failed'}</p>
+            <p className="text-xs text-red-400 text-center px-3">{humanStatusText(clip.userMessage, clip.error) ?? 'Generation failed'}</p>
           </div>
         )}
 
@@ -203,15 +189,15 @@ export function GenerationCard({
 
           <button
             type="button"
-            onClick={handleAddToTimeline}
+            onClick={handleAddToLibrary}
             disabled={!isDone || adding}
             className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg
               bg-white/5 hover:bg-[#00e5c8]/20 text-white/60 hover:text-[#00e5c8] text-xs
               disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            title="Add to timeline"
+            title="Add to library"
           >
             <Plus className="w-3 h-3" />
-            {adding ? 'Adding…' : 'Timeline'}
+            {adding ? 'Adding…' : 'Library'}
           </button>
 
           <a

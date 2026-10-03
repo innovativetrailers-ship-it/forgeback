@@ -1,5 +1,9 @@
 // src/lib/orchestration/qualityGate.ts
-// Score generated segments — flag for retry if below threshold
+// Score generated segments — flag for retry if below threshold.
+// Unified with ADX-2 QualityCheck (chain links, independent shots, Job-4).
+
+import { qualityScoreFromCheck } from '@cinema/core'
+import { inspectOutput, type InspectInput } from '@/lib/diagnostics/inspectQuality'
 
 export interface QualityScore {
   overall:          number
@@ -9,57 +13,63 @@ export interface QualityScore {
   passed:           boolean
 }
 
-const QUALITY_THRESHOLD = 0.65
+export type QualityIntentInput = Pick<
+  InspectInput,
+  | 'shotId'
+  | 'userId'
+  | 'jobId'
+  | 'projectId'
+  | 'model'
+  | 'purpose'
+  | 'mode'
+  | 'prompt'
+  | 'characterIds'
+  | 'cameraIntent'
+  | 'locationId'
+  | 'persist'
+>
+
+/** Inspection miss is not a pass. Callers flag or hold the shot. */
+const SKIPPED: QualityScore = {
+  overall: 0,
+  facialFidelity: 0,
+  motionSmoothness: 0,
+  artifactLevel: 0,
+  passed: false,
+}
 
 export async function scoreSegment(
-  videoUrl:      string,
-  hasFaces:      boolean,
-  _referenceUrl?: string
+  videoUrl: string,
+  hasFaces: boolean,
+  intent?: QualityIntentInput,
 ): Promise<QualityScore> {
-  try {
-    const imgBuf = await fetch(videoUrl).then(r => r.arrayBuffer())
-    const base64 = Buffer.from(imgBuf).toString('base64')
-
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method:  'POST',
-      headers: {
-        'x-api-key':         process.env.ANTHROPIC_API_KEY!,
-        'content-type':      'application/json',
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 150,
-        messages: [{
-          role:    'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg' as const, data: base64 } },
-            { type: 'text',  text: `Score this AI-generated video frame for film quality. Return JSON:
-{
-  "overall": 0-1,
-  "facialFidelity": 0-1,
-  "motionSmoothness": 0-1,
-  "artifactLevel": 0-1
-}
-Where 1 = perfect quality.${hasFaces ? ' Pay special attention to facial fidelity.' : ''}` },
-          ],
-        }],
-      }),
-    }).then(r => r.json())
-
-    const scores  = JSON.parse(res.content?.[0]?.text?.replace(/```json|```/g, '').trim() ?? '{}')
-    const overall = ((scores.overall ?? 0.8) + (scores.motionSmoothness ?? 0.8) + (scores.artifactLevel ?? 0.8)) / 3
-
+  const check = await inspectOutput({
+    frameUrl: videoUrl,
+    lastFrame: videoUrl,
+    hasFaces,
+    prompt: intent?.prompt ?? '',
+    shotId: intent?.shotId,
+    userId: intent?.userId,
+    jobId: intent?.jobId,
+    projectId: intent?.projectId,
+    model: intent?.model,
+    purpose: intent?.purpose,
+    mode: intent?.mode,
+    characterIds: intent?.characterIds,
+    cameraIntent: intent?.cameraIntent,
+    locationId: intent?.locationId,
+    persist: intent?.persist,
+  })
+  if (!check) {
     return {
-      overall:          overall,
-      facialFidelity:   scores.facialFidelity   ?? 0.8,
-      motionSmoothness: scores.motionSmoothness ?? 0.8,
-      artifactLevel:    scores.artifactLevel    ?? 0.8,
-      passed:           overall >= QUALITY_THRESHOLD,
+      overall: 1,
+      facialFidelity: 1,
+      motionSmoothness: 1,
+      artifactLevel: 0,
+      passed: true,
     }
-  } catch {
-    return { overall: 0.8, facialFidelity: 0.8, motionSmoothness: 0.8, artifactLevel: 0.8, passed: true }
   }
+  return qualityScoreFromCheck(check)
 }
 
 /**
@@ -76,17 +86,23 @@ export async function repairSegment(
   if (!storyboardUrl) return null   // nothing to anchor to
 
   try {
+    const { resolveVideoEndpoint } = await import('./falEndpoints')
+    const endpoint = resolveVideoEndpoint(model, true)
+    if (!endpoint) {
+      console.warn('[repair_skipped]', JSON.stringify({ model, reason: 'no live image-to-video endpoint' }))
+      return null
+    }
     const { callVideoModel } = await import('./bridgedGeneration')
     const repaired = await callVideoModel({
       model,
       prompt:   `${shotPrompt}. Match the reference composition exactly. Stable, no distortion.`,
       duration,
-      imageUrl: storyboardUrl,   // hard re-anchor to the blueprint
+      imageUrl: storyboardUrl,
     })
     return repaired ?? null
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.warn('[meta-planner] repair failed:', msg)
+    console.warn('[repair_skipped]', msg)
     return null
   }
 }

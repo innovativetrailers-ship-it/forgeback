@@ -14,7 +14,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let body: Record<string, unknown>
   try {
     body = (await req.json()) as Record<string, unknown>
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/location/search/route.ts:17", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 

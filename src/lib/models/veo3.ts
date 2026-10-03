@@ -1,5 +1,5 @@
 import { runFal, extractVideoUrl } from '@/lib/fal/client'
-import { buildFalVideoInput } from '@/lib/fal/videoPayloads'
+import { buildPayload } from '@/lib/fal/videoPayloads'
 import { resolveModel } from '@/lib/models/resolve'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
@@ -8,7 +8,7 @@ export async function generateVideo(
 ): Promise<GenerateVideoOutput> {
   const def = resolveModel('veo-3.1')
   const falModel = def.falEndpoint!
-  const falInput = await buildFalVideoInput(falModel, 'veo-3.1', {
+  const falInput = await buildPayload(falModel, 'veo-3.1', {
     prompt: input.prompt,
     duration: input.duration,
     aspectRatio: input.aspectRatio ?? '16:9',

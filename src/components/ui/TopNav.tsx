@@ -20,6 +20,7 @@ import { BrandLogo } from '@/components/brand/BrandLogo'
 import { cn } from '@/lib/utils'
 import { JobProgressBadge } from './JobProgressBadge'
 import { useStudioStore, type AppMode, type OutcomeTier } from '@/store/editor'
+import { TIER_POLICY } from '@/lib/orchestration/tierPolicy'
 
 const MODES: Array<{ label: string; href: string; mode: AppMode }> = [
   { label: 'Simple',   href: '/simple',   mode: 'simple' },
@@ -93,7 +94,7 @@ export function TopNav() {
                 <button
                   key={t.value}
                   onClick={() => setTier(t.value)}
-                  title={t.description}
+                  title={TIER_POLICY[t.value].label}
                   className={cn(
                     'relative px-3 py-1.5 rounded-md text-xs font-medium transition-all',
                     activeTier === t.value
@@ -107,6 +108,9 @@ export function TopNav() {
                   )}
                 </button>
               ))}
+              <span className="ml-2 max-w-[16rem] truncate text-[10px] text-muted-foreground" title={TIER_POLICY[activeTier].label}>
+                {TIER_POLICY[activeTier].label}
+              </span>
             </div>
           )}
         </nav>

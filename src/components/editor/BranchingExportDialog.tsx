@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo } from 'react'
 import { GitBranch, Plus, Trash2, Copy, Check, ArrowRight } from 'lucide-react'
-import { useEditorStore } from '@/store/editor'
+import { useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
 import { useUIStore } from '@/store/ui'
 import type { BranchingConfig, BranchNode, BranchChoice } from '@/lib/export/BranchingExport'
 
@@ -19,7 +19,7 @@ const uid = () => `br-${Date.now()}-${++_counter}`
 const THEMES = ['dark', 'light', 'cinema'] as const
 
 export function BranchingExportDialog() {
-  const recipe = useEditorStore((s) => s.recipe)
+  const recipe = useEditorRecipeView()
   const addToast = useUIStore((s) => s.addToast)
 
   const [nodes, setNodes] = useState<DraftNode[]>([])
@@ -109,6 +109,8 @@ export function BranchingExportDialog() {
       setResult(data)
       addToast('Branching video exported!', 'success')
     } catch (err: unknown) {
+      console.warn("[caught] src/components/editor/BranchingExportDialog.tsx:111", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError(err instanceof Error ? err.message : 'Export failed')
     } finally {
       setLoading(false)

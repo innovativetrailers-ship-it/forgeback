@@ -1,5 +1,4 @@
 import {
-  cloneVoiceFromBuffers,
   convertSpeechBuffer,
   generateSoundEffectBuffer,
   generateVoiceBuffer,
@@ -22,6 +21,7 @@ export async function synthesiseVoice(params: {
     similarityBoost: params.similarity,
     style: params.style,
     speakerBoost: params.speakerBoost,
+    source: 'audio.voice',
   })
 }
 
@@ -30,12 +30,8 @@ export async function cloneVoice(params: {
   description: string
   audioUrls: string[]
 }): Promise<{ voiceId: string }> {
-  const files: Buffer[] = []
-  for (const url of params.audioUrls) {
-    const buf = await fetch(url).then((r) => r.arrayBuffer())
-    files.push(Buffer.from(buf))
-  }
-  const voiceId = await cloneVoiceFromBuffers(params.name, files, params.description)
+  const { cloneVoiceFromUrls } = await import('@/lib/elevenlabs/client')
+  const voiceId = await cloneVoiceFromUrls(params.audioUrls, 'audio.voice')
   return { voiceId }
 }
 
@@ -44,7 +40,7 @@ export async function speechToSpeech(params: {
   voiceId: string
   modelId?: string
 }): Promise<Buffer> {
-  return convertSpeechBuffer(params.audioBuffer, params.voiceId, { modelId: params.modelId })
+  return convertSpeechBuffer(params.audioBuffer, params.voiceId, { modelId: params.modelId, source: 'audio.voice' })
 }
 
 export async function generateSFX(params: {

@@ -31,7 +31,9 @@ export async function POST(req: NextRequest) {
   let lastFrame = ''
   try {
     lastFrame = (await extractTailFrame(url)) ?? ''
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/studio/shot/manual/route.ts:34", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     lastFrame = ''
   }
 

@@ -16,6 +16,8 @@ export interface RecordEpisodeParams {
 }
 
 export async function recordEpisode(params: RecordEpisodeParams): Promise<void> {
+  const { memoryAllows } = await import('@/lib/privacy/gate')
+  if (!(await memoryAllows(params.userId, 'episodic'))) return
   const vec = await embed(`${params.summary} ${JSON.stringify(params.intent ?? '')}`)
   await db.$executeRaw`
     INSERT INTO "EpisodicMemory" (id, "userId", "projectId", kind, summary, intent, brief, outcome, embedding, importance, "createdAt", "lastAccessed")
@@ -37,6 +39,8 @@ export interface RecalledEpisode {
 }
 
 export async function recallEpisodes(userId: string, query: string, limit = 5): Promise<RecalledEpisode[]> {
+  const { memoryAllows } = await import('@/lib/privacy/gate')
+  if (!(await memoryAllows(userId, 'episodic'))) return []
   const vec = await embed(query)
   const literal = toVector(vec)
   const rows = await db.$queryRaw<RecalledEpisode[]>`

@@ -1,7 +1,19 @@
 /**
- * Zero-cost FAL endpoint probes — shared by verify-fal-endpoints.mjs and preflight gate.
- * Uses invalid payloads so queue submit returns 422 (never queues real generations).
+ * FAL endpoint existence checks. Default path is the free OpenAPI document.
+ * A queue POST is allowed only when ALLOW_BILLABLE_FAL_PROBE=true and NODE_ENV is not production.
  */
+
+function billableFalProbeAllowed(): boolean {
+  return process.env.ALLOW_BILLABLE_FAL_PROBE === 'true' && process.env.NODE_ENV !== 'production'
+}
+
+async function probeViaOpenApi(endpoint: string): Promise<ProbeResult> {
+  const url = `https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=${encodeURIComponent(endpoint)}`
+  const res = await fetch(url)
+  if (res.status === 200) return { endpoint, status: 'VALID', code: 200 }
+  if (res.status === 404) return { endpoint, status: 'DEAD', code: 404 }
+  return { endpoint, status: 'UNKNOWN', code: res.status }
+}
 
 export type ProbeStatus =
   | 'VALID'
@@ -40,16 +52,15 @@ function isDeprecatedBody(body: unknown): boolean {
 }
 
 async function runProbe(endpoint: string, falKey: string): Promise<ProbeResult> {
-  const res = await fetch(`https://queue.fal.run/${endpoint}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Key ${falKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(FAL_PROBE_BODY),
-  })
+  if (!billableFalProbeAllowed()) return probeViaOpenApi(endpoint)
 
-  const body = await res.json().catch(() => ({}))
+  const { billableFalQueueProbe } = await import('@/lib/fal/falQueue')
+  const res = await billableFalQueueProbe(endpoint, falKey)
+
+  const body = await res.json().catch((err) => {
+    console.warn("[caught] src/lib/fal/probeEndpoint.ts:60", err instanceof Error ? { name: err.name, message: err.message } : err)
+    return (({}))
+  })
 
   if (isDeprecatedBody(body)) {
     return { endpoint, status: 'DEPRECATED', code: res.status, detail: body.detail ?? body }
@@ -83,7 +94,7 @@ async function runProbe(endpoint: string, falKey: string): Promise<ProbeResult> 
 
 export async function probeEndpoint(endpoint: string, falKey?: string): Promise<ProbeResult> {
   const key = falKey ?? process.env.FAL_KEY ?? process.env.FAL_API_KEY
-  if (!key) {
+  if (!key && billableFalProbeAllowed()) {
     return { endpoint, status: 'AUTH_ERROR', detail: 'FAL_KEY not configured' }
   }
 
@@ -93,7 +104,7 @@ export async function probeEndpoint(endpoint: string, falKey?: string): Promise<
   }
 
   try {
-    const result = await runProbe(endpoint, key)
+    const result = await runProbe(endpoint, key ?? '')
     probeCache.set(endpoint, {
       status: result.status,
       code: result.code,
@@ -101,6 +112,8 @@ export async function probeEndpoint(endpoint: string, falKey?: string): Promise<
     })
     return result
   } catch (err) {
+    console.warn("[caught] src/lib/fal/probeEndpoint.ts:111", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return {
       endpoint,
       status: 'NETWORK_ERROR',

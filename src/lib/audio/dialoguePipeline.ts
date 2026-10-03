@@ -1,9 +1,10 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import { writeFileSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import pLimit from 'p-limit'
 import { db } from '@/lib/db'
-import { generateVoiceBuffer } from '@/lib/elevenlabs/client'
+import { alignSpeech, generateVoiceBuffer } from '@/lib/elevenlabs/client'
 import { measureAudioMs } from '@/lib/audio/measure'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { listShotPlan } from '@/lib/studio/shotPlan'
@@ -35,10 +36,10 @@ export async function generateVoiceLines(projectId: string, jobId?: string): Pro
       const shot = t.shotPlanId ? shotByClipId.get(t.shotPlanId) : undefined
       let speed = 1.0
       let buffer = await generateVoiceBuffer(t.prompt, t.voiceId, {
-        modelId: 'eleven_multilingual_v2',
         stability: 0.5,
         similarityBoost: 0.75,
         speed,
+        source: 'audio.voice',
       })
 
       const work = mkdtempSync(join(tmpdir(), 'voice-'))
@@ -54,10 +55,18 @@ export async function generateVoiceLines(projectId: string, jobId?: string): Pro
           stability: 0.5,
           similarityBoost: 0.75,
           speed,
+          source: 'audio.voice',
         })
         writeFileSync(local, buffer)
         ms = await measureAudioMs(local)
         if (ms > shot.duration * 1000) durationWarning = true
+      }
+
+      let alignmentWords: Array<{ text: string; start: number; end: number }> | undefined
+      try {
+        alignmentWords = await alignSpeech(buffer, t.prompt, 'audio.voice')
+      } catch (alignErr) {
+        console.warn('[dialogue] alignment skipped:', alignErr instanceof Error ? alignErr.message : alignErr)
       }
 
       const url = await uploadToR2(
@@ -73,6 +82,7 @@ export async function generateVoiceLines(projectId: string, jobId?: string): Pro
           prevUrl: t.url,
           durationMs: ms,
           durationWarning,
+          ...(alignmentWords ? { alignmentWords } : {}),
           status: 'READY',
         },
       })
@@ -80,7 +90,7 @@ export async function generateVoiceLines(projectId: string, jobId?: string): Pro
       await db.audioTrack.update({
         where: { id: t.id },
         data: { status: 'FAILED' },
-      }).catch(() => {})
+      }).catch((err) => logCaught('lib/audio/dialoguePipeline', err))
       console.error(`[dialogue] track ${t.id} failed:`, err instanceof Error ? err.message : err)
     }
   })))

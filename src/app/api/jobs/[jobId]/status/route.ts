@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { parseProgressEvents } from '@/lib/jobs/jobProgressEvents'
+import { humanStatusText } from '@/lib/jobs/humanStatus'
 
 export async function GET(
   request: NextRequest,
@@ -55,13 +56,25 @@ export async function GET(
     : 'processing'
 
   const progressEvents = parseProgressEvents(job.metadata)
+  const interpreted = await db.shotError.findFirst({
+    where: { jobId },
+    orderBy: { createdAt: 'desc' },
+    select: { userMessage: true },
+  })
+  const userMessage = humanStatusText(interpreted?.userMessage, undefined)
+  const failed = streamStatus === 'failed'
 
   return NextResponse.json({
     ...job,
     status: streamStatus,
     progress: job.progressPct,
-    message: job.statusMessage,
-    error: job.errorMessage,
+    userMessage,
+    message: failed
+      ? (userMessage ?? humanStatusText(undefined, job.errorMessage) ?? humanStatusText(undefined, job.statusMessage))
+      : humanStatusText(undefined, job.statusMessage),
+    error: failed
+      ? (userMessage ?? humanStatusText(undefined, job.errorMessage) ?? job.errorMessage)
+      : job.errorMessage,
     outputUrl: job.outputUrl,
     result: job.status === 'COMPLETE' ? { outputUrl: job.outputUrl } : null,
     lastEvent: progressEvents.at(-1) ?? null,

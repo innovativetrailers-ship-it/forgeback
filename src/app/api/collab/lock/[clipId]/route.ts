@@ -17,7 +17,9 @@ export async function POST(
     if (typeof body.projectId !== 'string' || !body.projectId.trim())
       return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
     projectId = body.projectId.trim()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/collab/lock/[clipId]/route.ts:20", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 

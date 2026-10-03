@@ -1,12 +1,13 @@
 // src/lib/orchestration/bridgedGeneration.ts
 // FilmWeaver dual cache + tail-to-head keyframe bridging
 
+import { falEndpoint } from '@cinema/core/endpoints'
 import { runFal, extractVideoUrl, extractImageUrl } from '@/lib/fal/client'
 import { uploadToR2 } from '@/lib/storage/r2'
-import { recordPerformance } from '@/lib/cognition/routing/performance'
 import { analyseFrameMotion, injectMotionContext } from './opticalFlow'
 import { generateVideo } from './dispatch'
 import type { GenerationMode } from './costGuard'
+import { seedanceAssetRefs } from './seedanceRefs'
 import type { DAGNode, GeneratedSegment, PatientZeroAssets } from './types'
 
 // Per-model generation timeout ceilings (milliseconds).
@@ -51,7 +52,7 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
 }
 
 export async function extractTailFrame(videoUrl: string): Promise<string> {
-  const result = await runFal<{ image?: { url: string }; output_url?: string }>('fal-ai/ffmpeg', {
+  const result = await runFal<{ image?: { url: string }; output_url?: string }>(falEndpoint('ffmpeg'), {
     video_url: videoUrl,
     command: 'extract_last_frame',
     output_format: 'jpg',
@@ -66,26 +67,28 @@ export interface VideoModelParams {
   imageUrl?:       string
   endImageUrl?:    string
   patientZeroUrl?: string
+  characterIds?:   string[]
+  locationId?:     string | null
+  projectId?:      string
+  camera?:         import('@cinema/core').PromptCamera | null
+  genrePresetId?:  string | null
+  continueExactFrame?: boolean
+  referenceImages?: { url: string; label?: string; role: 'character' | 'location'; primary?: boolean }[]
+  referenceVideos?: { url: string; label?: string; role?: 'motion_ref' | 'style_ref' | 'continuation' }[]
+  referenceAudios?: { url: string; label?: string; role?: 'dialogue' | 'music' | 'sfx' }[]
   jobId?:           string
   shotIndex?:       number
   generationMode?:  GenerationMode
+  resolution?:      string
+  characterLora?:   import('@cinema/core').LoraAssetRef
+  styleLora?:       import('@cinema/core').LoraAssetRef
   onSubProgress?:   import('./types').SubProgressFn
   onPoll?:          () => void | Promise<void>
+  onSubmission?:    (submission: import('@/lib/fal/falQueue').FalSubmission) => void | Promise<void>
 }
 
-// Public entry: times every model call and records live performance (latency +
-// success) into the cognitive routing matrix. Non-fatal — a cognition/DB failure
-// is swallowed and never affects the render.
 export async function callVideoModel(params: VideoModelParams): Promise<string> {
-  const t0 = Date.now()
-  let ok = false
-  try {
-    const url = await runVideoModel(params)
-    ok = true
-    return url
-  } finally {
-    void recordPerformance({ model: params.model, latencyMs: Date.now() - t0, success: ok }).catch(() => {})
-  }
+  return runVideoModel(params)
 }
 
 async function runVideoModel(params: VideoModelParams): Promise<string> {
@@ -133,8 +136,9 @@ export async function generateWithBridging(
       }
     }
 
-    const characterRef = node.shot.charactersPresent.length > 0
-      ? assets.characters.find(c => c.name === node.shot.charactersPresent[0])?.imageUrl
+    const present = node.shot.charactersPresent ?? []
+    const characterRef = present.length > 0
+      ? (assets.characters ?? []).find(c => c.name === present[0])?.imageUrl
       : undefined
 
     let videoUrl = ''
@@ -149,6 +153,8 @@ export async function generateWithBridging(
             duration:       node.shot.duration,
             imageUrl:       tailFrameUrl,
             patientZeroUrl: characterRef,
+            continueExactFrame: Boolean(tailFrameUrl),
+            referenceImages: tailFrameUrl ? undefined : seedanceAssetRefs(node.shot, assets),
             onSubProgress: (sub) => {
               const shotsBefore    = node.shot.shotIndex
               const currentFrac    = sub.pct / 100
@@ -187,7 +193,9 @@ export async function generateWithBridging(
         )
         shotMemoryCache.push(r2Kf)
       }
-    } catch { /* non-fatal */ }
+    } catch (err) {
+      console.warn("[caught] src/lib/orchestration/bridgedGeneration.ts:208", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal */ }
 
     results.push({
       shotIndex:    node.shot.shotIndex,

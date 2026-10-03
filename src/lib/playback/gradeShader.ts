@@ -67,6 +67,7 @@ export const FRAGMENT_SHADER = `
 
 export interface GradeRenderer {
   render: (params: LiveGradeParams) => void
+  dispose: () => void
 }
 
 function compile(gl: WebGLRenderingContext, type: number, src: string): WebGLShader | null {
@@ -87,9 +88,25 @@ export function initGradeGL(canvas: HTMLCanvasElement, videoEl: HTMLVideoElement
   const gl = canvas.getContext('webgl')
   if (!gl) return null
 
+  let lost = false
+  const onLost = (event: Event) => {
+    event.preventDefault()
+    lost = true
+  }
+  const onRestored = () => {
+    lost = false
+  }
+  canvas.addEventListener('webglcontextlost', onLost)
+  canvas.addEventListener('webglcontextrestored', onRestored)
+
   const vs = compile(gl, gl.VERTEX_SHADER, VERTEX_SHADER)
   const fs = compile(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER)
-  if (!vs || !fs) return null
+  if (!vs || !fs) {
+    canvas.removeEventListener('webglcontextlost', onLost)
+    canvas.removeEventListener('webglcontextrestored', onRestored)
+    gl.getExtension('WEBGL_lose_context')?.loseContext()
+    return null
+  }
 
   const prog = gl.createProgram()
   if (!prog) return null
@@ -133,6 +150,7 @@ export function initGradeGL(canvas: HTMLCanvasElement, videoEl: HTMLVideoElement
   }
 
   const render = (params: LiveGradeParams) => {
+    if (lost || gl.isContextLost()) return
     if (videoEl.readyState < 2) return // no frame yet
     canvas.width  = videoEl.videoWidth  || 1920
     canvas.height = videoEl.videoHeight || 1080
@@ -145,5 +163,16 @@ export function initGradeGL(canvas: HTMLCanvasElement, videoEl: HTMLVideoElement
     gl.drawArrays(gl.TRIANGLES, 0, 6)
   }
 
-  return { render }
+  const dispose = () => {
+    canvas.removeEventListener('webglcontextlost', onLost)
+    canvas.removeEventListener('webglcontextrestored', onRestored)
+    gl.deleteTexture(tex)
+    gl.deleteBuffer(buf)
+    gl.deleteProgram(prog)
+    gl.deleteShader(vs)
+    gl.deleteShader(fs)
+    gl.getExtension('WEBGL_lose_context')?.loseContext()
+  }
+
+  return { render, dispose }
 }

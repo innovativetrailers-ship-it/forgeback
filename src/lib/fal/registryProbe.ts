@@ -2,7 +2,7 @@
  * Deep FAL registry probes — existence via stored execution result + payload contract.
  */
 
-import { buildFalVideoInput } from '@/lib/fal/videoPayloadAdapters'
+import { buildPayload } from '@/lib/fal/videoPayloadAdapters'
 import {
   listAllFalEndpointIds,
   VIDEO_MODEL_REGISTRY,
@@ -114,19 +114,33 @@ async function pollStatusUrl(statusUrl: string, key: string, maxMs = 45_000): Pr
   return { status: 'TIMEOUT' }
 }
 
-/** Submit {} and read stored execution result — catches wrong namespaces. */
+function billableFalProbeAllowed(): boolean {
+  return process.env.ALLOW_BILLABLE_FAL_PROBE === 'true' && process.env.NODE_ENV !== 'production'
+}
+
+async function probeExistenceViaOpenApi(endpoint: string): Promise<ExistenceProbeResult> {
+  const url = `https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=${encodeURIComponent(endpoint)}`
+  const res = await fetch(url)
+  if (res.status === 200) return { id: endpoint, alive: true, http: 200, status: 'EXISTS' }
+  if (res.status === 404) return { id: endpoint, alive: false, http: 404, status: 'DEAD', code: 404 }
+  return { id: endpoint, alive: false, http: res.status, status: 'UNKNOWN', code: res.status }
+}
+
+/** Free OpenAPI existence check. Queue POST only behind ALLOW_BILLABLE_FAL_PROBE. */
 export async function probeEndpointExistence(
   endpoint: string,
   falKey: string,
 ): Promise<ExistenceProbeResult> {
+  if (!billableFalProbeAllowed()) return probeExistenceViaOpenApi(endpoint)
+
   const id = endpoint
   try {
-    const sub = await fetch(`https://queue.fal.run/${endpoint}`, {
-      method: 'POST',
-      headers: authHeaders(falKey),
-      body: '{}',
-    })
-    const subBody = await sub.json().catch(() => ({})) as Record<string, unknown>
+    const { billableFalQueueProbe } = await import('@/lib/fal/falQueue')
+    const sub = await billableFalQueueProbe(endpoint, falKey)
+    const subBody = await sub.json().catch((err) => {
+      console.warn("[caught] src/lib/fal/registryProbe.ts:140", err instanceof Error ? { name: err.name, message: err.message } : err)
+      return (({}))
+    }) as Record<string, unknown>
     let http = sub.status
 
     if (sub.status === 404) {
@@ -145,7 +159,10 @@ export async function probeEndpointExistence(
       const responseUrl = subBody.response_url as string | undefined
       if (responseUrl && polled.status === 'COMPLETED') {
         const resultRes = await fetch(responseUrl, { headers: authHeaders(falKey) })
-        const resultBody = await resultRes.json().catch(() => ({}))
+        const resultBody = await resultRes.json().catch((err) => {
+          console.warn("[caught] src/lib/fal/registryProbe.ts:159", err instanceof Error ? { name: err.name, message: err.message } : err)
+          return (({}))
+        })
         http = resultRes.status
         if (resultRes.status === 404 || isNotFoundBody(resultBody)) {
           return { id, alive: false, http, status: 'DEAD', code: resultRes.status, detail: resultBody }
@@ -167,6 +184,8 @@ export async function probeEndpointExistence(
     }
     return { id, alive: true, http, status: 'EXISTS', detail: subBody }
   } catch (err) {
+    console.warn("[caught] src/lib/fal/registryProbe.ts:180", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return {
       id,
       alive: false,
@@ -196,7 +215,7 @@ function isVideoEndpoint(endpoint: string): boolean {
     || endpoint.includes('dream-machine')
 }
 
-/** OpenAPI required fields vs buildFalVideoInput — video endpoints only. */
+/** OpenAPI required fields vs buildPayload — video endpoints only. */
 export async function probePayloadContract(
   endpoint: string,
   registryKey?: string,
@@ -218,7 +237,7 @@ export async function probePayloadContract(
       imageUrl: mode === 'i2v' ? SAMPLE_SHOT.imageUrl : undefined,
       audioPolicy: 'elevenlabs' as const,
     }
-    const sample = await buildFalVideoInput(endpoint, key, intent)
+    const sample = await buildPayload(endpoint, key, intent)
 
     let required: string[] = []
     try {
@@ -229,7 +248,9 @@ export async function probePayloadContract(
         const openapi = await schemaRes.json() as Record<string, unknown>
         required = inputSchemaRequired(openapi)
       }
-    } catch { /* non-fatal */ }
+    } catch (err) {
+      console.warn("[caught] src/lib/fal/registryProbe.ts:243", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal */ }
 
     const missing = required.filter((k) => !(k in sample))
     if (missing.length) {
@@ -237,6 +258,8 @@ export async function probePayloadContract(
     }
     return { id: endpoint, registryKey: key, status: 'OK' }
   } catch (err) {
+    console.warn("[caught] src/lib/fal/registryProbe.ts:250", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return {
       id: endpoint,
       registryKey: key,

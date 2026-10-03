@@ -1,11 +1,9 @@
 import { db } from '@/lib/db'
 import { appendJobProgressEvent } from '@/lib/jobs/jobProgressEvents'
-import { buildDAG } from '@/lib/orchestration/dagRouter'
-import { generateAllScenes } from '@/lib/orchestration/chainGeneration'
-import { groupIntoScenes } from '@/lib/orchestration/chainBuilder'
+import { toRagConstraint } from '@/lib/orchestration/tierPolicy'
+import { isShotPurpose } from '@cinema/core'
+import { orchestrate } from '@/lib/orchestration'
 import { extractDialogueForShots } from '@/lib/orchestration/dialogueExtractor'
-import { generateVoiceLines } from '@/lib/audio/dialoguePipeline'
-import { runLipSyncPass } from '@/lib/orchestration/lipSyncPass'
 import type { StructuredShot } from '@/lib/orchestration/types'
 
 export interface ProcessSceneGenerateInput {
@@ -40,9 +38,9 @@ export async function processSceneGenerateJob(input: ProcessSceneGenerateInput):
     duration: clip.duration,
     contentType: 'dialogue_closeup' as const,
     visualPrompt: clip.prompt,
-    cameraMove: 'slow_push_in',
+    cameraMove: clip.cameraMove ?? 'slow_push_in',
     motionLevel: 'medium',
-    hasDialogue: false,
+    hasDialogue: Boolean(clip.lipSyncEnabled),
     hasFaces: true,
     hasAudio: false,
     hasCGI: false,
@@ -56,10 +54,15 @@ export async function processSceneGenerateJob(input: ProcessSceneGenerateInput):
     continuityGroup: sceneNumber,
     isChainStart: isFirstScene && i === 0,
     storyboardUrl: clip.keyframeUrl ?? undefined,
+    purpose: clip.purpose && isShotPurpose(clip.purpose) ? clip.purpose : undefined,
+    modelOverride: clip.modelOverride,
+    moneyShot: clip.moneyShot,
+    chainFrom: clip.chainFrom,
+    characterIds: clip.characterIds,
+    locationId: clip.locationId,
+    cameraPrecision: clip.cameraPrecision,
+    endFrameUrl: clip.endFrameUrl,
   }))
-
-  const dag = await buildDAG(shots, selectedModels)
-  const sceneGroup = groupIntoScenes(shots)[0]
 
   await appendJobProgressEvent(
     jobId,
@@ -67,31 +70,28 @@ export async function processSceneGenerateJob(input: ProcessSceneGenerateInput):
     { status: 'PROCESSING', progressPct: 10, phase: 'generating' },
   )
 
-  let segments = await generateAllScenes(
-    shots,
-    dag,
-    { characters: [], locations: [] },
-    ({ shotIndex, totalShots, status }) => {
-      const pct = 10 + Math.round((shotIndex / Math.max(totalShots, 1)) * 70)
+  const planned = await orchestrate({
+    prompt: shots.map((shot) => shot.visualPrompt).filter(Boolean).join('\n') || `Scene ${sceneNumber}`,
+    totalDuration: Math.max(5, shots.reduce((sum, shot) => sum + shot.duration, 0)),
+    selectedModels,
+    userId: input.userId,
+    jobId,
+    projectId,
+    skipInterpret: true,
+    directedShots: shots,
+    generationMode: mode,
+    qualityTier: toRagConstraint(mode === 'draft' ? 'draft' : 'standard'),
+    onProgress: (phase, detail, pct) => {
       void appendJobProgressEvent(
         jobId,
-        { phase: 'generating', status: 'running', detail: `Shot ${shotIndex + 1}/${totalShots}: ${status}`, pct },
+        { phase, status: 'running', detail, pct },
         { progressPct: pct },
       )
     },
-    {
-      jobId,
-      generationMode: mode,
-      selectedModels,
-      onPhase: (phase, detail) => {
-        void appendJobProgressEvent(jobId, { phase, status: 'running', detail, pct: 50 }, {})
-      },
-    },
-  )
+  })
+  let segments = planned.segments
 
   await extractDialogueForShots(shots, projectId)
-  await generateVoiceLines(projectId, jobId)
-  segments = await runLipSyncPass(segments, projectId, jobId, mode ?? 'draft')
 
   const lastSeg = segments[segments.length - 1]
   if (lastSeg?.tailFrameUrl) {
@@ -123,7 +123,6 @@ export async function processSceneGenerateJob(input: ProcessSceneGenerateInput):
     },
   )
 
-  void sceneGroup
   void crossSceneAnchor
   void isFirstScene
 }

@@ -1,0 +1,11 @@
+---
+description: SPEC-10 LLM and intelligence. Read before changing the director, model routing, LLM tiers, or memory.
+globs: ["src/lib/cognition/**", "packages/core/src/llm/**", "src/lib/llm/**", "src/lib/jobs/processOrchestrateJob.ts"]
+alwaysApply: false
+---
+
+# SPEC-10 — LLM and intelligence
+
+Contract: `docs/spec-references/SPEC-10-llm-intelligence.md`. Inherits SPEC-00. Do not build from it until the user feeds this spec.
+
+Director mode runs intent, affect, ideation, and critique. Auto routing runs only when the shot has no model override. Tiers are `LLM_MECHANICAL`, `LLM_CREATIVE`, and `LLM_HARD` via `llmModelForTier`. All of those calls go through `claudeCall`. There is no Grok stage and no memory toggle. Do not rebuild the director from scratch.

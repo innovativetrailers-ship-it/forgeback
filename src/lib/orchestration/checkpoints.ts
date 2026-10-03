@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 /**
  * Layer 3 — segment checkpoints for resume-without-repay.
  */
@@ -128,7 +129,7 @@ export async function clearSubmissionCheckpoint(
 ): Promise<void> {
   await db.segmentCheckpoint.delete({
     where: { jobId_segmentId: { jobId, segmentId: `submission_${segmentId}` } },
-  }).catch(() => {})
+  }).catch((err) => logCaught('lib/orchestration/checkpoints', err))
 }
 
 const DECOMPOSITION_SEGMENT_ID = 'decomposition'
@@ -149,10 +150,62 @@ export async function saveDecompositionCheckpoint(
   })
 }
 
+export async function loadDecompositionCheckpoint(jobId: string): Promise<unknown[] | null> {
+  const row = await loadCheckpoint(jobId, DECOMPOSITION_SEGMENT_ID)
+  if (!row || row.modelUsed !== DECOMPOSITION_MARKER) return null
+  try {
+    const parsed = JSON.parse(row.videoUrl) as unknown
+    return Array.isArray(parsed) ? parsed : null
+  } catch (err) {
+    console.warn('[checkpoint] decomposition unreadable', err instanceof Error ? err.message : err)
+    return null
+  }
+}
+
+export async function loadWizardRefs(jobId: string): Promise<{ characters: Array<{ name: string; imageUrl: string }>; locations: Array<{ name: string; imageUrl: string }> } | null> {
+  const job = await db.renderJob.findUnique({ where: { id: jobId }, select: { metadata: true } })
+  const refs = job?.metadata && typeof job.metadata === 'object'
+    ? (job.metadata as { wizardRefs?: unknown }).wizardRefs
+    : null
+  if (!refs || typeof refs !== 'object') return null
+  const row = refs as { characters?: unknown; locations?: unknown }
+  const characters = Array.isArray(row.characters)
+    ? row.characters.flatMap((item) => {
+      if (!item || typeof item !== 'object') return []
+      const rec = item as { name?: unknown; imageUrl?: unknown }
+      return typeof rec.name === 'string' && typeof rec.imageUrl === 'string'
+        ? [{ name: rec.name, imageUrl: rec.imageUrl }]
+        : []
+    })
+    : []
+  const locations = Array.isArray(row.locations)
+    ? row.locations.flatMap((item) => {
+      if (!item || typeof item !== 'object') return []
+      const rec = item as { name?: unknown; imageUrl?: unknown }
+      return typeof rec.name === 'string' && typeof rec.imageUrl === 'string'
+        ? [{ name: rec.name, imageUrl: rec.imageUrl }]
+        : []
+    })
+    : []
+  return { characters, locations }
+}
+
+export async function saveWizardRefs(
+  jobId: string,
+  assets: { characters: Array<{ name: string; imageUrl: string }>; locations: Array<{ name: string; imageUrl: string }> },
+): Promise<void> {
+  const job = await db.renderJob.findUnique({ where: { id: jobId }, select: { metadata: true } })
+  const meta = (job?.metadata && typeof job.metadata === 'object' ? job.metadata : {}) as Record<string, unknown>
+  await db.renderJob.update({
+    where: { id: jobId },
+    data: { metadata: { ...meta, wizardRefs: assets } },
+  })
+}
+
 export async function clearDecompositionCheckpoint(jobId: string): Promise<void> {
   await db.segmentCheckpoint.delete({
     where: { jobId_segmentId: { jobId, segmentId: DECOMPOSITION_SEGMENT_ID } },
-  }).catch(() => {})
+  }).catch((err) => logCaught('lib/orchestration/checkpoints', err))
 }
 
 export async function listCheckpoints(jobId: string): Promise<SegmentCheckpointRow[]> {

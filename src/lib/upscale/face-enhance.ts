@@ -1,4 +1,6 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '../fal/client'
+const falSubscribe = falSubscribeBound('lib.upscale.face-enhance')
 import { uploadToR2 } from '../storage/r2'
 import { execSync } from 'child_process'
 import { existsSync, mkdirSync, rmSync } from 'fs'
@@ -40,7 +42,7 @@ export async function enhanceFacesInVideo(params: {
           const frameDataUrl = `data:image/png;base64,${execSync(`base64 "${framePath}"`).toString().trim()}`
 
           try {
-            const faceDetect = await fal.subscribe('fal-ai/ip-adapter-face-id', {
+            const faceDetect = await falSubscribe(falEndpoint('ip-adapter-face-id'), {
               input: { image_url: frameDataUrl },
             }) as unknown as { faces: Array<{ x: number; y: number; width: number; height: number; confidence: number }> }
 
@@ -50,14 +52,16 @@ export async function enhanceFacesInVideo(params: {
 
             if (detectedFaces.length > 0) {
               totalFaces += detectedFaces.length
-              const restored = await fal.subscribe('fal-ai/codeformer', {
+              const restored = await falSubscribe(falEndpoint('codeformer'), {
                 input: { image_url: frameDataUrl, fidelity },
               }) as unknown as { image: { url: string } }
               enhancedFrames.push(restored.image.url)
             } else {
               enhancedFrames.push(framePath)
             }
-          } catch {
+          } catch (err) {
+            console.warn("[caught] src/lib/upscale/face-enhance.ts:61", err instanceof Error ? { name: err.name, message: err.message } : err)
+
             enhancedFrames.push(framePath)
           }
         })

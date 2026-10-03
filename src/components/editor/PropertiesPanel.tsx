@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react'
 import { RefreshCw, ChevronDown, ChevronRight, Sun, Sliders, Wand2, Sparkles } from 'lucide-react'
 import type { Clip, TimelineRecipe } from '@/lib/timeline/schema'
 import { EFFECT_PRESETS } from './constants'
-import { isColourGradeSuggestion, suggestionToClipGrade, type ColourMood } from '@/lib/color/AIColorGrading'
+import { isColourGradeSuggestion, suggestionToClipGrade, type ColourMood } from '@/lib/color/colourGradeShape'
 import { GradePreviewBar } from './GradePreviewBar'
 import { BeforeAfterToggle } from './BeforeAfterToggle'
 
@@ -92,6 +92,8 @@ export function PropertiesPanel({ selectedClip, recipe, onOpenRepaint, onClipUpd
       onClipUpdate(clip.id, { colourGrade: clipGrade })
       setAiGradeReasoning(data.grade.reasoning)
     } catch (e: unknown) {
+      console.warn("[caught] src/components/editor/PropertiesPanel.tsx:94", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       setAiGradeError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
       setAiGradeLoading(false)
@@ -342,14 +344,18 @@ export function PropertiesPanel({ selectedClip, recipe, onOpenRepaint, onClipUpd
             className="w-full bg-[#12121a] border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] text-white/60 focus:outline-none"
           >
             <option value="cut">Cut</option>
+            <option value="match">Match cut</option>
             <option value="dissolve">Dissolve</option>
             <option value="fade">Fade</option>
+            <option value="fade-in">Fade in</option>
+            <option value="fade-out">Fade out</option>
+            <option value="flash">Flash</option>
             <option value="film_burn">Film Burn</option>
             <option value="wipe">Wipe</option>
             <option value="zoom">Zoom</option>
             <option value="glitch">Glitch</option>
           </select>
-          {clip.transition && clip.transition.type !== 'cut' && (
+          {clip.transition && clip.transition.type !== 'cut' && clip.transition.type !== 'match' && (
             <Slider label="Duration" value={clip.transition.duration} min={0.1} max={2}
               onChange={(v) => onClipUpdate(clip.id, { transition: { ...clip.transition!, duration: v } })} unit="s" />
           )}

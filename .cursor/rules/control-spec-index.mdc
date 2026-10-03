@@ -1,0 +1,36 @@
+---
+description: Control-spec index and conventions. Read the matching SPEC-0N before changing that system. Do not build from these until the user feeds that spec.
+alwaysApply: true
+---
+
+# Control specs (SPEC-00–10)
+
+Full text: `docs/spec-references/SPEC-00-INDEX-and-conventions.md` and `SPEC-01` through `SPEC-10` in that folder. Call them by those filenames.
+
+These are per-control contracts (340 controls). The execution queue for them is `docs/spec-references/BP-00-INDEX-and-rules.md` (BP-01 through BP-13, one prompt per session). A SPEC is the contract. A BP is the only permission to change code, and only after the user feeds that BP. `spec-reconciliation-overlay.md` still wins on conflict. BP-01 through BP-13 are not in the repo until each one is fed.
+
+## Conventions (every chunk inherits these)
+
+1. Paid calls (FAL, Anthropic, ElevenLabs, Tripo, Runway, Suno) go through `providerSubmit` / `submitToFal` / `claudeCall`, pause-aware, source-attributed.
+2. Timeline clips write the one store. Do not add another.
+3. Model payload params come from the live schema via `buildPayload`. Do not hardcode ranges.
+4. Honest UI. If the backend is coarse, the control is coarse.
+5. Camera, style, and character intent are stored as structured data and rendered to a prompt.
+6. The spine is shared. Heavy controls are desktop-only. Note the other host.
+
+## Read which file
+
+| File | When the change touches |
+|---|---|
+| `SPEC-01-generation-camera.md` | prompt, duration, frames, camera, native audio, Draft/Studio/Blockbuster |
+| `SPEC-02-color-grading.md` | wheels, curves, HSL, windows, LUT, scopes, micro color |
+| `SPEC-03-lighting-shading.md` | relight, bloom, vignette, diffusion, skin |
+| `SPEC-04-editing-nle.md` | blade, trim, slip, JKL, multicam, speed, ingest |
+| `SPEC-05-vfx-compositing.md` | blend, key, roto, track, motion brush, effects rack |
+| `SPEC-06-cgi-overlays.md` | text/image to 3D, CGI insert, charts, MoGRT |
+| `SPEC-07-audio.md` | voice, lip-sync, SFX, music, mixer, master |
+| `SPEC-08-style-look.md` | style chips, LUTs, film stock, grain, denoise |
+| `SPEC-09-production-delivery.md` | ForgeFlow, ForgeReview, export, location |
+| `SPEC-10-llm-intelligence.md` | director, routing, LLM tiers, memory |
+
+Absent and tier-3 rows are build sketches. They are not permission to build them.
