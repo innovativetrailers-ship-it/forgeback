@@ -2,7 +2,7 @@ import { db } from '@/lib/db'
 import { Prisma } from '@/generated/prisma/client'
 import { isGenerationPaused } from '@/lib/generation/pause'
 import { rollupScene } from '@/lib/studio/sceneRollup'
-import { clipReason } from '@/lib/reconcile/wave2Reasons'
+import { canonicalAssetState, clipReason, MISSING_FAIL_REASON } from '@/lib/reconcile/wave2Reasons'
 import { ledgerBalance } from '@/lib/credits/meter'
 
 const TRAINING_TIMEOUT_MS = 6 * 60 * 60 * 1000
@@ -64,6 +64,7 @@ export async function reconcileClipBacklog(): Promise<Pick<ReconcileReport, 'cli
   return { clipsRetagged, clipsRetryEligible, jobsClosed: stuck.count }
 }
 
+/** Internal accounts stay at balance 0 and are not rewritten from the historical ledger. */
 export async function reconcileLedgers(): Promise<number> {
   await db.creditTransaction.updateMany({ where: { type: null, amount: { gt: 0, lt: 100000 } }, data: { type: 'signup_grant' } })
   await db.creditTransaction.updateMany({ where: { type: null, amount: { gte: 100000 } }, data: { type: 'adjustment' } })
@@ -176,21 +177,22 @@ export async function reconcileLocations(): Promise<number> {
 
 export async function flagUnresolvedAssets(): Promise<number> {
   const rows = await db.asset.findMany({
-    where: { resolutionState: 'unresolved' },
-    select: { id: true, generatedImage: true, weightsKey: true },
+    where: { resolutionState: { in: ['unresolved', 'needs_action', 'resolved'] } },
+    select: { id: true, kind: true, generatedImage: true, weightsKey: true, resolutionState: true },
   })
   let flagged = 0
   for (const row of rows) {
-    const next = row.weightsKey ? 'trained' : row.generatedImage ? 'generated' : 'unresolved'
+    const next = canonicalAssetState(row)
     const current = await db.asset.findUnique({ where: { id: row.id }, select: { boundary: true, resolutionState: true } })
     const boundary = (current?.boundary && typeof current.boundary === 'object' && !Array.isArray(current.boundary))
       ? { ...(current.boundary as Record<string, unknown>) }
       : {}
-    if (next === 'unresolved') boundary.needsAction = 'Unresolved — action needed. Nothing was generated.'
-    if (current?.resolutionState === next && next !== 'unresolved') continue
+    if (next.needsAction) boundary.needsAction = 'Unresolved — action needed. Nothing was generated.'
+    const already = current?.resolutionState === next.resolutionState && (!next.needsAction || Boolean(boundary.needsAction))
+    if (already) continue
     await db.asset.update({
       where: { id: row.id },
-      data: { resolutionState: next, boundary: boundary as Prisma.InputJsonValue },
+      data: { resolutionState: next.resolutionState, boundary: boundary as Prisma.InputJsonValue },
     })
     flagged += 1
   }
@@ -225,6 +227,45 @@ export async function patchDraftPlaceholders(): Promise<number> {
   return patched
 }
 
+export async function fillMissingFailReasons(): Promise<number> {
+  const rows = await db.studioClip.findMany({
+    where: { status: 'FAILED', OR: [{ statusReason: null }, { statusReason: '' }] },
+    select: { id: true, generateClaimJobId: true },
+  })
+  let filled = 0
+  for (const row of rows) {
+    let reason = MISSING_FAIL_REASON
+    if (row.generateClaimJobId) {
+      const job = await db.renderJob.findUnique({ where: { id: row.generateClaimJobId }, select: { errorMessage: true } })
+      if (job?.errorMessage?.trim()) reason = job.errorMessage.trim()
+    }
+    await db.studioClip.update({ where: { id: row.id }, data: { statusReason: reason } })
+    filled += 1
+  }
+  return filled
+}
+
+/** Tags the pre-fix cancelled pile. Does not change status and does not re-queue. */
+export async function markCancelledResidue(): Promise<number> {
+  const rows = await db.renderJob.findMany({
+    where: { status: 'CANCELLED' },
+    select: { id: true, metadata: true },
+  })
+  let tagged = 0
+  for (const row of rows) {
+    const meta = row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+      ? row.metadata as Record<string, unknown>
+      : {}
+    if (meta.historicalResidue === true) continue
+    await db.renderJob.update({
+      where: { id: row.id },
+      data: { metadata: { ...meta, historicalResidue: true } as Prisma.InputJsonValue },
+    })
+    tagged += 1
+  }
+  return tagged
+}
+
 export async function runWave2Reconcile(): Promise<ReconcileReport> {
   const clips = await reconcileClipBacklog()
   const ledgerCorrected = await reconcileLedgers()
@@ -232,6 +273,8 @@ export async function runWave2Reconcile(): Promise<ReconcileReport> {
   const charactersClosed = await reconcileTraining()
   const platesCopied = await reconcileLocations()
   const assetsFlagged = await flagUnresolvedAssets()
+  await fillMissingFailReasons()
+  await markCancelledResidue()
   const draftsPatched = await patchDraftPlaceholders()
   return { ...clips, ledgerCorrected, countersCorrected, charactersClosed, platesCopied, assetsFlagged, draftsPatched }
 }

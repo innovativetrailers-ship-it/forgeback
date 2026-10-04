@@ -11,7 +11,7 @@ import {
   type CompositorNode,
   type NodeConnection,
 } from '@/lib/compositor'
-import { DESKTOP_VFX_NODES } from '@/lib/compositor/vfx'
+import { DESKTOP_VFX_NODES, DESKTOP_VFX_NOTE } from '@/lib/compositor/vfx'
 
 export type { NodeType, NodePort, CompositorNode, NodeConnection } from '@/lib/compositor'
 
@@ -133,19 +133,24 @@ export default function NodeCompositor() {
       <div className="flex flex-1 min-h-0">
         <div className="w-48 flex-shrink-0 border-r border-white/10 overflow-y-auto p-3">
           <div className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-2">Nodes</div>
-          <p className="mb-2 text-[10px] text-white/40">Particles, 3D layers, and OFX plugins are desktop depth. This page runs the same graph.</p>
-          {NODE_TYPES_LIST.map((type) => (
+          <p className="mb-2 text-[10px] text-white/40">{DESKTOP_VFX_NOTE}</p>
+          {NODE_TYPES_LIST.map((type) => {
+            const desktop = DESKTOP_VFX_NODES.includes(type as (typeof DESKTOP_VFX_NODES)[number])
+            return (
             <button
               key={type}
               type="button"
+              disabled={desktop}
+              title={desktop ? DESKTOP_VFX_NOTE : undefined}
               onClick={() => addNode(type)}
-              className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-white/10 transition-colors mb-1 flex items-center gap-2"
+              className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-white/10 transition-colors mb-1 flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: NODE_COLORS[type] }} />
               {type}
-              {DESKTOP_VFX_NODES.includes(type as (typeof DESKTOP_VFX_NODES)[number]) ? ' · desktop' : ''}
+              {desktop ? ' · desktop' : ''}
             </button>
-          ))}
+            )
+          })}
         </div>
 
         <div

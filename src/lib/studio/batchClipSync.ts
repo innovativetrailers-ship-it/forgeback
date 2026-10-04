@@ -237,6 +237,6 @@ export async function markBatchClipFailed(projectId: string, shotIndex: number):
       status: { notIn: ['COMPLETED', 'MANUAL'] },
       OR: [{ videoUrl: null }, { videoUrl: '' }],
     },
-    data: { status: 'FAILED', generatingAt: null, generateClaimJobId: null, generateClaimedBy: null, generateClaimedAt: null },
+    data: { status: 'FAILED', generatingAt: null, generateClaimJobId: null, generateClaimedBy: null, generateClaimedAt: null, statusReason: 'The batch shot failed before a provider reason was stored. The clip was kept.' },
   })
 }

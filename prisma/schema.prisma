@@ -127,6 +127,8 @@ model User {
   filmTemplates   FilmTemplate[]
   subscriptions   Subscription[]
   activations     DesktopActivation[]
+  featureRequests FeatureRequest[]
+  featureVotes    FeatureRequestVote[]
   hasUsedDesktopTrial Boolean @default(false)
   /** Designated Forge accounts. Unmetered. Pause and the submit chokepoint still apply. */
   isInternal          Boolean   @default(false)
@@ -1466,6 +1468,8 @@ model Asset {
   ownerId             String
   kind                String
   sourcePrompt        String?  @db.Text
+  negativePrompt      String?  @db.Text
+  rules               String?  @db.Text
   sourceRefs          String[] @default([])
   generatedImage      String?
   weightsKey          String?
@@ -1606,5 +1610,54 @@ model DesktopActivation {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, deviceId])
+  @@index([userId])
+}
+
+enum FeatureRequestKind {
+  feature
+  tool
+  bug
+  other
+}
+
+enum FeatureRequestStatus {
+  new
+  reviewing
+  planned
+  in_progress
+  implemented
+  declined
+}
+
+model FeatureRequest {
+  id        String               @id @default(cuid())
+  userId    String
+  kind      FeatureRequestKind
+  title     String
+  body      String               @db.Text
+  context   Json?
+  status    FeatureRequestStatus @default(new)
+  devNote   String?              @db.Text
+  upvotes   Int                  @default(0)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  user  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  votes FeatureRequestVote[]
+
+  @@index([userId, createdAt])
+  @@index([status, upvotes])
+}
+
+model FeatureRequestVote {
+  id        String   @id @default(cuid())
+  requestId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  request FeatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, userId])
   @@index([userId])
 }

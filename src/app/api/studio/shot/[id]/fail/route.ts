@@ -25,7 +25,7 @@ export async function POST(
       status: 'GENERATING',
       scene: { project: { userId } },
     },
-    data: { status: 'FAILED', generatingAt: null },
+    data: { status: 'FAILED', generatingAt: null, statusReason: 'The shot was marked failed. The clip was kept.' },
   })
 
   if (claimed.count !== 1) {

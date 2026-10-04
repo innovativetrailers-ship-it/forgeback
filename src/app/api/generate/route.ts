@@ -36,6 +36,7 @@ export async function POST(req: Request) {
     directorMode?:     string
     wizard?:           unknown
     templateShots?:    unknown
+    musicVideo?:       { audioUrl?: string; rights?: boolean }
   }
 
   const rawPrompt = (body.prompt ?? body.script)?.trim()
@@ -54,6 +55,9 @@ export async function POST(req: Request) {
     ? (parseWizard(body.wizard) ?? defaultWizard(directorMode))
     : undefined
   const { projectId, characterId, musicUrl, ambienceUrl } = body
+  if (body.musicVideo?.audioUrl && body.musicVideo.rights !== true) {
+    return Response.json({ error: 'Music rights are required before a video can be made from this track' }, { status: 400 })
+  }
 
   if (!rawPrompt || rawPrompt.length < 10) {
     return Response.json(

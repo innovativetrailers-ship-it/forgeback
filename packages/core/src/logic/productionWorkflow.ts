@@ -34,6 +34,12 @@ export interface BreakdownShot {
   description: string
   entityRefs: ShotEntityRef[]
   continuity?: 'continuous' | 'cut'
+  /** Music-video timing. Absent on a normal shot. */
+  section?: 'intro' | 'verse' | 'chorus' | 'bridge' | 'outro'
+  barStart?: number
+  barEnd?: number
+  choreography?: string
+  lipSync?: boolean
 }
 
 export interface BreakdownScene {

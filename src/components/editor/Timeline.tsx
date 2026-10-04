@@ -73,6 +73,35 @@ export function Timeline({
   } | null>(null)
   const [hoveredClipId, setHoveredClipId] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const tracksRef = useRef<HTMLDivElement>(null)
+  const projectId = usePlaybackStore((state) => state.projectId)
+  const heightKey = `cinema-track-height:${projectId || 'local'}`
+  const [rowHeight, setRowHeight] = useState(TRACK_HEIGHT)
+  const [heightMode, setHeightMode] = useState<'S' | 'M' | 'L' | 'fit'>('M')
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(heightKey)
+    if (saved === 'S' || saved === 'M' || saved === 'L') {
+      setHeightMode(saved)
+      setRowHeight(saved === 'S' ? 28 : saved === 'L' ? 72 : TRACK_HEIGHT)
+    }
+  }, [heightKey])
+
+  function chooseHeight(mode: 'S' | 'M' | 'L') {
+    const next = mode === 'S' ? 28 : mode === 'L' ? 72 : TRACK_HEIGHT
+    setHeightMode(mode)
+    setRowHeight(next)
+    window.localStorage.setItem(heightKey, mode)
+  }
+
+  function fitTracks() {
+    const box = tracksRef.current
+    const count = Math.max(1, tracks.length)
+    const next = Math.max(22, Math.floor((box?.clientHeight ?? 0) / count))
+    setHeightMode('fit')
+    setRowHeight(next)
+    window.localStorage.setItem(heightKey, 'fit')
+  }
 
   const storeRecipe = usePlaybackStore((state) => state.recipe)
   const rendered = recipeForTimeline(storeRecipe, recipe)
@@ -97,14 +126,17 @@ export function Timeline({
     onSeek(xToTime(contentX, zoomLevel, scrollOffset))
   }, [zoomLevel, scrollOffset, onSeek])
 
-  // Zoom with scroll wheel + modifier
+  // Ctrl/Cmd zooms. Shift scrolls time. A plain wheel scrolls tracks vertically.
   const handleWheel = useCallback((e: WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault()
       const delta = -e.deltaY * 0.5
       onZoomChange(Math.max(20, Math.min(400, zoomLevel + delta)))
-    } else {
-      onScrollChange(Math.max(0, scrollOffset + e.deltaX || e.deltaY))
+      return
+    }
+    if (e.shiftKey) {
+      e.preventDefault()
+      onScrollChange(Math.max(0, scrollOffset + (e.deltaY || e.deltaX)))
     }
   }, [zoomLevel, scrollOffset, onZoomChange, onScrollChange])
 
@@ -114,6 +146,13 @@ export function Timeline({
     el.addEventListener('wheel', handleWheel, { passive: false })
     return () => el.removeEventListener('wheel', handleWheel)
   }, [handleWheel])
+
+  useEffect(() => {
+    if (!selectedClipId) return
+    const clip = tracks.flatMap((track) => track.clips).find((row) => row.id === selectedClipId)
+    if (!clip) return
+    document.getElementById(`track-row-${clip.trackId}`)?.scrollIntoView({ block: 'nearest' })
+  }, [selectedClipId, tracks])
 
   // Mouse events for drag/trim
   const handleMouseDown = useCallback((
@@ -187,8 +226,15 @@ export function Timeline({
   return (
     <div
       ref={timelineRef}
-      className="flex flex-col flex-1 overflow-hidden bg-[#0c0c14] select-none"
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0c0c14] select-none"
     >
+      <div className="flex shrink-0 items-center gap-1 border-b border-white/8 px-2 py-1 text-[9px] text-white/45">
+        <span>Track height</span>
+        {(['S', 'M', 'L'] as const).map((mode) => (
+          <button key={mode} type="button" className={`rounded px-1.5 ${heightMode === mode ? 'bg-[#00e5c8]/20 text-[#00e5c8]' : 'bg-white/5'}`} onClick={() => chooseHeight(mode)}>{mode}</button>
+        ))}
+        <button type="button" className={`rounded px-1.5 ${heightMode === 'fit' ? 'bg-[#00e5c8]/20 text-[#00e5c8]' : 'bg-white/5'}`} onClick={fitTracks}>Fit all tracks</button>
+      </div>
       {/* Ruler */}
       <div
         ref={rulerRef}
@@ -231,10 +277,11 @@ export function Timeline({
       )}
 
       {/* Track rows */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+      <div ref={tracksRef} className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
         {tracks.map((track) => (
           <TrackRow
             key={track.id}
+            rowHeight={rowHeight}
             track={track}
             zoomLevel={zoomLevel}
             scrollOffset={scrollOffset}
@@ -325,6 +372,7 @@ export function Timeline({
 }
 
 interface TrackRowProps {
+  rowHeight: number
   track: Track
   zoomLevel: number
   scrollOffset: number
@@ -341,6 +389,7 @@ interface TrackRowProps {
 }
 
 function TrackRow({
+  rowHeight,
   track,
   zoomLevel,
   scrollOffset,
@@ -360,8 +409,9 @@ function TrackRow({
 
   return (
     <div
+      id={`track-row-${track.id}`}
       className="flex border-b border-white/5 hover:bg-white/[0.015] transition-colors"
-      style={{ height: TRACK_HEIGHT }}
+      style={{ height: rowHeight }}
     >
       {/* Label column */}
       <div
@@ -421,7 +471,7 @@ function TrackRow({
               style={{
                 left: Math.max(0, x),
                 width: Math.max(20, w - 2),
-                height: TRACK_HEIGHT - 12,
+                height: Math.max(12, rowHeight - 12),
                 backgroundColor: clipColour,
               }}
               onMouseDown={(e) => onMouseDown(e, 'clip', clip)}

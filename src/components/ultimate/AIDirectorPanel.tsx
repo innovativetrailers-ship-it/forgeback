@@ -11,6 +11,8 @@ import { subscribeJobStream } from '@/lib/jobs/subscribeJobStream'
 import { ShotPlanPanel } from '@/components/ultimate/ShotPlanPanel'
 import { DirectorWizardStep } from '@/components/ultimate/DirectorWizardStep'
 import { TemplateGallery } from '@/components/editor/TemplateGallery'
+import { GenerationUtilities } from '@/components/studio/GenerationUtilities'
+import { BundleImport } from '@/components/ultimate/BundleImport'
 import { placeholdersIn, templateToShots, type FilmTemplateRecord } from '@/lib/templates/catalog'
 import { jobPlaybackPath } from '@/lib/media/jobPlayback'
 import { usePlaybackStore } from '@/store/playbackStore'
@@ -75,6 +77,11 @@ export function AIDirectorPanel({
   const [pausedJobId, setPausedJobId] = useState<string | null>(null)
   const [template, setTemplate] = useState<FilmTemplateRecord | null>(null)
   const [fills, setFills] = useState<Record<string, string>>({})
+  const [trackUrl, setTrackUrl] = useState('')
+  const [trackBpm, setTrackBpm] = useState(120)
+  const [musicRights, setMusicRights] = useState(false)
+  const [musicNote, setMusicNote] = useState('')
+  const [musicTreatment, setMusicTreatment] = useState('')
 
   useEffect(() => {
     function onTemplate(event: Event) {
@@ -157,10 +164,14 @@ export function AIDirectorPanel({
         ? `Style: ${preset.id} — ${preset.description}`
         : `Style: ${stylePreset}`
       const notes = customInstructions.trim()
+      if (stylePreset === 'music_video' && trackUrl.trim() && !musicRights) {
+        throw new Error('Music rights are required before a video can be made from this track')
+      }
       const prompt = [
         styleDirective,
+        musicTreatment ? `Music video treatment:\n${musicTreatment}` : '',
         notes ? `Directorial notes: ${notes}` : '',
-        liveScript,
+        liveScript || musicTreatment,
       ].filter(Boolean).join('\n\n')
 
       addStep('Queuing director run…')
@@ -200,6 +211,10 @@ export function AIDirectorPanel({
           duration:       targetDuration,
           projectId,
           aspectRatio,
+          musicUrl: stylePreset === 'music_video' ? trackUrl.trim() : undefined,
+          musicVideo: stylePreset === 'music_video' && trackUrl.trim()
+            ? { audioUrl: trackUrl.trim(), rights: musicRights }
+            : undefined,
         }),
       })
 
@@ -305,6 +320,65 @@ export function AIDirectorPanel({
             ))}
           </div>
         </div>
+
+        {stylePreset === 'music_video' && (
+          <div className="space-y-2 rounded-xl border border-white/10 p-2 text-[10px] text-white/60">
+            <p className="uppercase tracking-wider text-white/35">Music video from a track</p>
+            <input
+              value={trackUrl}
+              onChange={(event) => setTrackUrl(event.target.value)}
+              placeholder="Track address"
+              className="w-full rounded border border-white/10 bg-black/40 px-2 py-1"
+            />
+            <label className="flex items-center gap-2">
+              BPM
+              <input
+                type="number"
+                min={40}
+                max={220}
+                value={trackBpm}
+                onChange={(event) => setTrackBpm(Math.max(40, Number(event.target.value) || 120))}
+                className="w-16 rounded border border-white/10 bg-black/40 px-2 py-1"
+              />
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={musicRights} onChange={(event) => setMusicRights(event.target.checked)} />
+              I hold the rights to this audio
+            </label>
+            <button
+              type="button"
+              className="rounded bg-white/10 px-2 py-1"
+              onClick={() => {
+                void fetch('/api/studio/director/music', {
+                  method: 'POST',
+                  credentials: 'include',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({
+                    audioUrl: trackUrl.trim(),
+                    rights: musicRights,
+                    duration: targetDuration,
+                    bpm: trackBpm,
+                    performer: characters[0]?.name,
+                  }),
+                }).then(async (res) => {
+                  const body = await res.json() as { treatment?: string; error?: string }
+                  if (!res.ok) {
+                    setMusicNote(body.error || 'The track was not analysed')
+                    return
+                  }
+                  setMusicTreatment(body.treatment || '')
+                  setMusicNote('Beat-timed treatment is ready. Direct still waits for you to run it. The track is the master.')
+                }).catch((err: unknown) => {
+                  console.warn('[music-video]', err instanceof Error ? err.message : err)
+                  setMusicNote('The track was not analysed')
+                })
+              }}
+            >
+              Analyse track
+            </button>
+            {musicNote && <p>{musicNote}</p>}
+          </div>
+        )}
 
         {/* Model Council */}
         <div>
@@ -543,6 +617,7 @@ export function AIDirectorPanel({
                 <span className="text-[10px] text-white/50">Use vault characters ({characters.length})</span>
               </label>
             )}
+            <GenerationUtilities />
             {locations.length > 0 && (
               <label className="flex items-center gap-2 cursor-pointer">
                 <div onClick={() => setUseLocations((v) => !v)}
@@ -556,6 +631,12 @@ export function AIDirectorPanel({
           </div>
         </div>
 
+        <BundleImport
+          onScreenplay={(text, style) => {
+            if (text.trim()) useScriptStore.getState().setScript(text)
+            if (style.trim()) setCustomInstructions(style)
+          }}
+        />
         <TemplateGallery
           onUse={(item) => {
             setTemplate(item)

@@ -48,6 +48,7 @@ export type NodeType =
   | 'DeepMerge'
   | 'DeepHold'
   | 'Cryptomatte'
+  | 'VectorWarp'
   | 'Dot'
   | 'NoOp'
   | 'Shuffle'

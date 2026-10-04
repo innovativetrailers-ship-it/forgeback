@@ -35,6 +35,10 @@ export function AwaitingDirectionCard({
   const [model, setModel] = useState(shot.modelOverride ?? '__auto__')
   const [dialogueText, setDialogueText] = useState(shot.dialogueText ?? '')
   const [lipSyncEnabled, setLipSyncEnabled] = useState(shot.lipSyncEnabled)
+  const [performanceNote, setPerformanceNote] = useState('')
+  const [performanceArmed, setPerformanceArmed] = useState(false)
+  const [likenessConsent, setLikenessConsent] = useState(false)
+  const [audioRights, setAudioRights] = useState(false)
   const [directing, setDirecting] = useState(false)
   const [generatingAnchor, setGeneratingAnchor] = useState(false)
   const [characterIds, setCharacterIds] = useState<string[]>(shot.characterIds ?? [])
@@ -560,9 +564,60 @@ export function AwaitingDirectionCard({
                   checked={lipSyncEnabled}
                   onChange={(e) => void toggleLipSync(e.target.checked)}
                 />
-                Auto lip-sync after generation
+                Lip-sync this clip (LatentSync)
               </label>
             )}
+            <div className="space-y-1 text-[10px] text-zinc-400">
+              <p>Or generate a performance from a still and the vocal (OmniHuman). The existing clip stays.</p>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={likenessConsent} onChange={(event) => setLikenessConsent(event.target.checked)} />
+                Likeness consent is on file
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={audioRights} onChange={(event) => setAudioRights(event.target.checked)} />
+                I hold the rights to this audio
+              </label>
+              <button
+                type="button"
+                className="rounded bg-white/10 px-2 py-1 text-zinc-200"
+                onClick={() => {
+                  void fetch('/api/studio/shot/performance', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({
+                      projectId,
+                      shotId: shot.id,
+                      resolution: shot.duration > 30 ? '720p' : '1080p',
+                      prompt,
+                      likenessConsent,
+                      audioRights,
+                      confirm: performanceArmed,
+                    }),
+                  }).then(async (res) => {
+                    const payload = await res.json() as { estimateCredits?: number; error?: string; videoUrl?: string; split?: number[] }
+                    if (!res.ok) {
+                      setPerformanceArmed(false)
+                      setPerformanceNote(payload.split ? `${payload.error} Parts: ${payload.split.join('s, ')}s.` : (payload.error || 'The performance did not run'))
+                      return
+                    }
+                    if (!performanceArmed) {
+                      setPerformanceArmed(true)
+                      setPerformanceNote(`${payload.estimateCredits ?? 0} credits for this duration. Confirm to generate. The clip stays.`)
+                      return
+                    }
+                    setPerformanceArmed(false)
+                    setPerformanceNote(payload.videoUrl ? 'Performance take is ready. The original clip stays.' : 'The performance did not return a video')
+                  }).catch((err: unknown) => {
+                    console.warn('[omnihuman]', err instanceof Error ? err.message : err)
+                    setPerformanceNote('The performance did not run')
+                  })
+                }}
+              >
+                {performanceArmed ? 'Confirm performance' : 'Generate performance'}
+              </button>
+              {performanceNote && <p>{performanceNote}</p>}
+            </div>
           </div>
         )}
 

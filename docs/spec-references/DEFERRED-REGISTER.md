@@ -35,6 +35,6 @@ Tier-2 residuals:
 - Subtitle translation already goes through `claudeCall` with source `translate` and writes an SRT.
 - The in-app error dashboard stays deferred. ShotError remains the error net. Unused Sentry and PostHog DSNs stay unwired.
 
-Run 24 future depth, not launch: Cryptomatte, deep-EXR compositing, and vector-warp face replace stay recorded here until a pro VFX pass adds them as compositor nodes.
+VFX-T5 is in the web compositor schema (`Cryptomatte`, `DeepMerge`, `VectorWarp`, plus particles and OFX). The desktop app does not host that graph yet. Web keeps the basic mask and says so.
 
 Desktop ship: electron-builder is the packager (dmg, zip, NSIS, portable, AppImage, deb). Signing and notarization run only when the CI secrets are present. The entitlement token is stored with the OS keychain helper, not as plaintext. A second launch focuses the running app. Updates download and wait for a restart. Crash uploads carry version, OS, and channel, with home directories and project ids redacted.

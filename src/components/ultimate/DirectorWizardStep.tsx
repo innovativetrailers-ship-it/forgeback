@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { ShotTransitionKind, StructuredShot } from '@/lib/orchestration/types'
 import { GlbCapture } from '@/components/ultimate/GlbCapture'
+import { MultiReferencePanel } from '@/components/ultimate/MultiReferencePanel'
 
 const SIZES = ['ECU', 'CU', 'MCU', 'MS', 'MLS', 'WS', 'EWS']
 const ANGLES = ['eye_level', 'low', 'high', 'overhead', 'dutch', 'pov']
@@ -595,6 +596,13 @@ export function DirectorWizardStep({
                 setBusy(false)
               }
             }}
+          />
+          <MultiReferencePanel
+            consent={consent}
+            images={[
+              ...refs.characters.map((row) => ({ ...row, kind: 'Character' })),
+              ...refs.locations.map((row) => ({ ...row, kind: 'Location' })),
+            ]}
           />
           {refs.characters.length + refs.locations.length === 0 && (
             <p className="text-[10px] text-white/40">No stills yet. The names are on the shots. Next continues with prompt-only references where a still is missing.</p>

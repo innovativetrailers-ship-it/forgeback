@@ -5,6 +5,8 @@ import { checkAccess } from '@/lib/access/guard'
 import { extractImageUrl, runFal } from '@/lib/fal/client'
 import { extractVideoFrame } from '@/lib/fal/frameExtract'
 import { GENERATIVE_EDIT_CREDITS } from '@/lib/timeline/timeRemap'
+import { buildConditionInput, quoteMultiRef, type VaceResolution } from '@/lib/studio/multiReference'
+import { isGenerationPausedError } from '@/lib/generation/pause'
 
 const ENGINES = {
   inpaint: 'wan-vace-14b/inpainting',
@@ -77,6 +79,11 @@ export async function POST(req: NextRequest) {
     mood?: string
     mask?: { x: number; y: number; w: number; h: number }
     fast?: boolean
+    refImageUrls?: string[]
+    maskImageUrl?: string
+    seconds?: number
+    resolution?: VaceResolution
+    consent?: boolean
   } | null
   if (body?.tool && TOOLS[body.tool]) {
     return runTool(userId, body.tool, body)
@@ -85,20 +92,45 @@ export async function POST(req: NextRequest) {
   if (op !== 'inpaint' && op !== 'bridge' && op !== 'extend') {
     return NextResponse.json({ error: 'op must be inpaint, bridge, or extend' }, { status: 400 })
   }
+  const referenceShot = Boolean(body?.refImageUrls?.length)
+  let estimateCredits = GENERATIVE_EDIT_CREDITS
+  if (referenceShot && op === 'inpaint') {
+    try {
+      estimateCredits = quoteMultiRef({
+        mode: 'condition',
+        seconds: body?.seconds ?? 5,
+        resolution: body?.resolution === '580p' || body?.resolution === '720p' ? body.resolution : '480p',
+      })
+    } catch (err) {
+      console.warn('[timeline-edit] price', err instanceof Error ? err.message : err)
+      return NextResponse.json({ error: err instanceof Error ? err.message : 'Could not price this shot' }, { status: 400 })
+    }
+  }
   if (!body?.confirm) {
-    return NextResponse.json({ confirm: false, estimateCredits: GENERATIVE_EDIT_CREDITS })
+    return NextResponse.json({ confirm: false, estimateCredits })
+  }
+  if (referenceShot && body.consent !== true) {
+    return NextResponse.json({ error: 'Consent is required for a real-person reference' }, { status: 400 })
   }
   const prompt = body.prompt?.trim()
   const videoUrl = body.videoUrl?.trim()
   if (!prompt || !videoUrl?.startsWith('http')) {
     return NextResponse.json({ error: 'A prompt and a video URL are required' }, { status: 400 })
   }
-  const access = await checkAccess(userId, GENERATIVE_EDIT_CREDITS)
+  const access = await checkAccess(userId, estimateCredits)
   if (!access.allowed) return NextResponse.json({ error: access.reason }, { status: access.code })
   const engineKey = body.engine && ENGINES[body.engine] ? body.engine : (op === 'inpaint' ? 'inpaint' : 'bridge')
   try {
     let input: Record<string, unknown>
-    if (op === 'inpaint') {
+    if (op === 'inpaint' && referenceShot) {
+      input = buildConditionInput({
+        prompt,
+        videoUrl,
+        imageUrls: body.refImageUrls ?? [],
+        maskUrl: body.maskImageUrl,
+        resolution: body.resolution === '580p' || body.resolution === '720p' ? body.resolution : '480p',
+      })
+    } else if (op === 'inpaint') {
       input = { prompt, video_url: videoUrl }
     } else if (op === 'bridge') {
       const other = body.otherVideoUrl?.trim()
@@ -138,9 +170,12 @@ export async function POST(req: NextRequest) {
         },
       },
     })
-    return NextResponse.json({ takeUrl, estimateCredits: GENERATIVE_EDIT_CREDITS })
+    return NextResponse.json({ takeUrl, estimateCredits, libraryTake: true })
   } catch (err) {
     console.warn('[timeline-edit]', err instanceof Error ? err.message : err)
+    if (isGenerationPausedError(err)) {
+      return NextResponse.json({ error: 'Generation is paused. The edit was not submitted.' }, { status: 503 })
+    }
     const message = err instanceof Error ? err.message : 'The edit did not run'
     return NextResponse.json({ error: message }, { status: 502 })
   }

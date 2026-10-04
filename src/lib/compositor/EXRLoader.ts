@@ -4,6 +4,8 @@
  * for deep compositing, depth-of-field, and Cryptomatte operations.
  */
 
+import { cryptomatteCoverage } from './vfx'
+
 export interface EXRData {
   width: number
   height: number
@@ -72,11 +74,11 @@ export function extractDepthChannel(exr: EXRData): Float32Array | null {
 
 /** Extract a Cryptomatte matte for a given object name. */
 export function extractCryptomatteMatte(exr: EXRData, objectName: string): Float32Array | null {
-  // Cryptomatte stores hashed IDs in float channels
-  // Simple approach: return the first id.red channel as the matte
+  const name = objectName.trim()
+  if (!name) return null
   const idRed = exr.channelData['id.red'] ?? exr.channelData['crypto_object00.R']
   if (!idRed) return null
-  return new Float32Array(idRed)
+  return cryptomatteCoverage(idRed, name)
 }
 
 export async function checkEXRHealth(): Promise<boolean> {

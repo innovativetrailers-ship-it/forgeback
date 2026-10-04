@@ -68,7 +68,7 @@ export async function failGenerateShot(clipId: string | undefined): Promise<void
   if (!clipId) return
   await db.studioClip.update({
     where: { id: clipId },
-    data: { status: 'FAILED', generatingAt: null },
+    data: { status: 'FAILED', generatingAt: null, statusReason: 'Generation failed before a provider reason was stored. The clip was kept.' },
   }).catch((err) => logCaught('lib/studio/recordGenerateShot', err))
   await noteClipTerminal(clipId, false).catch((err) => logCaught('lib/studio/recordGenerateShot', err))
 }

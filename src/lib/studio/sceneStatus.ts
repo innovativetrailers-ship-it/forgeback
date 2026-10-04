@@ -1,14 +1,13 @@
 export type SceneRollup = 'PENDING' | 'GENERATING' | 'GENERATED' | 'FAILED' | 'PARTIAL'
 
-/** Honest parent status from child clip statuses. GENERATED means every clip finished cleanly. */
+/** Honest parent status from the full clip mix. Awaiting does not hide completed siblings. */
 export function sceneStatusFromClips(statuses: string[]): SceneRollup {
   if (!statuses.length) return 'PENDING'
   if (statuses.some((status) => status === 'GENERATING')) return 'GENERATING'
-  if (statuses.some((status) => status === 'PENDING' || status === 'AWAITING_DIRECTION')) return 'PENDING'
-  const failed = statuses.filter((status) => status === 'FAILED').length
   const done = statuses.filter((status) => status === 'COMPLETED' || status === 'MANUAL').length
-  if (failed && done) return 'PARTIAL'
-  if (failed && failed === statuses.length) return 'FAILED'
+  const failed = statuses.filter((status) => status === 'FAILED').length
   if (done === statuses.length) return 'GENERATED'
+  if (done > 0) return 'PARTIAL'
+  if (failed > 0) return 'FAILED'
   return 'PENDING'
 }

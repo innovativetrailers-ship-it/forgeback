@@ -1,7 +1,17 @@
 import type { CompositorNode } from '../schema'
 import type { CompositorFrame, NodeInputs } from '../frame'
 import { loadEXRFromURL } from '../EXRLoader'
-import { applyOfx, applyParallax, applyParticles, applyRoto, ofxParams, type RotoPoint } from '../vfx'
+import {
+  applyLayer3D,
+  applyParticles,
+  applyRoto,
+  applyVectorWarp,
+  deepMerge,
+  propagateRoto,
+  runOfx,
+  type RotoLayer,
+  type RotoPoint,
+} from '../vfx'
 
 type SharpFactory = (input?: import('sharp').SharpOptions | Buffer) => import('sharp').Sharp
 
@@ -229,7 +239,6 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
       return { exr: inputs.exr }
     }
 
-    case 'DeepMerge':
     case 'DeepHold':
     case 'DepthMap':
       return { video, depth: inputs.depth ?? video }
@@ -250,7 +259,13 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
     case 'Roto':
     case 'Mask': {
       if (!video) return { video }
-      const points = Array.isArray(p.points) ? p.points as RotoPoint[] : []
+      const points = Array.isArray(p.points) ? propagateRoto(p.points as RotoPoint[], num(p.trackDx, 0), num(p.trackDy, 0)) : []
+      const layers = Array.isArray(p.layers)
+        ? (p.layers as RotoLayer[]).map((layer) => ({
+            ...layer,
+            points: propagateRoto(layer.points ?? [], num(p.trackDx, 0), num(p.trackDy, 0)),
+          }))
+        : undefined
       try {
         const decoded = await decodeRaw(video.rgba)
         const masked = applyRoto(
@@ -259,6 +274,13 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
           decoded.height,
           points,
           p.combine === 'subtract' ? 'subtract' : 'add',
+          {
+            layers,
+            spline: node.type === 'Roto' && p.spline !== false,
+            motion: num(p.motionDx, 0) || num(p.motionDy, 0)
+              ? { dx: num(p.motionDx, 0), dy: num(p.motionDy, 0) }
+              : undefined,
+          },
         )
         const png = await encodePng(masked, decoded.width, decoded.height)
         return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
@@ -271,7 +293,11 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
     case 'Particle': {
       if (!video) return { video }
       const decoded = await decodeRaw(video.rgba)
-      const painted = applyParticles(decoded.data, decoded.width, decoded.height, num(p.rate, 40), num(p.seed, 1))
+      const painted = applyParticles(decoded.data, decoded.width, decoded.height, num(p.rate, 40), num(p.seed, 1), {
+        lifetime: num(p.lifetime, 1),
+        forceY: num(p.forceY, 0),
+        sprite: num(p.sprite, 1),
+      })
       const png = await encodePng(painted, decoded.width, decoded.height)
       return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
     }
@@ -280,18 +306,53 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
     case 'Camera3D': {
       if (!video) return { video }
       const decoded = await decodeRaw(video.rgba)
-      const shifted = applyParallax(decoded.data, decoded.width, decoded.height, num(p.cameraX ?? p.x, 0))
+      const shifted = applyLayer3D(decoded.data, decoded.width, decoded.height, {
+        cameraX: num(p.cameraX ?? p.x, 0),
+        cameraY: num(p.cameraY ?? p.y, 0),
+        cameraZ: num(p.cameraZ ?? p.z, 1),
+        depth: num(p.depth, 1),
+        light: num(p.light, 1),
+      })
       const png = await encodePng(shifted, decoded.width, decoded.height)
       return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
     }
 
+    case 'VectorWarp': {
+      if (!video) return { video }
+      const decoded = await decodeRaw(video.rgba)
+      const warped = applyVectorWarp(decoded.data, decoded.width, decoded.height, num(p.dx, 0), num(p.dy, 0))
+      const png = await encodePng(warped, decoded.width, decoded.height)
+      return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
+    }
+
+    case 'DeepMerge': {
+      const front = inputs.foreground ?? video
+      const back = inputs.background
+      const frontZ = Array.isArray(p.frontZ) ? p.frontZ as number[] : null
+      const backZ = Array.isArray(p.backZ) ? p.backZ as number[] : null
+      if (!front || !back || !frontZ || !backZ) return { video, depth: inputs.depth ?? video }
+      try {
+        const frontRaw = await decodeRaw(front.rgba)
+        const backRaw = await decodeRaw(back.rgba)
+        const merged = deepMerge(frontRaw.data, backRaw.data, frontZ, backZ)
+        const png = await encodePng(merged, frontRaw.width, frontRaw.height)
+        return { video: { ...front, rgba: png, width: frontRaw.width, height: frontRaw.height } }
+      } catch (err) {
+        console.warn('[compositor]', err instanceof Error ? err.message : err)
+        return { video, depth: inputs.depth ?? video }
+      }
+    }
+
     case 'OfxPlugin': {
       if (!video) return { video }
-      const safe = ofxParams(String(p.pluginId ?? ''), num(p.amount, 1))
       try {
         const decoded = await decodeRaw(video.rgba)
-        const graded = applyOfx(decoded.data, safe.amount)
-        const png = await encodePng(graded, decoded.width, decoded.height)
+        const hosted = runOfx(decoded.data, String(p.pluginId ?? ''), num(p.amount, 1), typeof p.script === 'string' ? p.script : undefined)
+        if (hosted.error) {
+          console.warn('[compositor]', hosted.error)
+          return { video }
+        }
+        const png = await encodePng(hosted.rgba, decoded.width, decoded.height)
         return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
       } catch (err) {
         console.warn('[compositor]', err instanceof Error ? err.message : err)

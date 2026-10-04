@@ -5,6 +5,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { Providers } from '@/components/providers'
 import { ToastContainer } from '@/components/ui/ToastContainer'
 import { UpgradeModal } from '@/components/ui/UpgradeModal'
+import { FeatureRequestButton } from '@/components/features/FeatureRequestButton'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://cinema.growthengine.ai'
 
@@ -88,6 +89,7 @@ export default function RootLayout({
             <Toaster richColors position="bottom-right" />
             <ToastContainer />
             <UpgradeModal />
+            <FeatureRequestButton />
           </TooltipProvider>
         </Providers>
       </body>

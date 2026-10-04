@@ -42,7 +42,7 @@ export async function POST(
     }
     await db.studioClip.update({
       where: { id },
-      data: { prompt, chainBlock: null, status: 'FAILED' },
+      data: { prompt, chainBlock: null, status: 'FAILED', statusReason: 'The chain was altered and this shot was marked failed. The clip was kept.' },
     })
     return NextResponse.json({ ok: true })
   }

@@ -65,7 +65,7 @@ function ProgramPanel(_props: IDockviewPanelProps) {
   return <div className="h-full overflow-hidden">{useFrame().program}</div>
 }
 function TimelinePanel(_props: IDockviewPanelProps) {
-  return <div className="h-full overflow-hidden">{useFrame().timeline}</div>
+  return <div className="flex h-full min-h-0 flex-col overflow-hidden">{useFrame().timeline}</div>
 }
 function InspectorPanel(_props: IDockviewPanelProps) {
   return <div className="h-full overflow-auto">{useFrame().inspector}</div>
@@ -584,6 +584,7 @@ function place(api: DockviewApi, workspace: WorkspaceName) {
   }
   const lock = workspace === 'Creator'
   api.groups.forEach((group) => { group.locked = lock })
+  api.getPanel('timeline')?.api.setConstraints({ minimumHeight: 80 })
 }
 
 export function EditorDock({

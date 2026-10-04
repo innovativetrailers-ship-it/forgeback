@@ -67,13 +67,17 @@ type VoiceRow = {
 
 type CharacterRow = { id: string; name: string }
 
-const TAB_LABEL: Record<StudioTab, string> = {
+type PanelTab = StudioTab | 'locations'
+const PANEL_TABS: PanelTab[] = ['cast', 'locations', 'styles', 'assets', 'voices', 'music']
+const TAB_LABEL: Record<PanelTab, string> = {
   cast: 'Cast',
+  locations: 'Locations',
   styles: 'Styles',
   assets: 'Assets',
   voices: 'Voices',
   music: 'Music',
 }
+type MediaItem = { name: string; kind: 'image' | 'video' | 'audio'; url: string; selected: boolean }
 
 function kindForFile(file: File): 'image' | 'video' | 'audio' | null {
   if (file.type.startsWith('image/')) return 'image'
@@ -101,7 +105,8 @@ export function TrainingStudioPanel() {
   const queryClient = useQueryClient()
   const projectId = usePlaybackStore((s) => s.projectId)
   const selectedClipId = useStudioStore((s) => s.selectedClipId)
-  const [tab, setTab] = useState<StudioTab>('cast')
+  const [tab, setTab] = useState<PanelTab>('cast')
+  const [media, setMedia] = useState<MediaItem[]>([])
   const [subcategory, setSubcategory] = useState(defaultSubcategory('cast'))
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -121,9 +126,10 @@ export function TrainingStudioPanel() {
   const [presetId, setPresetId] = useState('')
 
   useEffect(() => {
-    setSubcategory(defaultSubcategory(tab))
+    if (tab !== 'locations') setSubcategory(defaultSubcategory(tab))
     setConfirming(false)
     setFiles([])
+    setMedia([])
     setOwnedOrLicensed(false)
     setSubjectConsent(false)
     setFootageCopyrighted(false)
@@ -137,7 +143,7 @@ export function TrainingStudioPanel() {
 
   const recommendQuery = useQuery<Recommend | { error: string }>({
     queryKey: ['training-recommend', tab, subcategory, steps, kinds.join(',')],
-    enabled: tab !== 'voices',
+    enabled: tab !== 'voices' && tab !== 'locations',
     queryFn: async () => {
       const params = new URLSearchParams({
         tab,
@@ -158,8 +164,9 @@ export function TrainingStudioPanel() {
 
   const { data: assets = [] } = useQuery<AssetRow[]>({
     queryKey: ['trained-assets', tab],
-    enabled: tab !== 'voices',
+    enabled: tab !== 'voices' && tab !== 'locations',
     queryFn: async () => {
+      if (tab === 'locations') return []
       const type = assetTypeForTab(tab)
       const res = await fetch(`/api/studio/assets?type=${type}`, { credentials: 'include' })
       const body = await res.json() as { assets?: AssetRow[] }
@@ -217,7 +224,7 @@ export function TrainingStudioPanel() {
 
   const activeRuns = runs.filter((row) => {
     if (row.status === 'complete' || row.status === 'failed') return false
-    if (tab === 'voices') return false
+    if (tab === 'voices' || tab === 'locations') return false
     return row.assetType === assetTypeForTab(tab)
   })
 
@@ -246,8 +253,12 @@ export function TrainingStudioPanel() {
     }
     setBusy(true)
     try {
-      const uploaded = []
-      for (const file of files) uploaded.push(await uploadMedia(file))
+      const uploaded: Array<{ name: string; kind: 'image' | 'video' | 'audio'; url: string }> = media.length
+        ? media.map(({ name, kind, url }) => ({ name, kind, url }))
+        : []
+      if (!uploaded.length) {
+        for (const file of files) uploaded.push(await uploadMedia(file))
+      }
       const res = await fetch('/api/studio/training', {
         method: 'POST',
         credentials: 'include',
@@ -411,7 +422,7 @@ export function TrainingStudioPanel() {
   return (
     <div className="h-full flex flex-col text-[11px] text-[var(--text-secondary)]">
       <div className="flex border-b border-[var(--border)] shrink-0 overflow-x-auto">
-        {STUDIO_TABS.map((id) => (
+        {PANEL_TABS.map((id) => (
           <button
             key={id}
             type="button"
@@ -428,9 +439,16 @@ export function TrainingStudioPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-3">
-        {(tab === 'cast' || tab === 'styles' || tab === 'assets') && (
-          <AssetPrompt kind={tab === 'styles' ? 'style' : tab === 'assets' ? 'asset' : 'character'} />
+        {(tab === 'cast' || tab === 'styles' || tab === 'assets' || tab === 'locations') && (
+          <AssetPrompt
+            kind={tab === 'styles' ? 'style' : tab === 'assets' ? 'asset' : tab === 'locations' ? 'location' : 'character'}
+            media={media}
+            consent={subjectConsent}
+            onToggle={(url) => setMedia((rows) => rows.map((row) => row.url === url ? { ...row, selected: !row.selected } : row))}
+          />
         )}
+        {tab === 'locations' && <LocationPack />}
+        {tab !== 'locations' && (
         <div className="flex flex-wrap gap-1">
           {STUDIO_SUBCATEGORIES[tab].map((row) => (
             <button
@@ -447,6 +465,7 @@ export function TrainingStudioPanel() {
             </button>
           ))}
         </div>
+        )}
 
         {tab === 'styles' && isGenreFamily(subcategory) && (
           <div className="space-y-1">
@@ -577,6 +596,17 @@ export function TrainingStudioPanel() {
               const next = Array.from(e.target.files ?? [])
               setFiles(next)
               setConfirming(false)
+              void (async () => {
+                const stored: MediaItem[] = []
+                for (const file of next) {
+                  const item = await uploadMedia(file)
+                  stored.push({ ...item, selected: item.kind === 'image' })
+                }
+                setMedia(stored)
+              })().catch((err: unknown) => {
+                console.warn('[training-upload]', err instanceof Error ? err.message : err)
+                toast.error(err instanceof Error ? err.message : 'Upload failed')
+              })
               const audio = next.find((file) => file.type.startsWith('audio/'))
               if (audio) {
                 const el = document.createElement('audio')
@@ -599,7 +629,7 @@ export function TrainingStudioPanel() {
         {recommend?.rightsNotice && (
           <p className="text-[10px] text-[var(--text-tertiary)] leading-relaxed">{recommend.rightsNotice}</p>
         )}
-        {(recommend?.requiresOwnedOrLicensed || tab === 'cast' || tab === 'assets') && (
+        {(recommend?.requiresOwnedOrLicensed || tab === 'cast' || tab === 'assets' || tab === 'locations') && (
           <label className="flex items-start gap-1.5 text-[10px] leading-relaxed">
             <input type="checkbox" className="mt-0.5" checked={footageCopyrighted} onChange={(e) => { setFootageCopyrighted(e.target.checked); setConfirming(false) }} />
             These files include movie, TV, or anime footage
@@ -611,10 +641,10 @@ export function TrainingStudioPanel() {
             I own or am licensed for this material. Do not train without this.
           </label>
         )}
-        {(tab === 'cast' || tab === 'voices') && (
+        {(tab === 'cast' || tab === 'voices' || tab === 'locations') && (
           <label className="flex items-start gap-1.5 text-[10px] leading-relaxed">
             <input type="checkbox" className="mt-0.5" checked={subjectConsent} onChange={(e) => setSubjectConsent(e.target.checked)} />
-            The subject consents to this face LoRA / voice clone
+            {tab === 'locations' ? 'I have the rights to these places and any footage in the plates' : 'The subject consents to this face LoRA / voice clone'}
           </label>
         )}
 
@@ -631,7 +661,7 @@ export function TrainingStudioPanel() {
           </p>
         )}
 
-        {tab !== 'voices' && tab !== 'music' && (
+        {tab !== 'voices' && tab !== 'music' && tab !== 'locations' && (
           <>
             <label className="block">
               <span className="text-[10px] uppercase text-[var(--text-tertiary)]">Steps {steps}</span>
@@ -771,6 +801,32 @@ export function TrainingStudioPanel() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function LocationPack() {
+  const { data: rows = [] } = useQuery<Array<{ id: string; name: string; imageUrl: string | null; resolutionState: string; plates: number; needsAction: boolean }>>({
+    queryKey: ['studio-locations'],
+    queryFn: async () => {
+      const res = await fetch('/api/studio/assets/t2i?kind=location&list=all', { credentials: 'include' })
+      const body = await res.json() as { assets?: Array<{ id: string; name: string; imageUrl: string | null; resolutionState: string; plates: number; needsAction: boolean }> }
+      return body.assets ?? []
+    },
+  })
+  return (
+    <div className="space-y-1">
+      <p className="text-[10px] text-[var(--text-tertiary)]">Location LoRA training is not in the registry. This tab is a reference pack. Plates and variations feed generation. These files stay yours.</p>
+      {rows.map((row) => (
+        <div key={row.id} className="flex items-center gap-2 rounded border border-white/10 p-1">
+          {row.imageUrl && <img src={row.imageUrl} alt="" className="h-8 w-12 object-cover" />}
+          <div className="min-w-0">
+            <p className="truncate">{row.name}</p>
+            <p className="text-[9px] text-white/40">{row.resolutionState} · {row.plates} plate{row.plates === 1 ? '' : 's'}{row.needsAction ? ' · needs action' : ''}</p>
+          </div>
+        </div>
+      ))}
+      {rows.length === 0 && <p className="text-[10px] text-white/35">No locations yet. Generate a reference or import a plate.</p>}
     </div>
   )
 }

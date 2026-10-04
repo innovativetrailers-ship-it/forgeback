@@ -41,12 +41,15 @@ export declare const ENDPOINT_CATALOG: {
     readonly 'imageutils/rembg': "fal-ai/imageutils/rembg";
     readonly 'instant-character': "fal-ai/instant-character";
     readonly 'ip-adapter-face-id': "fal-ai/ip-adapter-face-id";
+    readonly 'kling-video/o1/reference-to-video': "fal-ai/kling-video/o1/reference-to-video";
+    readonly 'kling-video/o3/4k/reference-to-video': "fal-ai/kling-video/o3/4k/reference-to-video";
     readonly 'kling-video/o3/pro/image-to-video': "fal-ai/kling-video/o3/pro/image-to-video";
     readonly 'kling-video/o3/pro/text-to-video': "fal-ai/kling-video/o3/pro/text-to-video";
     readonly 'kling-video/v1.5/pro/image-to-video': "fal-ai/kling-video/v1.5/pro/image-to-video";
     readonly 'kling-video/v1.6/pro/image-to-video': "fal-ai/kling-video/v1.6/pro/image-to-video";
     readonly 'kling-video/v1.6/pro/motion-brush': "fal-ai/kling-video/v1.6/pro/motion-brush";
     readonly 'kling-video/v1.6/standard/image-to-video': "fal-ai/kling-video/v1.6/standard/image-to-video";
+    readonly 'kling-video/v1.6/standard/elements': "fal-ai/kling-video/v1.6/standard/elements";
     readonly 'kling-video/v1.6/standard/text-to-video': "fal-ai/kling-video/v1.6/standard/text-to-video";
     readonly 'kling-video/v2.1/pro/image-to-video': "fal-ai/kling-video/v2.1/pro/image-to-video";
     readonly 'kling-video/v3/pro/image-to-video': "fal-ai/kling-video/v3/pro/image-to-video";
@@ -78,6 +81,7 @@ export declare const ENDPOINT_CATALOG: {
     readonly 'rembg-video': "fal-ai/rembg-video";
     readonly 'rife-interpolation': "fal-ai/rife-interpolation";
     readonly sadtalker: "fal-ai/sadtalker";
+    readonly 'sam-3/3d-objects': "fal-ai/sam-3/3d-objects";
     readonly 'seedance-v1-lite-i2v': "fal-ai/seedance-v1-lite-i2v";
     readonly 'seedance-v1-pro-i2v': "fal-ai/seedance-v1-pro-i2v";
     readonly 'stable-audio': "fal-ai/stable-audio";

@@ -1,3 +1,30 @@
+export const MISSING_FAIL_REASON = 'failed — reason not captured (pre-reconcile)'
+
+const CANONICAL_STATES = new Set(['unresolved', 'imported', 'generated', 'trained'])
+
+/** Legacy `resolved` / `needs_action` values map onto the canonical set. Nothing is deleted. */
+export function canonicalAssetState(row: {
+  resolutionState: string
+  kind?: string | null
+  generatedImage?: string | null
+  weightsKey?: string | null
+}): { resolutionState: string; needsAction: boolean } {
+  if (row.weightsKey) return { resolutionState: 'trained', needsAction: false }
+  if (row.resolutionState === 'needs_action') return { resolutionState: 'unresolved', needsAction: true }
+  if (row.resolutionState === 'resolved') {
+    if (row.kind === 'location') return { resolutionState: 'imported', needsAction: false }
+    if (row.generatedImage) return { resolutionState: 'generated', needsAction: false }
+    return { resolutionState: 'imported', needsAction: false }
+  }
+  if (row.resolutionState === 'unresolved' && !row.generatedImage && !row.weightsKey) {
+    return { resolutionState: 'unresolved', needsAction: true }
+  }
+  if (row.generatedImage && !CANONICAL_STATES.has(row.resolutionState)) {
+    return { resolutionState: 'generated', needsAction: false }
+  }
+  return { resolutionState: CANONICAL_STATES.has(row.resolutionState) ? row.resolutionState : 'unresolved', needsAction: false }
+}
+
 export function clipReason(
   clip: { keyframeUrl: string | null; prompt: string; videoUrl: string | null },
   paused: boolean,
