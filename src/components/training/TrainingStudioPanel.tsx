@@ -122,6 +122,8 @@ export function TrainingStudioPanel() {
   const [voiceSeconds, setVoiceSeconds] = useState(0)
   const [ownedOrLicensed, setOwnedOrLicensed] = useState(false)
   const [subjectConsent, setSubjectConsent] = useState(false)
+  const [lookPlates, setLookPlates] = useState<Array<{ id: string; label: string | null; imageUrl: string; lookId: string }>>([])
+  const [lookIds, setLookIds] = useState<string[]>([])
   const [footageCopyrighted, setFootageCopyrighted] = useState(false)
   const [presetId, setPresetId] = useState('')
 
@@ -210,6 +212,19 @@ export function TrainingStudioPanel() {
     },
   })
 
+  useEffect(() => {
+    if (tab !== 'cast') return
+    void fetch('/api/studio/looks', { credentials: 'include' })
+      .then(async (res) => {
+        if (!res.ok) return
+        const body = await res.json() as { plates?: Array<{ id: string; label: string | null; imageUrl: string; lookId: string }> }
+        const plates = body.plates ?? []
+        setLookPlates(plates)
+        setLookIds(plates.map((plate) => plate.id))
+      })
+      .catch((err) => console.warn('[training-looks]', err instanceof Error ? err.message : err))
+  }, [tab])
+
   const prevActiveIds = useRef<string[]>([])
   useEffect(() => {
     const activeIds = runs
@@ -230,7 +245,16 @@ export function TrainingStudioPanel() {
 
   async function train() {
     if (!recommend) return
-    if (files.length < recommend.minItems) {
+    const lookFiles = tab === 'cast'
+      ? lookPlates.filter((plate) => lookIds.includes(plate.id)).map((plate) => ({
+          name: `${plate.label || plate.lookId || 'look'}.png`,
+          kind: 'image' as const,
+          url: plate.imageUrl,
+          caption: `${trigger.trim() || name.trim() || 'character'}, ${plate.label || 'sfx makeup'} look`,
+        }))
+      : []
+    const readyCount = (media.length || files.length) + lookFiles.length
+    if (readyCount < recommend.minItems) {
       toast.error(`Need at least ${recommend.minItems} ${recommend.types.join('/')} files`)
       return
     }
@@ -253,12 +277,13 @@ export function TrainingStudioPanel() {
     }
     setBusy(true)
     try {
-      const uploaded: Array<{ name: string; kind: 'image' | 'video' | 'audio'; url: string }> = media.length
+      const uploaded: Array<{ name: string; kind: 'image' | 'video' | 'audio'; url: string; caption?: string }> = media.length
         ? media.map(({ name, kind, url }) => ({ name, kind, url }))
         : []
       if (!uploaded.length) {
         for (const file of files) uploaded.push(await uploadMedia(file))
       }
+      uploaded.push(...lookFiles)
       const res = await fetch('/api/studio/training', {
         method: 'POST',
         credentials: 'include',
@@ -279,8 +304,10 @@ export function TrainingStudioPanel() {
           subjectConsent: subjectConsent || undefined,
           footageIncludesCopyrightedTitles: footageCopyrighted || undefined,
           files: uploaded.map((file) => ({
-            ...file,
-            caption: caption.trim() || undefined,
+            name: file.name,
+            kind: file.kind,
+            url: file.url,
+            caption: file.caption || caption.trim() || undefined,
           })),
         }),
       })
@@ -448,6 +475,22 @@ export function TrainingStudioPanel() {
           />
         )}
         {tab === 'locations' && <LocationPack />}
+        {tab === 'cast' && (
+          <div className="space-y-1">
+            <p className="text-[10px] text-[var(--text-tertiary)]">SFX look plates are baked into this character LoRA with the cast trainer. There is no second look trainer.</p>
+            {lookPlates.length === 0 && <p className="text-[10px] text-[var(--text-tertiary)]">No baked looks yet. Bake one in SFX Makeup onto a character.</p>}
+            {lookPlates.map((plate) => (
+              <label key={plate.id} className="flex items-center gap-2 text-[10px]">
+                <input
+                  type="checkbox"
+                  checked={lookIds.includes(plate.id)}
+                  onChange={() => setLookIds((ids) => ids.includes(plate.id) ? ids.filter((id) => id !== plate.id) : [...ids, plate.id])}
+                />
+                {plate.label || plate.lookId || 'Look plate'}
+              </label>
+            ))}
+          </div>
+        )}
         {tab !== 'locations' && (
         <div className="flex flex-wrap gap-1">
           {STUDIO_SUBCATEGORIES[tab].map((row) => (

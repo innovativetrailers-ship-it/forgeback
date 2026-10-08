@@ -1,6 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { KEYMAP_PRESET_IDS, KEYMAP_PRESET_LABELS, migrateKeymapPreset, type KeymapPresetId } from '@cinema/core'
+import { TimelineDockProvider, type TimelineDockMode } from '@/components/editor/timelineDock'
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import {
@@ -575,7 +577,7 @@ function place(api: DockviewApi, workspace: WorkspaceName) {
   }
   api.addPanel({ id: 'tools', component: 'tools', title: 'Tools', position: { referencePanel: program, direction: 'right' } })
   api.addPanel({ id: 'inspector', component: 'inspector', title: 'Inspector', position: { referencePanel: 'tools', direction: 'within' } })
-  if (workspace === 'Editor' || workspace === 'VFX' || workspace === 'Creator' || workspace === 'Director') {
+  if (workspace === 'Editor' || workspace === 'VFX' || workspace === 'Compositor' || workspace === 'Creator' || workspace === 'Director' || workspace === 'Motion' || workspace === 'Look-dev') {
     api.addPanel({ id: 'transitions', component: 'transitions', title: 'Transitions', position: { referencePanel: 'inspector', direction: 'within' } })
     api.addPanel({ id: 'titles', component: 'titles', title: 'Titles', position: { referencePanel: 'inspector', direction: 'within' } })
     api.addPanel({ id: 'templates', component: 'templates', title: 'Templates', position: { referencePanel: 'inspector', direction: 'within' } })
@@ -619,8 +621,9 @@ export function EditorDock({
   const apiRef = useRef<DockviewApi | null>(null)
   const [workspace, setWorkspace] = useState<WorkspaceName>('Creator')
   const [locked, setLocked] = useState(true)
-  const [preset, setPreset] = useState<keyof typeof KEYMAP_PRESETS>('Premiere')
-  const [keymap, setKeymap] = useState<Keymap>(KEYMAP_PRESETS.Premiere)
+  const [preset, setPreset] = useState<KeymapPresetId>('forge')
+  const [keymap, setKeymap] = useState<Keymap>(KEYMAP_PRESETS.forge)
+  const [timelineMode, setTimelineMode] = useState<TimelineDockMode>('full')
   const [bindCommand, setBindCommand] = useState<KeyCommand | ''>('')
   const [sourceId, setSourceId] = useState<string | null>(null)
   const [marks, setMarks] = useState({ inn: 0, out: 2 })
@@ -636,8 +639,9 @@ export function EditorDock({
     const saved = window.localStorage.getItem(`${storageKey}:keys`)
     if (!saved) return
     try {
-      const parsed = JSON.parse(saved) as { preset?: keyof typeof KEYMAP_PRESETS; map?: Keymap }
-      if (parsed.preset && KEYMAP_PRESETS[parsed.preset]) setPreset(parsed.preset)
+      const parsed = JSON.parse(saved) as { preset?: string; map?: Keymap }
+      const id = migrateKeymapPreset(parsed.preset)
+      if (parsed.preset && KEYMAP_PRESETS[id]) setPreset(id)
       if (parsed.map) setKeymap(parsed.map)
     } catch (err) {
       console.warn('[editor] keymap', err instanceof Error ? err.message : err)
@@ -658,6 +662,11 @@ export function EditorDock({
         setKeymap(next)
         window.localStorage.setItem(`${storageKey}:keys`, JSON.stringify({ preset, map: next }))
         setBindCommand('')
+        return
+      }
+      if (event.key === '\\' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault()
+        setTimelineMode((current) => current === 'full' ? 'compact' : current === 'compact' ? 'hidden' : 'full')
         return
       }
       const command = commandFor(keymap, event)
@@ -710,10 +719,21 @@ export function EditorDock({
   function switchWorkspace(next: WorkspaceName) {
     setWorkspace(next)
     setLocked(next === 'Creator')
+    const full = next === 'Creator' || next === 'Director' || next === 'Editor'
+    setTimelineMode(full ? 'full' : 'compact')
     const api = apiRef.current
     if (!api) return
     place(api, next)
   }
+
+  useEffect(() => {
+    const panel = apiRef.current?.getPanel('timeline')
+    if (!panel) return
+    const height = timelineMode === 'full' ? 280 : timelineMode === 'compact' ? 72 : 28
+    panel.api.setConstraints({ minimumHeight: timelineMode === 'hidden' ? 28 : 64 })
+    panel.api.setSize({ height })
+    window.localStorage.setItem(`${storageKey}:timeline-mode`, timelineMode)
+  }, [timelineMode, storageKey])
 
   function toggleLock() {
     const api = apiRef.current
@@ -724,6 +744,7 @@ export function EditorDock({
   }
 
   return (
+    <TimelineDockProvider mode={timelineMode} setMode={setTimelineMode}>
     <EditorFrameContext.Provider value={frame}>
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-1 border-b border-white/10 px-2 py-1 text-[10px] text-white/70">
@@ -732,8 +753,12 @@ export function EditorDock({
             value={workspace}
             onChange={(event) => switchWorkspace(event.target.value as WorkspaceName)}
           >
-            {WORKSPACES.map((name) => <option key={name}>{name}</option>)}
+            {WORKSPACES.map((name) => <option key={name} value={name}>{name === 'Editor' ? 'Edit' : name}</option>)}
           </select>
+          <button type="button" className="rounded bg-white/10 px-2 py-0.5" onClick={() => switchWorkspace('Editor')}>Back to Edit</button>
+          <button type="button" className="rounded bg-white/10 px-2 py-0.5" title="Cycle timeline: full, compact, hidden" onClick={() => setTimelineMode((current) => current === 'full' ? 'compact' : current === 'compact' ? 'hidden' : 'full')}>
+            Timeline {timelineMode}
+          </button>
           <button type="button" className="rounded bg-white/10 px-2 py-0.5" onClick={toggleLock}>{locked ? 'Unlock layout' : 'Lock layout'}</button>
           <button
             type="button"
@@ -748,21 +773,22 @@ export function EditorDock({
           <select
             className="rounded border border-white/10 bg-black/40 px-1 py-0.5"
             value={preset}
+            title={KEYMAP_PRESET_LABELS[preset]}
             onChange={(event) => {
-              const name = event.target.value as keyof typeof KEYMAP_PRESETS
+              const name = migrateKeymapPreset(event.target.value)
               setPreset(name)
               setKeymap(KEYMAP_PRESETS[name])
               window.localStorage.setItem(`${storageKey}:keys`, JSON.stringify({ preset: name, map: KEYMAP_PRESETS[name] }))
             }}
           >
-            {(Object.keys(KEYMAP_PRESETS) as Array<keyof typeof KEYMAP_PRESETS>).map((name) => <option key={name}>{name}</option>)}
+            {KEYMAP_PRESET_IDS.map((id) => <option key={id} value={id}>{KEYMAP_PRESET_LABELS[id]}</option>)}
           </select>
           <select
             className="rounded border border-white/10 bg-black/40 px-1 py-0.5"
             value={bindCommand}
             onChange={(event) => setBindCommand(event.target.value as KeyCommand | '')}
           >
-            <option value="">Rebind…</option>
+            <option value="">Customise keys…</option>
             {KEY_COMMANDS.map((name) => <option key={name} value={name}>{name}</option>)}
           </select>
           <button
@@ -770,20 +796,20 @@ export function EditorDock({
             className="rounded bg-white/10 px-2 py-0.5"
             onClick={() => void navigator.clipboard.writeText(exportKeymap(keymap))}
           >
-            Export keys
+            Export keymap
           </button>
           <button
             type="button"
             className="rounded bg-white/10 px-2 py-0.5"
             onClick={() => {
-              const raw = window.prompt('Paste a keymap', '') ?? ''
+              const raw = window.prompt('Import keymap file (.kys, .xml, .json)', '') ?? ''
               const next = importKeymap(raw)
               if (!next || !Object.keys(next).length) return
               setKeymap(next)
               window.localStorage.setItem(`${storageKey}:keys`, JSON.stringify({ preset, map: next }))
             }}
           >
-            Import keys
+            Import keymap
           </button>
           <span className="text-white/35">{bindCommand ? `Press the new key for ${bindCommand}` : 'J K L move · I O mark'}</span>
         </div>
@@ -792,5 +818,6 @@ export function EditorDock({
         </div>
       </div>
     </EditorFrameContext.Provider>
+    </TimelineDockProvider>
   )
 }

@@ -11,45 +11,34 @@ import { GeneratePanel } from '@/components/panels/GeneratePanel'
 import { LibraryPanel } from '@/components/panels/LibraryPanel'
 import { TrainingStudioPanel } from '@/components/training/TrainingStudioPanel'
 import { TranslatePanel } from '@/components/panels/TranslatePanel'
+import { ComingPanel, TransitionsPanel, AudioStudioPanel, VfxPanel, CgiPanel, StockPanel, BrandKitPanel, AvatarPanel, HighlightPanel } from '@/components/panels/RailTools'
 import { X } from 'lucide-react'
-
-// Lazy placeholders for panels
-function PlaceholderPanel({ label }: { label: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-6">
-      <div className="w-10 h-10 rounded-full bg-[var(--teal-glow)] border border-[var(--teal-border)] flex items-center justify-center mb-3">
-        <span className="text-[var(--teal-bright)] text-lg">⚡</span>
-      </div>
-      <p className="text-[12px] font-medium text-[var(--text-primary)] mb-1">{label}</p>
-      <p className="text-[10px] text-[var(--text-tertiary)]">Select a clip or use the timeline below</p>
-    </div>
-  )
-}
 
 const PANEL_MAP: Partial<Record<PanelId, React.ReactNode>> = {
   generate:    <GeneratePanel />,
-  vault:       <PlaceholderPanel label="Character Vault" />,
+  vault:       <ComingPanel label="Character vault" run="use Cast for the people in this film" />,
   library:     <LibraryPanel />,
   location:    <LocationPanel />,
   cast:        <CharacterCastPanel />,
   training:    <TrainingStudioPanel />,
   makeup:      <SFXMakeupPanel />,
+  sfx_makeup:  <SFXMakeupPanel />,
   greenscreen: <GreenScreenPanel />,
-  cgi:         <PlaceholderPanel label="CGI Insertion" />,
-  vfx:         <PlaceholderPanel label="VFX Compositor" />,
-  transitions: <PlaceholderPanel label="Transitions" />,
-  audio:       <PlaceholderPanel label="Audio Studio" />,
-  stock:       <PlaceholderPanel label="Stock Media" />,
-  script:      <PlaceholderPanel label="Script Editor" />,
-  storyboard:  <PlaceholderPanel label="Storyboard" />,
-  avatar:      <PlaceholderPanel label="AI Avatar" />,
+  cgi:         <CgiPanel />,
+  vfx:         <VfxPanel />,
+  transitions: <TransitionsPanel />,
+  audio:       <AudioStudioPanel />,
+  stock:       <StockPanel />,
+  script:      <ComingPanel label="Script" run="the script editor is not mounted" />,
+  storyboard:  <ComingPanel label="Storyboard" run="the storyboard is not mounted" />,
+  avatar:      <AvatarPanel />,
   translate:   <TranslatePanel />,
-  highlight:   <PlaceholderPanel label="Highlight Reel" />,
-  brandkit:    <PlaceholderPanel label="Brand Kit" />,
-  settings:    <PlaceholderPanel label="Settings" />,
+  highlight:   <HighlightPanel />,
+  brandkit:    <BrandKitPanel />,
+  settings:    <ComingPanel label="Settings" run="settings are not mounted on this rail" />,
   ai_director: <AIDirectorPanel />,
   continuity:  <ContinuityPanel />,
-  audio_mix:   <PlaceholderPanel label="Audio Mix" />,
+  audio_mix:   <AudioStudioPanel />,
 }
 
 export function LeftPanel() {
@@ -75,7 +64,7 @@ export function LeftPanel() {
   }
 
   return (
-    <aside className={`${activePanel === 'training' ? 'w-[320px]' : 'w-[260px]'} shrink-0 flex flex-col bg-[var(--bg-elevated)] border-r border-[var(--border)] overflow-hidden`}>
+    <aside className={`${activePanel === 'training' || activePanel === 'vfx' ? 'w-[520px]' : 'w-[260px]'} shrink-0 flex flex-col bg-[var(--bg-elevated)] border-r border-[var(--border)] overflow-hidden`}>
       <div className="flex items-center justify-between px-3 h-8 border-b border-[var(--border)] shrink-0">
         <span className="panel-label">{PANEL_LABELS[activePanel]}</span>
         <button
@@ -87,7 +76,7 @@ export function LeftPanel() {
         </button>
       </div>
       <div className="flex-1 overflow-hidden">
-        {PANEL_MAP[activePanel] ?? <PlaceholderPanel label={PANEL_LABELS[activePanel]} />}
+        {PANEL_MAP[activePanel] ?? <ComingPanel label={PANEL_LABELS[activePanel] ?? 'Panel'} run="this tool is not mounted" />}
       </div>
     </aside>
   )

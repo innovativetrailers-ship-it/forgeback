@@ -1,7 +1,8 @@
+import { GOOGLE_IMAGERY_NOTE, MAPILLARY_LICENCE, sampleAlong, type GeoHit } from '@cinema/core'
 import { NextRequest, NextResponse } from 'next/server'
-import { geocodeLocation }                        from '@/lib/engines/geocode'
-import { searchStreetView }                       from '@/lib/engines/mapillary'
-import { getSatelliteImageUrls, getCesiumConfig } from '@/lib/engines/satellite'
+import { geocodeLocation, suggestPlaces } from '@/lib/engines/geocode'
+import { searchStreetView } from '@/lib/engines/mapillary'
+import { getSatelliteImageUrls } from '@/lib/engines/satellite'
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const userId = req.headers.get('x-user-id')
@@ -11,41 +12,58 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'MAPILLARY_ACCESS_TOKEN not configured' }, { status: 503 })
   }
 
-  let body: Record<string, unknown>
+  let body: {
+    query?: string
+    lat?: number
+    lng?: number
+    line?: Array<[number, number]>
+  }
   try {
-    body = (await req.json()) as Record<string, unknown>
+    body = await req.json() as typeof body
   } catch (err) {
-    console.warn("[caught] src/app/api/location/search/route.ts:17", err instanceof Error ? { name: err.name, message: err.message } : err)
-
+    console.warn('[location-search]', err instanceof Error ? err.message : err)
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
   const query = typeof body.query === 'string' ? body.query.trim() : ''
-  if (!query) {
+  if (!query && (typeof body.lat !== 'number' || typeof body.lng !== 'number')) {
     return NextResponse.json({ error: 'query required' }, { status: 400 })
   }
 
-  const radius = typeof body.radius === 'number' && body.radius > 0 ? body.radius : 150
-
   try {
-    const location   = await geocodeLocation(query)
-    const { lat, lng } = location
-
-    const [streetView, satellite] = await Promise.all([
-      searchStreetView({ lat, lng, radius, limit: 24 }),
-      Promise.resolve(getSatelliteImageUrls(lat, lng)),
-    ])
-    const cesium = getCesiumConfig(lat, lng, location.displayName)
-
+    const suggestions = query ? await suggestPlaces(query) : []
+    const picked = typeof body.lat === 'number' && typeof body.lng === 'number'
+      ? suggestions.find((hit) => Math.abs(hit.lat - body.lat!) < 0.0008 && Math.abs(hit.lng - body.lng!) < 0.0008)
+      : suggestions[0]
+    const base = picked ?? (typeof body.lat === 'number' && typeof body.lng === 'number'
+      ? { lat: body.lat, lng: body.lng, displayName: query || `${body.lat}, ${body.lng}`, kind: 'place:pin', line: body.line }
+      : await geocodeLocation(query))
+    const place: GeoHit = {
+      ...base,
+      lat: typeof body.lat === 'number' ? body.lat : base.lat,
+      lng: typeof body.lng === 'number' ? body.lng : base.lng,
+      line: body.line ?? base.line,
+    }
+    const samples = sampleAlong(place.line, { lat: place.lat, lng: place.lng })
+    const street = await searchStreetView({ points: samples })
+    const satellite = getSatelliteImageUrls(place.lat, place.lng)
     return NextResponse.json({
-      location,
-      streetView,
+      location: place,
+      suggestions,
+      streetView: street.shown,
+      filtered: street.filtered,
       satellite,
-      cesium,
+      viewer: { lat: place.lat, lng: place.lng, label: place.displayName },
       meta: {
-        streetViewCount: streetView.length,
-        hasStreetView:   streetView.length > 0,
-        hasSatellite:    true,
+        streetViewCount: street.shown.length,
+        filteredCount: street.filtered.length,
+        hasStreetView: street.shown.length > 0,
+        licence: MAPILLARY_LICENCE,
+        google: GOOGLE_IMAGERY_NOTE,
+        unavailable: [
+          'KartaView nearby search returned HTTP 400 (query timeout) and is not listed.',
+          'Wikimedia Commons geosearch returned no photos for a sample point and is not listed.',
+        ],
       },
     })
   } catch (err: unknown) {

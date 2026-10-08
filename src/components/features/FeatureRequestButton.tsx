@@ -50,7 +50,7 @@ export function FeatureRequestButton() {
       <button
         type="button"
         onClick={() => { setRoute(window.location.pathname); setOpen(true) }}
-        className="fixed bottom-4 left-4 z-40 rounded-full bg-white/10 px-3 py-1.5 text-[11px] text-white/80"
+        className="fixed bottom-4 left-16 z-40 rounded-full bg-white/10 px-3 py-1.5 text-[11px] text-white/80"
       >
         Request a feature
       </button>

@@ -44,10 +44,12 @@ export const SERVICE_REGISTRY: Record<string, ServiceConfig> = {
   kimi:       { name: 'Kimi K2',       category: 'llm', access: 'fal-openrouter', envVar: 'FAL_KEY' },
 
   // ── Location — direct (free tier) ────────────────────────────
+  nominatim:  { name: 'Nominatim',     category: 'location', access: 'direct', envVar: 'NOMINATIM_USER_AGENT',
+                engineFile: 'src/lib/engines/geocode.ts',      apiRoute: 'src/app/api/location/suggest/route.ts' },
   mapillary:  { name: 'Mapillary',     category: 'location', access: 'direct', envVar: 'MAPILLARY_ACCESS_TOKEN',
-                engineFile: 'src/lib/engines/mapillary.ts',    apiRoute: 'src/app/api/location/imagery/route.ts' },
-  cesium:     { name: 'Cesium',        category: 'location', access: 'direct', envVar: 'CESIUM_ION_TOKEN',
-                engineFile: 'src/lib/engines/cesium.ts',       apiRoute: 'src/app/api/location/aerial-path/route.ts' },
+                engineFile: 'src/lib/engines/mapillary.ts',    apiRoute: 'src/app/api/location/search/route.ts' },
+  cesium:     { name: 'Cesium',        category: 'location', access: 'direct', envVar: 'CESIUM_ION_ACCESS_TOKEN',
+                engineFile: 'src/lib/engines/cesium.ts',       apiRoute: 'src/app/api/location/viewer/route.ts' },
 
   // ── Stock — direct (free tier) ────────────────────────────────
   pexels:     { name: 'Pexels',        category: 'stock', access: 'direct', envVar: 'PEXELS_API_KEY',

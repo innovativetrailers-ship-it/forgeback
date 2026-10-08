@@ -8,6 +8,9 @@ const steps = [
   'scripts/check-route-segments.mjs',
   'scripts/check-dormant-auth.mjs',
   'scripts/check-pause-guard.mjs',
+  'scripts/check-location-viewer.mjs',
+  'scripts/check-no-stub-panels.mjs',
+  'scripts/check-third-party-marks.mjs',
 ]
 
 for (const step of steps) {

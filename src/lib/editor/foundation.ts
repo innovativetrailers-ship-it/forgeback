@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid'
 import type { Clip, TimelineRecipe, Track } from '@/lib/timeline/schema'
 
-export const WORKSPACES = ['Creator', 'Director', 'Editor', 'Colour', 'Audio', 'VFX', 'Review'] as const
+export const WORKSPACES = ['Creator', 'Director', 'Editor', 'Colour', 'Audio', 'VFX', 'Compositor', 'Motion', 'Look-dev', 'Review'] as const
 export type WorkspaceName = (typeof WORKSPACES)[number]
 
 export const LOCAL_TRANSITIONS = ['cut', 'dissolve', 'fade', 'fade-in', 'fade-out', 'wipe', 'slide', 'push', 'zoom', 'whip', 'spin', 'glitch', 'blur', 'film_burn', 'light_leak', 'generative-bridge'] as const

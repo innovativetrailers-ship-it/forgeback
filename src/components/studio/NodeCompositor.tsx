@@ -1,21 +1,19 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
 import {
   NODE_COLORS,
   NODE_TYPES_LIST,
   COMPOSITOR_NODE_COUNT,
   makeNode,
-  type NodeType,
-  type CompositorNode,
-  type NodeConnection,
-} from '@/lib/compositor'
+} from '@/lib/compositor/palette'
+import type { NodeType, NodePort, CompositorNode, NodeConnection } from '@/lib/compositor/schema'
 import { DESKTOP_VFX_NODES, DESKTOP_VFX_NOTE } from '@/lib/compositor/vfx'
 
-export type { NodeType, NodePort, CompositorNode, NodeConnection } from '@/lib/compositor'
+export type { NodeType, NodePort, CompositorNode, NodeConnection }
 
-export default function NodeCompositor() {
+export default function NodeCompositor({ sourceUrl }: { sourceUrl?: string }) {
   const [nodes, setNodes] = useState<CompositorNode[]>([])
   const [connections, setConnections] = useState<NodeConnection[]>([])
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
@@ -25,6 +23,15 @@ export default function NodeCompositor() {
   const [renderUrl, setRenderUrl] = useState<string | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const seeded = useRef(false)
+
+  useEffect(() => {
+    if (!sourceUrl || seeded.current) return
+    seeded.current = true
+    const node = makeNode('MediaIn', { x: 24, y: 24 })
+    node.params = { ...node.params, sourceUrl }
+    setNodes([node])
+  }, [sourceUrl])
 
   function addNode(type: NodeType) {
     const node = makeNode(type, { x: 200 + Math.random() * 300, y: 100 + Math.random() * 200 })

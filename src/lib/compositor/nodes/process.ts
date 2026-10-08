@@ -1,6 +1,7 @@
 import type { CompositorNode } from '../schema'
 import type { CompositorFrame, NodeInputs } from '../frame'
 import { loadEXRFromURL } from '../EXRLoader'
+import { applyMatte, compositeSubject, matchColour } from '@/lib/greenscreen/matte'
 import {
   applyLayer3D,
   applyParticles,
@@ -96,6 +97,27 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
       const fg = inputs.foreground ?? video
       const bg = inputs.background
       if (!fg || !bg) return { video: fg ?? bg }
+      if (p.greenScreen === true) {
+        try {
+          const front = await decodeRaw(fg.rgba)
+          let back = await decodeRaw(bg.rgba)
+          if (back.width !== front.width || back.height !== front.height) {
+            const s = await sharp()
+            const resized = await s(bg.rgba).resize(front.width, front.height).png().toBuffer()
+            back = await decodeRaw(resized)
+          }
+          matchColour(front.data, back.data, num(p.colourMatch, 0))
+          const merged = compositeSubject(front.data, back.data, front.width, front.height, {
+            lightWrap: num(p.lightWrap, 0),
+            shadow: num(p.shadow, 0),
+            colourMatch: num(p.colourMatch, 0),
+          })
+          const png = await encodePng(Buffer.from(merged), front.width, front.height)
+          return { video: { ...fg, width: front.width, height: front.height, rgba: png } }
+        } catch (err) {
+          console.warn('[compositor]', err instanceof Error ? err.message : err)
+        }
+      }
       const merged = await mergeFrames(
         fg,
         bg,
@@ -252,8 +274,35 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
     case 'MotionBlur':
     case 'Keyer':
     case 'LumaKeyer':
+    case 'SpillSuppress': {
+      if (!video) return { video }
+      try {
+        const decoded = await decodeRaw(video.rgba)
+        const colour = String(p.colour ?? '#00ff00')
+        applyMatte(decoded.data, {
+          mode: node.type === 'LumaKeyer' ? 'luma' : 'chroma',
+          colour,
+          tolerance: node.type === 'SpillSuppress' ? 0 : num(p.tolerance, node.type === 'LumaKeyer' ? num(p.low, 0.2) : 0.4),
+          softness: node.type === 'SpillSuppress' ? 0 : num(p.softness ?? p.rollOff, 0.05),
+          spill: num(p.spill, node.type === 'SpillSuppress' ? 1 : 0),
+          invert: p.invert === true,
+          lumaLow: num(p.lumaLow ?? p.low, num(p.tolerance, 0.2)),
+          lumaHigh: num(p.lumaHigh ?? p.high, Math.min(1, num(p.tolerance, 0.2) + 0.15)),
+          shrink: num(p.shrink, 0),
+          grow: num(p.grow, 0),
+          holeFill: p.holeFill === true,
+          width: decoded.width,
+          height: decoded.height,
+        })
+        const png = await encodePng(decoded.data, decoded.width, decoded.height)
+        return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
+      } catch (err) {
+        console.warn('[compositor]', err instanceof Error ? err.message : err)
+        return { video }
+      }
+    }
+
     case 'DifferenceKey':
-    case 'SpillSuppress':
       return { video }
 
     case 'Roto':

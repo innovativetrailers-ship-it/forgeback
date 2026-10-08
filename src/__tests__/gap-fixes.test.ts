@@ -36,17 +36,17 @@ const words: TranscriptWord[] = [
 ]
 
 describe('gap fixes', () => {
-  it('ships the verified Premiere and Resolve bindings', () => {
-    expect(KEYMAP_PRESETS.Premiere.c).toBe('razor')
-    expect(KEYMAP_PRESETS.Premiere.b).toBe('ripple')
-    expect(KEYMAP_PRESETS.Premiere[',']).toBe('insert')
-    expect(KEYMAP_PRESETS.Premiere['shift+backspace']).toBe('rippleDelete')
-    expect(KEYMAP_PRESETS.Resolve.f9).toBe('insert')
-    expect(KEYMAP_PRESETS.Resolve.a).toBe('select')
-    expect(KEYMAP_PRESETS.Resolve['mod+\\']).toBe('split')
-    expect(KEYMAP_PRESETS.Resolve['alt+v']).toBe('pasteAttributes')
-    expect(commandFor(KEYMAP_PRESETS.Premiere, { key: 'A', shiftKey: true })).toBe('trackSelectBack')
-    const raw = exportKeymap(KEYMAP_PRESETS.Forge)
+  it('keeps the track-editor and finishing bindings under stable ids', () => {
+    expect(KEYMAP_PRESETS.premiere.c).toBe('razor')
+    expect(KEYMAP_PRESETS.premiere.b).toBe('ripple')
+    expect(KEYMAP_PRESETS.premiere[',']).toBe('insert')
+    expect(KEYMAP_PRESETS.premiere['shift+backspace']).toBe('rippleDelete')
+    expect(KEYMAP_PRESETS.resolve.f9).toBe('insert')
+    expect(KEYMAP_PRESETS.resolve.a).toBe('select')
+    expect(KEYMAP_PRESETS.resolve['mod+\\']).toBe('split')
+    expect(KEYMAP_PRESETS.resolve['alt+v']).toBe('pasteAttributes')
+    expect(commandFor(KEYMAP_PRESETS.premiere, { key: 'A', shiftKey: true })).toBe('trackSelectBack')
+    const raw = exportKeymap(KEYMAP_PRESETS.forge)
     expect(importKeymap(raw)?.b).toBe('blade')
   })
 

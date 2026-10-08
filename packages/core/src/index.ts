@@ -651,6 +651,24 @@ export {
 } from './logic/trainingStudio'
 export type { StudioTab, StudioSubcategory } from './logic/trainingStudio'
 export {
+  LOOK_CATEGORIES,
+  LOOK_CATEGORY_LABEL,
+  MAKEUP_LOOKS,
+  looksIn,
+  makeupLook,
+  lookConflict,
+} from './logic/makeupLooks'
+export type {
+  LookCategory,
+  LookRegion,
+  LookContinuity,
+  LookSafety,
+  LookMethod,
+  LookStatus,
+  MakeupLook,
+  LookLayer,
+} from './logic/makeupLooks'
+export {
   GENRE_FAMILIES,
   GENRE_PRESETS,
   isGenreFamily,
@@ -716,6 +734,23 @@ export {
   gradeHasDesktopDepth,
 } from './logic/deepGrade'
 export type { DeepGrade, RgbWheel } from './logic/deepGrade'
+export {
+  KEYMAP_PRESET_IDS,
+  KEYMAP_PRESET_LABELS,
+  KEYMAP_PRESET_BLURBS,
+  migrateKeymapPreset,
+} from './logic/keymapLabels'
+export type { KeymapPresetId } from './logic/keymapLabels'
+export {
+  rankGeoHits,
+  sampleAlong,
+  scoutDropReason,
+  rankScoutFrames,
+  MAPILLARY_LICENCE,
+  GOOGLE_IMAGERY_NOTE,
+  scoutPlatePrompt,
+} from './logic/locationScout'
+export type { GeoHit, ScoutFrame } from './logic/locationScout'
 export {
   LOCAL_MODEL_ROLES,
   routableLocalModels,

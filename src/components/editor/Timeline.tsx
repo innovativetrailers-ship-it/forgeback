@@ -10,6 +10,7 @@ import { clipPosterUrl, computeTimelineDuration, isVideoMediaUrl } from '@/lib/t
 import { ClipContextMenu } from '@/components/editor/ClipContextMenu'
 import { placeDraggedLibraryItem } from '@/lib/library/placeOnTimeline'
 import { toast } from '@/lib/toast'
+import { useTimelineDock } from '@/components/editor/timelineDock'
 
 interface ActiveJob { jobId: string; clipId: string; progress?: number }
 
@@ -222,6 +223,51 @@ export function Timeline({
   const playheadX = timeToX(playheadTime, zoomLevel, scrollOffset) + TRACK_LABEL_WIDTH
 
   const clipJobMap = new Map(activeJobs.map((j) => [j.clipId, j]))
+  const dock = useTimelineDock()
+  const duration = recipe ? computeTimelineDuration(recipe.tracks) : 1
+
+  if (recipe && dock.mode !== 'full') {
+    const clips = recipe.tracks.flatMap((track) => track.clips.map((clip) => ({ clip, track })))
+    return (
+      <div className={`flex items-center gap-2 bg-[#0c0c14] px-2 ${dock.mode === 'hidden' ? 'h-7' : 'h-16'} motion-safe:transition-[height] motion-safe:duration-150`}>
+        <button
+          type="button"
+          className="shrink-0 rounded bg-white/10 px-2 py-1 text-[10px] text-white"
+          title="The mini-strip scrubs and selects. Full edits need the expanded timeline. Press \\ to cycle."
+          onDoubleClick={() => dock.setMode(dock.mode === 'hidden' ? 'compact' : 'full')}
+          onClick={() => dock.setMode(dock.mode === 'hidden' ? 'compact' : 'full')}
+        >
+          Timeline {playheadTime.toFixed(1)}s
+        </button>
+        {dock.mode === 'compact' && (
+          <div
+            className="relative h-8 flex-1 overflow-hidden rounded bg-black/40"
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect()
+              onSeek(Math.max(0, ((event.clientX - rect.left) / rect.width) * duration))
+            }}
+          >
+            {clips.map(({ clip, track }) => {
+              const span = Math.max(duration, 0.1)
+              const left = (clip.startTime / span) * 100
+              const width = Math.max(0.4, ((clip.endTime - clip.startTime) / span) * 100)
+              const colour = TRACK_COLOURS[track.label] ?? TRACK_COLOURS[track.type.toUpperCase()] ?? '#3b82f6'
+              return (
+                <button
+                  key={clip.id}
+                  type="button"
+                  title={clip.prompt || clip.id}
+                  className={`absolute top-1 h-6 rounded-sm ${selectedClipId === clip.id ? 'ring-1 ring-white' : ''}`}
+                  style={{ left: `${left}%`, width: `${width}%`, background: colour }}
+                  onClick={(event) => { event.stopPropagation(); onClipSelect(clip.id); onSeek(clip.startTime) }}
+                />
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div

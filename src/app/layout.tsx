@@ -23,8 +23,6 @@ export const metadata: Metadata = {
     'text to video',
     'video editing',
     'AI director',
-    'CapCut alternative',
-    'Adobe Premiere alternative',
     'Kling',
     'Runway',
     'Veo 3',

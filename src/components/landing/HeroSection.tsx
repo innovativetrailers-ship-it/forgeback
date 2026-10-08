@@ -35,8 +35,7 @@ export function HeroSection() {
         </p>
 
         <p className="text-lg md:text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-          The only platform that replaces Premiere Pro, After Effects, DaVinci Resolve,
-          Runway, and HeyGen — simultaneously.
+          Professional timeline editing, a full colour suite, node compositing, and studio audio — one app.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">

@@ -9,11 +9,11 @@ import { toEditorTimelineRecipe } from '@/lib/timeline/to-editor-recipe'
 type ImportStep = 'drop' | 'detecting' | 'options' | 'importing' | 'relink' | 'done'
 
 const SOURCE_APP_LABELS: Record<ImportSourceApp, string> = {
-  premiere:  'Adobe Premiere Pro',
-  davinci:   'DaVinci Resolve',
-  capcut:    'CapCut',
-  finalcut:  'Final Cut Pro',
-  avid:      'Avid Media Composer',
+  premiere:  'Import project (.prproj)',
+  davinci:   'Import project (.drp)',
+  capcut:    'Import project (timeline package)',
+  finalcut:  'Import project (.fcpxml)',
+  avid:      'Import project (AAF)',
   edl:       'EDL (CMX 3600)',
   otio:      'OpenTimelineIO',
   raw_media: 'Raw media file',
@@ -33,11 +33,11 @@ const SOURCE_APP_ICONS: Record<ImportSourceApp, string> = {
 }
 
 const SOURCE_APP_DESCRIPTIONS: Partial<Record<ImportSourceApp, string>> = {
-  capcut:    'CapCut timeline, clips, and audio will be imported. AI-generated content is preserved as video clips.',
-  premiere:  'Sequences, bins, and media references will be imported. Media files must be accessible or re-linked.',
+  capcut:    'Timeline, clips, and audio will be imported. Generated clips stay as video.',
+  premiere:  'Sequences, bins, and media references will be imported. Relink media if a file is missing.',
   davinci:   'Timeline structure and media references will be imported. Colour grades are not transferred.',
-  finalcut:  'Timeline, clips, and media references will be imported via OpenTimelineIO.',
-  avid:      'Timeline, audio, and some effects will be imported via OpenTimelineIO.',
+  finalcut:  'Timeline, clips, and media references will be imported from an interchange file.',
+  avid:      'Timeline and audio will be imported from an interchange file.',
   edl:       'Cut points and basic metadata will be imported from the EDL.',
   otio:      'Full OTIO timeline bundle will be imported.',
 }

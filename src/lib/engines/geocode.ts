@@ -1,89 +1,92 @@
-// Convert address or GPS string → lat/lng
-// Uses Nominatim (OpenStreetMap) — free, no API key required
+import { rankGeoHits, sampleAlong, type GeoHit } from '@cinema/core'
 
-export interface GeoLocation {
-  lat:         number
-  lng:         number
-  displayName: string
-  country:     string
-  city:        string
-  address:     string
-}
-
-// Parse GPS coordinate input: "-33.8688, 151.2093" or "33.8688°S 151.2093°E"
-function parseGPSInput(input: string): { lat: number; lng: number } | null {
-  // Decimal degrees: "-33.8688, 151.2093" or "-33.8688 151.2093"
-  const decimalMatch = input.match(/^(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)$/)
-  if (decimalMatch) {
-    return { lat: parseFloat(decimalMatch[1]), lng: parseFloat(decimalMatch[2]) }
-  }
-
-  // DMS format: "33°52'7.68"S 151°12'33.48"E"
-  const dmsMatch = input.match(
-    /(\d+)[°](\d+)['](\d+\.?\d*)["]([NS])\s*(\d+)[°](\d+)['](\d+\.?\d*)["]([EW])/i
-  )
-  if (dmsMatch) {
-    const lat =
-      (parseFloat(dmsMatch[1]) + parseFloat(dmsMatch[2]) / 60 + parseFloat(dmsMatch[3]) / 3600) *
-      (dmsMatch[4].toUpperCase() === 'S' ? -1 : 1)
-    const lng =
-      (parseFloat(dmsMatch[5]) + parseFloat(dmsMatch[6]) / 60 + parseFloat(dmsMatch[7]) / 3600) *
-      (dmsMatch[8].toUpperCase() === 'W' ? -1 : 1)
-    return { lat, lng }
-  }
-
-  return null
-}
+const NOMINATIM = 'https://nominatim.openstreetmap.org'
+const USER_AGENT = process.env.NOMINATIM_USER_AGENT || 'CinematicForge/1.0 (location-scout)'
 
 interface NominatimResult {
-  lat:         string
-  lon:         string
+  lat: string
+  lon: string
   display_name: string
+  class?: string
+  type?: string
+  boundingbox?: [string, string, string, string]
+  geojson?: { type?: string; coordinates?: unknown }
   address?: {
-    country?: string
-    city?:    string
-    town?:    string
+    road?: string
+    suburb?: string
+    city?: string
+    town?: string
     village?: string
+    state?: string
+    postcode?: string
+    country?: string
   }
 }
 
-export async function geocodeLocation(query: string): Promise<GeoLocation> {
-  query = query.trim()
-
-  const gps = parseGPSInput(query)
-  if (gps) {
-    // Reverse geocode to get display name
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${gps.lat}&lon=${gps.lng}&format=json`,
-      { headers: { 'User-Agent': 'CinematicForge/1.0' } }
-    )
-    const data = await res.json() as NominatimResult
-    return {
-      lat:         gps.lat,
-      lng:         gps.lng,
-      displayName: data.display_name ?? `${gps.lat}, ${gps.lng}`,
-      country:     data.address?.country ?? '',
-      city:        data.address?.city ?? data.address?.town ?? data.address?.village ?? '',
-      address:     data.display_name ?? '',
-    }
+function lineFromGeo(geo: NominatimResult['geojson']): Array<[number, number]> | undefined {
+  if (!geo?.coordinates) return undefined
+  if (geo.type === 'LineString' && Array.isArray(geo.coordinates)) return geo.coordinates as Array<[number, number]>
+  if (geo.type === 'MultiLineString' && Array.isArray(geo.coordinates)) {
+    return (geo.coordinates as Array<Array<[number, number]>>).flat()
   }
+  return undefined
+}
 
-  // Text search via Nominatim
-  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&addressdetails=1`
-  const res = await fetch(url, { headers: { 'User-Agent': 'CinematicForge/1.0' } })
-  const results = await res.json() as NominatimResult[]
-
-  if (!results.length) {
-    throw new Error(`Location not found: "${query}"`)
-  }
-
-  const r = results[0]
+function toHit(row: NominatimResult): GeoHit {
+  const box = row.boundingbox
   return {
-    lat:         parseFloat(r.lat),
-    lng:         parseFloat(r.lon),
-    displayName: r.display_name,
-    country:     r.address?.country ?? '',
-    city:        r.address?.city ?? r.address?.town ?? r.address?.village ?? '',
-    address:     r.display_name,
+    lat: Number(row.lat),
+    lng: Number(row.lon),
+    displayName: row.display_name,
+    street: row.address?.road,
+    suburb: row.address?.suburb,
+    city: row.address?.city || row.address?.town || row.address?.village,
+    state: row.address?.state,
+    postcode: row.address?.postcode,
+    country: row.address?.country,
+    kind: `${row.class ?? 'place'}:${row.type ?? 'yes'}`,
+    bbox: box ? [Number(box[0]), Number(box[1]), Number(box[2]), Number(box[3])] : undefined,
+    line: lineFromGeo(row.geojson),
   }
 }
+
+function parseGPS(input: string): { lat: number; lng: number } | null {
+  const decimal = input.trim().match(/^(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)$/)
+  if (!decimal) return null
+  const lat = Number(decimal[1])
+  const lng = Number(decimal[2])
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+  return { lat, lng }
+}
+
+async function nominatim(path: string): Promise<NominatimResult[]> {
+  const res = await fetch(`${NOMINATIM}${path}`, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`Geocoder failed (${res.status})`)
+  const data = await res.json() as NominatimResult | NominatimResult[]
+  return Array.isArray(data) ? data : [data]
+}
+
+export async function suggestPlaces(query: string): Promise<GeoHit[]> {
+  const text = query.trim()
+  if (!text) return []
+  const gps = parseGPS(text)
+  if (gps) {
+    const rows = await nominatim(`/reverse?lat=${gps.lat}&lon=${gps.lng}&format=json&addressdetails=1`)
+    const hit = rows[0] ? toHit({ ...rows[0], lat: String(gps.lat), lon: String(gps.lng) }) : {
+      lat: gps.lat, lng: gps.lng, displayName: `${gps.lat}, ${gps.lng}`, kind: 'place:coordinate',
+    }
+    return [hit]
+  }
+  const rows = await nominatim(`/search?q=${encodeURIComponent(text)}&format=json&limit=6&addressdetails=1&polygon_geojson=1`)
+  if (!rows.length) throw new Error(`Location not found: "${text}"`)
+  return rankGeoHits(rows.map(toHit), text)
+}
+
+export async function geocodeLocation(query: string): Promise<GeoHit & { samples: Array<{ lat: number; lng: number }> }> {
+  const hits = await suggestPlaces(query)
+  const place = hits[0]
+  if (!place) throw new Error(`Location not found: "${query}"`)
+  return { ...place, samples: sampleAlong(place.line, { lat: place.lat, lng: place.lng }) }
+}
+
+export { sampleAlong }

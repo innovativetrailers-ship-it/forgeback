@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# sibling desktop checkout is its own repo
+/cinematic-forge-v3
+
 # production
 /build
 

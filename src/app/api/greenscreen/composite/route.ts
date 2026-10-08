@@ -17,24 +17,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'sourceVideoUrl, extractionMode and backdrop are required' }, { status: 400 })
   }
 
-  const extractionCreditKey = body.extractionMode === 'chroma_key' ? 'greenscreen_chroma_key' : 'greenscreen_ai_matting'
-  const backdropCreditKey = body.backdrop.source === 'ai_generated' ? 'backdrop_ai_generate' : 'backdrop_composite'
-
-  try {
-    await checkAndDeductCredits(userId, extractionCreditKey)
-  } catch (err) {
-    console.warn("[caught] src/app/api/greenscreen/composite/route.ts:25", err instanceof Error ? { name: err.name, message: err.message } : err)
-
-    return NextResponse.json({ error: (err as Error).message }, { status: 402 })
+  if (body.extractionMode === 'depth_matting') {
+    return NextResponse.json({ error: 'Depth-Anything-v2 is not in the registry. Depth matting is disabled.' }, { status: 400 })
   }
 
-  try {
-    await checkAndDeductCredits(userId, backdropCreditKey)
-  } catch (err) {
-    console.warn("[caught] src/app/api/greenscreen/composite/route.ts:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+  const chargeExtraction = body.extractionMode !== 'chroma_key'
+  const chargeBackdrop = body.backdrop.source === 'ai_generated'
+  const extractionCreditKey = 'greenscreen_ai_matting'
+  const backdropCreditKey = 'backdrop_ai_generate'
 
-    await refundOperationCredits(userId, extractionCreditKey)
-    return NextResponse.json({ error: (err as Error).message }, { status: 402 })
+  if (chargeExtraction) {
+    try {
+      await checkAndDeductCredits(userId, extractionCreditKey)
+    } catch (err) {
+      console.warn("[caught] src/app/api/greenscreen/composite/route.ts:25", err instanceof Error ? { name: err.name, message: err.message } : err)
+      return NextResponse.json({ error: (err as Error).message }, { status: 402 })
+    }
+  }
+
+  if (chargeBackdrop) {
+    try {
+      await checkAndDeductCredits(userId, backdropCreditKey)
+    } catch (err) {
+      console.warn("[caught] src/app/api/greenscreen/composite/route.ts:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+      if (chargeExtraction) await refundOperationCredits(userId, extractionCreditKey)
+      return NextResponse.json({ error: (err as Error).message }, { status: 402 })
+    }
   }
 
   try {
@@ -44,8 +52,8 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.warn("[caught] src/app/api/greenscreen/composite/route.ts:40", err instanceof Error ? { name: err.name, message: err.message } : err)
 
-    await refundOperationCredits(userId, extractionCreditKey)
-    await refundOperationCredits(userId, backdropCreditKey)
+    if (chargeExtraction) await refundOperationCredits(userId, extractionCreditKey)
+    if (chargeBackdrop) await refundOperationCredits(userId, backdropCreditKey)
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Compositing failed' }, { status: 500 })
   }
 }

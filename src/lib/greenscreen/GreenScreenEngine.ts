@@ -135,18 +135,11 @@ export class GreenScreenEngine {
           refine_foreground: true,
         }) as unknown as { image: { url: string } }
 
-      const depth = await runFal(falEndpoint('imageutils/depth'), { image_url: job.sourceVideoUrl }) as unknown as { image_url: string }
-
       const lighting = await this.extractLightingInfo(job.sourceVideoUrl)
-      return { alphaVideoUrl: result.image.url, depthMapUrl: depth.image_url, lightingInfo: lighting }
+      return { alphaVideoUrl: result.image.url, lightingInfo: lighting }
 
     } else {
-      const depth = await runFal(falEndpoint('imageutils/depth'), { image_url: job.sourceVideoUrl }) as unknown as { image_url: string }
-
-      const rembgResult = await runFal(falEndpoint('imageutils/rembg'), { image_url: job.sourceVideoUrl }) as unknown as { image: { url: string } }
-
-      const lighting = await this.extractLightingInfo(job.sourceVideoUrl)
-      return { alphaVideoUrl: rembgResult.image.url, depthMapUrl: depth.image_url, lightingInfo: lighting }
+      throw new Error('Depth-Anything-v2 is not in the registry. Depth matting is disabled.')
     }
   }
 
@@ -170,8 +163,11 @@ export class GreenScreenEngine {
 
       case 'location_vault': {
         const { db } = await import('../db')
-        const location = await db.vaultLocation.findUnique({ where: { id: config.locationId! } })
-        return location?.referenceUrls?.[0] ?? ''
+        const asset = await db.asset.findFirst({
+          where: { id: config.locationId!, kind: 'location' },
+          include: { plates: { take: 1, select: { imageUrl: true } } },
+        })
+        return asset?.generatedImage || asset?.plates[0]?.imageUrl || ''
       }
 
       case 'hdri_environment': {

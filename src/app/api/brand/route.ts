@@ -50,3 +50,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to create brand kit' }, { status: 500 })
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  const session = await auth()
+  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const body = await req.json().catch((err) => {
+    console.warn('[brand]', err instanceof Error ? err.message : err)
+    return null
+  }) as { id?: string; primaryColor?: string; secondaryColor?: string; accentColor?: string; fontFamily?: string } | null
+  if (!body?.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  const { db } = await import('@/lib/db')
+  const existing = await db.brandKit.findFirst({ where: { id: body.id, userId } })
+  if (!existing) return NextResponse.json({ error: 'Kit not found' }, { status: 404 })
+  const kit = await db.brandKit.update({
+    where: { id: existing.id },
+    data: {
+      primaryColor: body.primaryColor ?? existing.primaryColor,
+      secondaryColor: body.secondaryColor ?? existing.secondaryColor,
+      accentColor: body.accentColor ?? existing.accentColor,
+      fontFamily: body.fontFamily ?? existing.fontFamily,
+      lowerThirdStyle: { font: body.fontFamily ?? existing.fontFamily, color: body.primaryColor ?? existing.primaryColor },
+    },
+  })
+  return NextResponse.json({ kit })
+}

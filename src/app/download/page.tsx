@@ -24,33 +24,33 @@ interface ReleaseApiResponse {
 const BLOG_FEATURES = [
   {
     icon: <Film className="w-5 h-5" />,
-    title: 'Professional NLE — Replaces Adobe Premiere Pro',
-    desc: 'Full non-linear editor with unlimited tracks and proxy workflows. Import decodes MP4, MOV, WebM, MXF, HEVC, and AV1.',
+    title: 'Professional timeline editor',
+    desc: 'Unlimited tracks, proxy workflows, and import for MP4, MOV, WebM, MXF, HEVC, and AV1.',
   },
   {
     icon: <Palette className="w-5 h-5" />,
-    title: 'Complete Colour Science — Replaces DaVinci Resolve',
-    desc: 'Node-based grading with ACES/OCIO, qualifiers, Power Windows, AI shot match, and Forge Micro Colour with HDR nit targeting up to 10,000 nits.',
+    title: 'Colour suite',
+    desc: 'Node-based grading with ACES/OCIO, qualifiers, windows, shot match, and HDR nit targeting up to 10,000 nits.',
   },
   {
     icon: <Layers className="w-5 h-5" />,
-    title: 'Full VFX Compositing — Replaces After Effects',
-    desc: '28 blend modes, AI roto, planar tracking, 6 wired grade effects, and AI text-to-VFX generation.',
+    title: 'Node compositor',
+    desc: '28 blend modes, rotoscoping, planar tracking, grade effects, and text-to-effect generation.',
   },
   {
     icon: <Music className="w-5 h-5" />,
-    title: '20-Band Professional DAW — Replaces Logic Pro & Fairlight',
-    desc: 'Unlimited tracks, stem separation, Dolby Atmos 7.1.4, Forge Spectrum EQ, and the 9-stage Forge Master Suite.',
+    title: 'Studio audio mixer',
+    desc: 'Unlimited tracks, stem separation, surround layouts, a spectrum EQ, and a mastering chain.',
   },
   {
     icon: <Users className="w-5 h-5" />,
-    title: 'ForgeFlow — Replaces Autodesk ShotGrid',
-    desc: 'Shot management, Gantt scheduling, budget reports, and bidirectional timeline linking.',
+    title: 'ForgeFlow production tracking',
+    desc: 'Shot management, scheduling, budget reports, and bidirectional timeline linking.',
   },
   {
     icon: <Globe className="w-5 h-5" />,
-    title: 'ForgeReview — Replaces Adobe Frame.io',
-    desc: 'Timestamped annotations, approval workflows, client portal links, and C2PA authenticity.',
+    title: 'ForgeReview',
+    desc: 'Timestamped annotations, approval workflows, client portal links, and content credentials.',
   },
   {
     icon: <Zap className="w-5 h-5" />,
@@ -67,15 +67,6 @@ const BLOG_FEATURES = [
     title: 'Native Desktop Performance',
     desc: 'Electron 34 + WebGPU. Local FFmpeg export on your hardware — no cloud queue.',
   },
-]
-
-const REPLACES = [
-  { app: 'Adobe Premiere Pro', cost: '$659/yr', what: 'Professional NLE' },
-  { app: 'DaVinci Resolve Studio', cost: '$470 one-off', what: 'Colour science' },
-  { app: 'After Effects', cost: '$659/yr', what: 'VFX & motion graphics' },
-  { app: 'Logic Pro', cost: '$299 one-off', what: 'Audio DAW' },
-  { app: 'Autodesk ShotGrid', cost: '$800+/seat/yr', what: 'Production tracking' },
-  { app: 'Adobe Frame.io', cost: '$180+/yr', what: 'Media review' },
 ]
 
 function detectPlatform(): 'mac' | 'windows' | 'unknown' {
@@ -114,8 +105,7 @@ export default function DownloadPage() {
           <p className="text-sm uppercase tracking-[0.2em] text-[#00e5c8]/80 mb-3">Forge Extreme Desktop</p>
           <p className="text-xl text-gray-400 mb-2">The Professional Desktop Studio</p>
           <p className="text-sm text-gray-500 max-w-2xl mx-auto mb-8">
-            Replace Premiere Pro, DaVinci Resolve, After Effects, Logic Pro, ShotGrid, and Frame.io
-            in one desktop app. Included with Ultimate.
+            Professional timeline editing, a full colour suite, node compositing, and studio audio — one desktop app. Included with Ultimate.
           </p>
 
           {canDownload ? (
@@ -180,22 +170,6 @@ export default function DownloadPage() {
               Version {releaseInfo.version} · macOS 13+ · Windows 10/11 x64
             </p>
           )}
-        </div>
-      </div>
-
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        <h2 className="text-2xl font-bold text-center mb-2">
-          Replace <span className="text-[#00e5c8]">$2,000–$6,000</span> in software
-        </h2>
-        <p className="text-gray-400 text-center text-sm mb-8">One subscription. Everything you need.</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {REPLACES.map((r) => (
-            <div key={r.app} className="bg-[#0d1425] border border-white/8 rounded-xl p-4">
-              <p className="text-xs text-gray-500 mb-1">{r.what}</p>
-              <p className="font-semibold text-sm">{r.app}</p>
-              <p className="text-[#00e5c8] text-xs mt-1">Saves {r.cost}</p>
-            </div>
-          ))}
         </div>
       </div>
 

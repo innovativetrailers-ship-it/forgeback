@@ -33,9 +33,65 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
-  const nodes = parsed.data.graph.nodes as Array<{ params?: { aiMatte?: boolean } }>
+  const nodes = parsed.data.graph.nodes as Array<{ params?: { aiMatte?: boolean; cutout?: boolean; subjectUrl?: string } }>
   const wantsMatte = nodes.some((node) => node.params?.aiMatte === true)
+  const cutout = nodes.some((node) => node.params?.cutout === true)
   const confirmed = (body as { confirm?: boolean }).confirm === true
+  const consent = (body as { consent?: boolean }).consent === true
+  const subjectUrl = nodes.find((node) => typeof node.params?.subjectUrl === 'string')?.params?.subjectUrl
+
+  if (cutout && wantsMatte && !confirmed) {
+    return NextResponse.json({
+      estimateCredits: AI_MATTE_CREDITS,
+      metered: true,
+      perFrame: true,
+      note: 'BiRefNet keys one still. This is not a video matte. The published price is $0 per compute second. Confirm to submit. A paused server still refuses the call.',
+    })
+  }
+
+  if (cutout && wantsMatte && confirmed) {
+    if (!consent) {
+      return NextResponse.json({ error: 'Consent is required before a neural matte. The still was not submitted.' }, { status: 400 })
+    }
+    if (!subjectUrl) {
+      return NextResponse.json({ error: 'A subject image is required.' }, { status: 400 })
+    }
+    const access = await checkAccess(userId, AI_MATTE_CREDITS)
+    if (!access.allowed) return NextResponse.json({ error: access.reason }, { status: access.code })
+    try {
+      const matte = await runFal(
+        falEndpoint('birefnet'),
+        { image_url: subjectUrl },
+        undefined,
+        120_000,
+        undefined,
+        undefined,
+        'greenscreen.remove-background',
+      )
+      const cutoutRemote = (matte as { image?: { url?: string } }).image?.url
+      if (!cutoutRemote) return NextResponse.json({ error: 'BiRefNet returned no cutout.' }, { status: 502 })
+      const png = await executeCompositorGraphToPng(parsed.data.graph as CompositorGraph, {
+        mediaUrls: { ...(parsed.data.mediaUrls ?? {}), subject: cutoutRemote },
+      })
+      const key = `compositor/${userId}/${nanoid()}.png`
+      const url = await uploadToR2(png, key, 'image/png')
+      return NextResponse.json({
+        url,
+        cutoutUrl: cutoutRemote,
+        key,
+        perFrame: true,
+        libraryTake: true,
+        estimateCredits: AI_MATTE_CREDITS,
+        note: 'Per-frame BiRefNet on one still. Not a video-quality matte. The original file was not replaced. C2PA is not embedded; this take is marked AI-modified.',
+      })
+    } catch (err) {
+      console.warn('[greenscreen]', err instanceof Error ? err.message : err)
+      if (isGenerationPausedError(err)) {
+        return NextResponse.json({ error: 'Generation is paused. The AI matte was not submitted.' }, { status: 503 })
+      }
+      return NextResponse.json({ error: err instanceof Error ? err.message : 'The matte did not run' }, { status: 502 })
+    }
+  }
 
   try {
     const png = await executeCompositorGraphToPng(
@@ -56,6 +112,9 @@ export async function POST(req: NextRequest) {
         aiMatte: 'quoted',
         note: 'BiRefNet is $0. Confirm to submit the matte. The manual roto is already in this image.',
       })
+    }
+    if (!consent) {
+      return NextResponse.json({ error: 'Consent is required before a neural matte. The still was not submitted.', url }, { status: 400 })
     }
     const access = await checkAccess(userId, AI_MATTE_CREDITS)
     if (!access.allowed) return NextResponse.json({ error: access.reason, url }, { status: access.code })

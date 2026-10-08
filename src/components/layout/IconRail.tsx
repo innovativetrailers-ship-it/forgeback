@@ -33,6 +33,13 @@ const TOP_ITEMS: RailItem[] = [
   { id: 'brandkit',    icon: <Palette size={16} />,       label: 'Brand Kit' },
 ]
 
+const COMING: Partial<Record<PanelId, string>> = {
+  vault: 'Coming — use Cast',
+  script: 'Coming — script editor is not mounted',
+  storyboard: 'Coming — storyboard is not mounted',
+  settings: 'Coming — settings are not on this rail',
+}
+
 const BOTTOM_ITEMS: RailItem[] = [
   { id: 'settings', icon: <Settings size={16} />, label: 'Settings' },
 ]
@@ -45,7 +52,7 @@ export function IconRail() {
       {TOP_ITEMS.map((item) => (
         <div key={item.id} className="w-full">
           {item.dividerBefore && <div className="mx-auto my-1 w-5 h-px bg-[var(--border)]" />}
-          <RailButton item={item} active={activePanel === item.id} onToggle={() => togglePanel(item.id)} />
+          <RailButton item={item} active={activePanel === item.id} coming={COMING[item.id]} onToggle={() => { if (!COMING[item.id]) togglePanel(item.id) }} />
         </div>
       ))}
 
@@ -53,21 +60,23 @@ export function IconRail() {
       <div className="mx-auto my-1 w-5 h-px bg-[var(--border)]" />
 
       {BOTTOM_ITEMS.map((item) => (
-        <RailButton key={item.id} item={item} active={activePanel === item.id} onToggle={() => togglePanel(item.id)} />
+        <RailButton key={item.id} item={item} active={activePanel === item.id} coming={COMING[item.id]} onToggle={() => { if (!COMING[item.id]) togglePanel(item.id) }} />
       ))}
     </aside>
   )
 }
 
-function RailButton({ item, active, onToggle }: { item: RailItem; active: boolean; onToggle: () => void }) {
+function RailButton({ item, active, coming, onToggle }: { item: RailItem; active: boolean; coming?: string; onToggle: () => void }) {
   return (
     <div className="relative group flex justify-center w-full">
       <button
         onClick={onToggle}
-        title={item.label}
+        disabled={Boolean(coming)}
+        title={coming ?? item.label}
         className={cn(
           'rail-btn',
-          active && 'active'
+          active && 'active',
+          coming && 'opacity-40'
         )}
       >
         {item.icon}
@@ -75,7 +84,7 @@ function RailButton({ item, active, onToggle }: { item: RailItem; active: boolea
       {/* Tooltip */}
       <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity delay-150">
         <div className="bg-[#1e2636] border border-[var(--border-mid)] px-2 py-1 rounded text-[11px] text-[var(--text-primary)] whitespace-nowrap shadow-lg">
-          {item.label}
+          {coming ?? item.label}
         </div>
         <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-[#1e2636]" />
       </div>
