@@ -67,13 +67,22 @@ const TIERS: Array<{ label: string; value: OutcomeTier }> = [
   { label: 'Blockbuster', value: 'Blockbuster' },
 ]
 
-const FILM_TABS: Array<{ id: FilmToolbarTab; label: string }> = [
-  { id: 'script',      label: 'Script' },
-  { id: 'storyboard',  label: 'Storyboard' },
-  { id: 'ai_director', label: 'AI Director' },
-  { id: 'continuity',  label: 'Continuity' },
-  { id: 'cast',        label: 'Cast' },
-  { id: 'locations',   label: 'Locations' },
+const WORKSPACE_TABS: Array<{ key: string; id: FilmToolbarTab; label: string; workspace: import('@/lib/editor/foundation').WorkspaceName; look?: 'makeup' | 'greenscreen' | 'location'; divider?: boolean }> = [
+  { key: 'script', id: 'script', label: 'Script', workspace: 'Creator' },
+  { key: 'storyboard', id: 'storyboard', label: 'Storyboard', workspace: 'Director' },
+  { key: 'director', id: 'ai_director', label: 'AI Director', workspace: 'Director' },
+  { key: 'continuity', id: 'continuity', label: 'Continuity', workspace: 'Director' },
+  { key: 'cast', id: 'cast', label: 'Cast', workspace: 'Creator' },
+  { key: 'locations', id: 'locations', label: 'Locations', workspace: 'Look-dev', look: 'location' },
+  { key: 'edit', id: 'script', label: 'Edit', workspace: 'Editor', divider: true },
+  { key: 'colour', id: 'colour', label: 'Colour Grade', workspace: 'Colour', divider: true },
+  { key: 'vfx', id: 'vfx_mix', label: 'VFX Mix', workspace: 'Compositor' },
+  { key: 'audio', id: 'audio_mix', label: 'Audio Mix', workspace: 'Audio' },
+  { key: 'green', id: 'greenscreen', label: 'Green Screen', workspace: 'Look-dev', look: 'greenscreen' },
+  { key: 'makeup', id: 'sfx_makeup', label: 'SFX Makeup', workspace: 'Look-dev', look: 'makeup' },
+  { key: 'cgi', id: 'cgi', label: 'CGI', workspace: 'Compositor' },
+  { key: 'motion', id: 'review', label: 'Motion & Camera', workspace: 'Motion' },
+  { key: 'review', id: 'review', label: 'Review', workspace: 'Review', divider: true },
 ]
 
 // Maps film toolbar tabs → left panel IDs
@@ -108,7 +117,7 @@ export function TopBar() {
   const [purchaseOpen, setPurchaseOpen] = useState(false)
 
   const { mode, setMode, activeTier, setTier, zoom, setZoom, isPlaying, setIsPlaying } = useStudioStore()
-  const { filmToolbarTab, setFilmToolbarTab, editTool, setEditTool, projectName, setProjectName, autoSaveStatus, setActivePanel, addToast } = useUIStore()
+  const { setFilmToolbarTab, editTool, setEditTool, projectName, setProjectName, autoSaveStatus, setActivePanel, addToast, workspace, setWorkspace } = useUIStore()
 
   const isAdvancedOrUltimate = mode === 'advanced' || mode === 'ultimate'
   const isUltimate = mode === 'ultimate'
@@ -360,22 +369,24 @@ export function TopBar() {
 
       {/* ── ROW 2 — Film toolbar (Ultimate only, 34px) ── */}
       {isUltimate && (
-        <div className="flex items-center gap-1 px-3 h-[34px] border-b border-[var(--border)] bg-[var(--bg-elevated)]">
-          <span className="text-[9px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider mr-2">Film</span>
-          {FILM_TABS.map((tab) => (
+        <div className="flex items-center gap-1 px-3 h-[34px] border-b border-[var(--border)] bg-[var(--bg-elevated)] overflow-x-auto">
+          {WORKSPACE_TABS.map((tab) => (
             <button
-              key={tab.id}
+              key={tab.key}
+              title={tab.label}
               onClick={() => {
-                const next = filmToolbarTab === tab.id ? null : tab.id
-                setFilmToolbarTab(next)
-                const panel = next ? FILM_TAB_TO_PANEL[next] : undefined
-                if (panel) setActivePanel(panel)
+                setWorkspace(tab.workspace, tab.look)
+                setFilmToolbarTab(tab.id)
+                const panel = FILM_TAB_TO_PANEL[tab.id]
+                if (panel && (tab.workspace === 'Creator' || tab.workspace === 'Director')) setActivePanel(panel)
+                else setActivePanel(null)
               }}
               className={cn(
-                'px-3 py-1 rounded text-[11px] font-medium transition-all',
-                filmToolbarTab === tab.id
-                  ? 'bg-[var(--teal-glow)] border border-[var(--teal-border)] text-[var(--teal-bright)]'
-                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                'shrink-0 px-2 py-1 rounded text-[11px] font-medium',
+                workspace === tab.workspace && (tab.look ? useUIStore.getState().lookDev === tab.look : true)
+                  ? 'bg-[var(--teal-glow)] text-[var(--teal-bright)]'
+                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]',
+                tab.divider && 'ml-2 border-l border-[var(--border)] pl-2'
               )}
             >
               {tab.label}
@@ -389,7 +400,7 @@ export function TopBar() {
         <div className="flex items-center gap-1 px-3 h-[30px] border-b border-[var(--border)] bg-[var(--bg-elevated)]">
           {/* Edit tools */}
           <div className="flex items-center gap-0.5">
-          {EDIT_TOOLS.map((tool) => (
+          {(workspace === 'Editor' || workspace === 'Creator') && EDIT_TOOLS.map((tool) => (
                 <button
                   key={tool.id}
                   title={`${tool.label} (${tool.key})`}

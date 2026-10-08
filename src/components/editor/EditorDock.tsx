@@ -10,7 +10,6 @@ import 'dockview-react/dist/styles/dockview.css'
 import {
   KEYMAP_PRESETS,
   LOCAL_TRANSITIONS,
-  WORKSPACES,
   addTitle,
   applyLocalTransition,
   chordFromEvent,
@@ -720,9 +719,11 @@ export function EditorDock({
   function onReady(event: DockviewReadyEvent) {
     apiRef.current = event.api
     event.api.onDidLayoutChange(() => {
+      window.localStorage.setItem(`${storageKey}:layout-version`, '2')
       window.localStorage.setItem(`${storageKey}:layout`, JSON.stringify(event.api.toJSON()))
     })
-    const saved = window.localStorage.getItem(`${storageKey}:layout`)
+    const savedVer = window.localStorage.getItem(`${storageKey}:layout-version`)
+    const saved = savedVer === '2' ? window.localStorage.getItem(`${storageKey}:layout`) : null
     if (saved) {
       try {
         event.api.fromJSON(JSON.parse(saved))
@@ -731,7 +732,7 @@ export function EditorDock({
         console.warn('[editor] layout', err instanceof Error ? err.message : err)
       }
     }
-    place(event.api, 'Creator')
+    place(event.api, useUIStore.getState().workspace)
   }
 
   function switchWorkspace(next: WorkspaceName) {
@@ -807,81 +808,39 @@ export function EditorDock({
     <TimelineDockProvider mode={timelineMode} setMode={setTimelineMode}>
     <EditorFrameContext.Provider value={frame}>
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center gap-1 border-b border-white/10 px-2 py-1 text-[10px] text-white/70">
-          <select
-            className="rounded border border-white/10 bg-black/40 px-1 py-0.5"
-            value={workspace}
-            onChange={(event) => switchWorkspace(event.target.value as WorkspaceName)}
-          >
-            {WORKSPACES.map((name) => <option key={name} value={name}>{name === 'Editor' ? 'Edit' : name}</option>)}
-          </select>
-          <button type="button" className="rounded bg-white/10 px-2 py-0.5" onClick={() => switchWorkspace('Editor')}>Back to Edit</button>
-          <button type="button" className="rounded bg-white/10 px-2 py-0.5" onClick={() => {
-            setTimelineMode('full')
-            void fetch('/api/editor/workspaces', {
-              method: 'PUT',
-              credentials: 'include',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ name: workspace, timelineMode: 'full', reset: true, updatedAt: new Date().toISOString() }),
-            }).catch((err) => console.warn('[workspace]', err instanceof Error ? err.message : err))
-            if (apiRef.current) place(apiRef.current, workspace)
-          }}>Reset workspace</button>
+        <div className="flex items-center gap-1 border-b border-white/10 px-2 py-0.5 text-[10px] text-white/70">
+          <span className="text-white/80">{workspace}</span>
+          {workspace !== 'Editor' && workspace !== 'Creator' && (
+            <button type="button" className="rounded bg-white/10 px-2 py-0.5" onClick={() => switchWorkspace('Editor')}>Back to Edit</button>
+          )}
           <button type="button" className="rounded bg-white/10 px-2 py-0.5" title="Cycle timeline: full, compact, hidden" onClick={() => setTimelineMode((current) => current === 'full' ? 'compact' : current === 'compact' ? 'hidden' : 'full')}>
-            Timeline {timelineMode}
+            {timelineMode === 'full' ? 'Full' : timelineMode === 'compact' ? 'Compact' : 'Hidden'}
           </button>
-          <button type="button" className="rounded bg-white/10 px-2 py-0.5" onClick={toggleLock}>{locked ? 'Unlock layout' : 'Lock layout'}</button>
-          <button
-            type="button"
-            className="rounded bg-white/10 px-2 py-0.5"
-            onClick={() => {
-              const panel = apiRef.current?.getPanel('program')
-              if (panel) void apiRef.current?.addPopoutGroup(panel)
-            }}
-          >
-            Pop out program
-          </button>
-          <select
-            className="rounded border border-white/10 bg-black/40 px-1 py-0.5"
-            value={preset}
-            title={KEYMAP_PRESET_LABELS[preset]}
-            onChange={(event) => {
-              const name = migrateKeymapPreset(event.target.value)
-              setPreset(name)
-              setKeymap(KEYMAP_PRESETS[name])
-              window.localStorage.setItem(`${storageKey}:keys`, JSON.stringify({ preset: name, map: KEYMAP_PRESETS[name] }))
-            }}
-          >
-            {KEYMAP_PRESET_IDS.map((id) => <option key={id} value={id}>{KEYMAP_PRESET_LABELS[id]}</option>)}
-          </select>
-          <select
-            className="rounded border border-white/10 bg-black/40 px-1 py-0.5"
-            value={bindCommand}
-            onChange={(event) => setBindCommand(event.target.value as KeyCommand | '')}
-          >
-            <option value="">Customise keys…</option>
-            {KEY_COMMANDS.map((name) => <option key={name} value={name}>{name}</option>)}
-          </select>
-          <button
-            type="button"
-            className="rounded bg-white/10 px-2 py-0.5"
-            onClick={() => void navigator.clipboard.writeText(exportKeymap(keymap))}
-          >
-            Export keymap
-          </button>
-          <button
-            type="button"
-            className="rounded bg-white/10 px-2 py-0.5"
-            onClick={() => {
-              const raw = window.prompt('Import keymap file (.kys, .xml, .json)', '') ?? ''
-              const next = importKeymap(raw)
-              if (!next || !Object.keys(next).length) return
-              setKeymap(next)
-              window.localStorage.setItem(`${storageKey}:keys`, JSON.stringify({ preset, map: next }))
-            }}
-          >
-            Import keymap
-          </button>
-          <span className="text-white/35">{bindCommand ? `Press the new key for ${bindCommand}` : 'J K L move · I O mark'}</span>
+          <details className="relative">
+            <summary className="cursor-pointer list-none rounded bg-white/10 px-2 py-0.5">Workspace</summary>
+            <div className="absolute left-0 z-20 mt-1 flex w-44 flex-col gap-1 rounded border border-white/10 bg-black p-2">
+              <button type="button" onClick={() => { setTimelineMode('full'); if (apiRef.current) place(apiRef.current, workspace) }}>Reset workspace</button>
+              <button type="button" onClick={toggleLock}>{locked ? 'Unlock layout' : 'Lock layout'}</button>
+              <button type="button" onClick={() => { const panel = apiRef.current?.getPanel('program'); if (panel) void apiRef.current?.addPopoutGroup(panel) }}>Pop out program</button>
+              <select className="bg-black" value={preset} title={KEYMAP_PRESET_LABELS[preset]} onChange={(event) => {
+                const name = migrateKeymapPreset(event.target.value)
+                setPreset(name)
+                setKeymap(KEYMAP_PRESETS[name])
+                window.localStorage.setItem(`${storageKey}:keys`, JSON.stringify({ preset: name, map: KEYMAP_PRESETS[name] }))
+              }}>
+                {KEYMAP_PRESET_IDS.map((id) => <option key={id} value={id}>{KEYMAP_PRESET_LABELS[id]}</option>)}
+              </select>
+              <button type="button" onClick={() => void navigator.clipboard.writeText(exportKeymap(keymap))}>Export keymap</button>
+              <button type="button" onClick={() => {
+                const raw = window.prompt('Import keymap file (.kys, .xml, .json)', '') ?? ''
+                const next = importKeymap(raw)
+                if (!next || !Object.keys(next).length) return
+                setKeymap(next)
+                window.localStorage.setItem(`${storageKey}:keys`, JSON.stringify({ preset, map: next }))
+              }}>Import keymap</button>
+            </div>
+          </details>
+          <span className="text-white/35">{bindCommand ? `Press the new key for ${bindCommand}` : 'Press \\ for the timeline'}</span>
         </div>
         <div className="min-h-0 flex-1">
           <DockviewReact className="h-full" components={PANELS} onReady={onReady} />

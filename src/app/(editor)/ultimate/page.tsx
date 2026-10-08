@@ -122,7 +122,7 @@ export default function UltimatePage() {
   const [readyProjectId, setReadyProjectId] = useState<string | null>(null)
 
   // UIStore — icon rail / film toolbar panel selection
-  const { activePanel, activeTool } = useUIStore()
+  const { activePanel, activeTool, workspace } = useUIStore()
 
   const script = useScriptStore((s) => s.scriptContent)
   const scenes = useScriptStore((s) => s.parsedScenes)
@@ -165,6 +165,10 @@ export default function UltimatePage() {
 
   const [activeTab, setActiveTab] = useState<UltimateTab>('script')
   const [leftCollapsed, setLeftCollapsed] = useState(false)
+  useEffect(() => {
+    const tool = workspace === 'Colour' || workspace === 'Audio' || workspace === 'VFX' || workspace === 'Compositor' || workspace === 'Motion' || workspace === 'Look-dev' || workspace === 'Review'
+    setLeftCollapsed(tool)
+  }, [workspace])
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return 320
     const stored = localStorage.getItem('cinema-left-panel-width')

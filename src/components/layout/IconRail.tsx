@@ -4,34 +4,17 @@ import { useUIStore, type PanelId } from '@/store/ui'
 import type { WorkspaceName } from '@/lib/editor/foundation'
 import { cn } from '@/lib/utils'
 import {
-  Wand2, Folder, Library, MapPin, Users, Sparkles,
-  Layers, Video, Film, Music, Image, FileText,
-  Clapperboard, Star, Globe, Palette, BarChart2,
-  Settings, Boxes,
+  Wand2, Library, Image, Palette, Settings, Boxes,
 } from 'lucide-react'
 
 type RailItem = { id: PanelId; icon: React.ReactNode; label: string; dividerBefore?: boolean }
 
 const TOP_ITEMS: RailItem[] = [
-  { id: 'generate',    icon: <Wand2 size={16} />,       label: 'Generate' },
-  { id: 'vault',       icon: <Folder size={16} />,       label: 'Vault' },
-  { id: 'library',     icon: <Library size={16} />,      label: 'Library' },
-  { id: 'location',    icon: <MapPin size={16} />,        label: 'Locations' },
-  { id: 'cast',        icon: <Users size={16} />,         label: 'Cast' },
-  { id: 'training',    icon: <Boxes size={16} />,         label: 'Training Studio' },
-  { id: 'makeup',      icon: <Sparkles size={16} />,      label: 'Makeup/SFX', dividerBefore: true },
-  { id: 'greenscreen', icon: <Layers size={16} />,        label: 'Green Screen' },
-  { id: 'cgi',         icon: <Video size={16} />,         label: 'CGI Insert' },
-  { id: 'vfx',         icon: <Film size={16} />,          label: 'VFX' },
-  { id: 'transitions', icon: <Clapperboard size={16} />,  label: 'Transitions' },
-  { id: 'audio',       icon: <Music size={16} />,         label: 'Audio', dividerBefore: true },
-  { id: 'stock',       icon: <Image size={16} />,         label: 'Stock Media' },
-  { id: 'script',      icon: <FileText size={16} />,      label: 'Script' },
-  { id: 'storyboard',  icon: <Star size={16} />,          label: 'Storyboard' },
-  { id: 'avatar',      icon: <Users size={16} />,         label: 'AI Avatar' },
-  { id: 'translate',   icon: <Globe size={16} />,         label: 'Translate', dividerBefore: true },
-  { id: 'highlight',   icon: <BarChart2 size={16} />,     label: 'Highlight Reel' },
-  { id: 'brandkit',    icon: <Palette size={16} />,       label: 'Brand Kit' },
+  { id: 'generate', icon: <Wand2 size={16} />, label: 'Generate' },
+  { id: 'library', icon: <Library size={16} />, label: 'Library' },
+  { id: 'stock', icon: <Image size={16} />, label: 'Stock' },
+  { id: 'brandkit', icon: <Palette size={16} />, label: 'Brand' },
+  { id: 'training', icon: <Boxes size={16} />, label: 'Training' },
 ]
 
 const COMING: Partial<Record<PanelId, string>> = {
