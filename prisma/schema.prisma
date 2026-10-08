@@ -110,6 +110,7 @@ model User {
   avatars         Avatar[]
   reviewLinks     ReviewLink[]
   brandKits         BrandKit[]
+  editorWorkspaces  EditorWorkspace[]
   filmProjects      FilmProject[]
   seriesProjects    SeriesProject[]
   clonedVoices      ClonedVoice[]
@@ -651,6 +652,21 @@ model BrandKit {
 
   user               User     @relation(fields: [userId], references: [id])
 
+  @@index([userId])
+}
+
+model EditorWorkspace {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  timelineMode String   @default("full")
+  layout       Json?
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
   @@index([userId])
 }
 

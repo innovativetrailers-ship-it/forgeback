@@ -10,7 +10,7 @@ import type { ClipEffectType } from '@/lib/timeline/schema'
 import { ParametricEQ } from '@/components/audio/ParametricEQ'
 import { VoiceDialoguePanel } from '@/components/editor/VoiceDialoguePanel'
 
-type RightTab = 'properties' | 'lighting' | 'colour' | 'effects' | 'audio' | 'voice' | 'transform'
+export type RightTab = 'properties' | 'lighting' | 'colour' | 'effects' | 'audio' | 'voice' | 'transform'
 
 const TABS: Array<{ id: RightTab; label: string }> = [
   { id: 'properties', label: 'Props' },
@@ -22,12 +22,12 @@ const TABS: Array<{ id: RightTab; label: string }> = [
   { id: 'transform',  label: 'Xform' },
 ]
 
-export function RightPanel() {
-  const [activeTab, setActiveTab] = useState<RightTab>('properties')
+export function RightPanel({ initialTab, fill = false }: { initialTab?: RightTab; fill?: boolean }) {
+  const [activeTab, setActiveTab] = useState<RightTab>(initialTab ?? 'properties')
   const { selectedClipId } = useStudioStore()
 
   return (
-    <aside className="w-[220px] shrink-0 flex flex-col bg-[var(--bg-elevated)] border-l border-[var(--border)]">
+    <aside className={fill ? 'flex h-full min-h-0 w-full flex-col bg-[var(--bg-elevated)]' : 'w-[220px] shrink-0 flex flex-col bg-[var(--bg-elevated)] border-l border-[var(--border)]'}>
       {/* Tab bar */}
       <div className="flex border-b border-[var(--border)] shrink-0">
         {TABS.map((t) => (

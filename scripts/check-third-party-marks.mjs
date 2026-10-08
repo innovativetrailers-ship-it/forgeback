@@ -1,9 +1,14 @@
-import { readFileSync, readdirSync, statSync, writeFileSync, unlinkSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync, writeFileSync, unlinkSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const scanRoots = ['src/components', 'src/app'].map((dir) => join(root, dir))
+const scanRoots = [
+  'src/components',
+  'src/app',
+  '../cinematic-forge-v3/src/renderer',
+  '../cinema-mobile/app',
+].map((dir) => join(root, dir)).filter((dir) => existsSync(dir))
 const banned = [
   'Premiere',
   'Adobe',

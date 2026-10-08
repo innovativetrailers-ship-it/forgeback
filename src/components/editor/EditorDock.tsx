@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { KEYMAP_PRESET_IDS, KEYMAP_PRESET_LABELS, migrateKeymapPreset, type KeymapPresetId } from '@cinema/core'
+import { WorkspaceTool } from '@/components/editor/WorkspaceTool'
+import { useUIStore } from '@/store/ui'
 import { TimelineDockProvider, type TimelineDockMode } from '@/components/editor/timelineDock'
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
@@ -555,6 +557,11 @@ function TranscriptDock(_props: IDockviewPanelProps) {
   return <TranscriptPanel recipe={frame.recipe} selectedClipId={frame.selectedClipId} onCommit={frame.onCommit} onSeek={frame.onSeek} />
 }
 
+function WorkspaceToolPanel(_props: IDockviewPanelProps) {
+  const workspace = useUIStore((state) => state.workspace)
+  return <div className="h-full min-h-0 overflow-hidden"><WorkspaceTool workspace={workspace} /></div>
+}
+
 const PANELS = {
   program: ProgramPanel,
   timeline: TimelinePanel,
@@ -566,27 +573,36 @@ const PANELS = {
   templates: TemplatesPanel,
   extensions: ExtensionsPanel,
   transcript: TranscriptDock,
+  'workspace-tool': WorkspaceToolPanel,
 }
 
 function place(api: DockviewApi, workspace: WorkspaceName) {
   api.clear()
-  const program = api.addPanel({ id: 'program', component: 'program', title: 'Program' })
-  api.addPanel({ id: 'timeline', component: 'timeline', title: 'Timeline', position: { referencePanel: program, direction: 'below' } })
-  if (workspace !== 'Creator') {
-    api.addPanel({ id: 'source', component: 'source', title: 'Source', position: { referencePanel: program, direction: 'left' } })
-  }
-  api.addPanel({ id: 'tools', component: 'tools', title: 'Tools', position: { referencePanel: program, direction: 'right' } })
-  api.addPanel({ id: 'inspector', component: 'inspector', title: 'Inspector', position: { referencePanel: 'tools', direction: 'within' } })
-  if (workspace === 'Editor' || workspace === 'VFX' || workspace === 'Compositor' || workspace === 'Creator' || workspace === 'Director' || workspace === 'Motion' || workspace === 'Look-dev') {
-    api.addPanel({ id: 'transitions', component: 'transitions', title: 'Transitions', position: { referencePanel: 'inspector', direction: 'within' } })
-    api.addPanel({ id: 'titles', component: 'titles', title: 'Titles', position: { referencePanel: 'inspector', direction: 'within' } })
-    api.addPanel({ id: 'templates', component: 'templates', title: 'Templates', position: { referencePanel: 'inspector', direction: 'within' } })
-    api.addPanel({ id: 'extensions', component: 'extensions', title: 'Extensions', position: { referencePanel: 'inspector', direction: 'within' } })
-    api.addPanel({ id: 'transcript', component: 'transcript', title: 'Transcript', position: { referencePanel: 'inspector', direction: 'within' } })
+  const toolWorkspace = workspace === 'Colour' || workspace === 'Audio' || workspace === 'VFX' || workspace === 'Compositor' || workspace === 'Motion' || workspace === 'Look-dev' || workspace === 'Review'
+  if (toolWorkspace) {
+    const tool = api.addPanel({ id: 'workspace-tool', component: 'workspace-tool', title: workspace })
+    api.addPanel({ id: 'program', component: 'program', title: 'Program', position: { referencePanel: tool, direction: 'right' } })
+    api.addPanel({ id: 'timeline', component: 'timeline', title: 'Timeline', position: { referencePanel: tool, direction: 'below' } })
+    api.addPanel({ id: 'inspector', component: 'inspector', title: 'Inspector', position: { referencePanel: 'program', direction: 'below' } })
+  } else {
+    const program = api.addPanel({ id: 'program', component: 'program', title: 'Program' })
+    api.addPanel({ id: 'timeline', component: 'timeline', title: 'Timeline', position: { referencePanel: program, direction: 'below' } })
+    if (workspace !== 'Creator') {
+      api.addPanel({ id: 'source', component: 'source', title: 'Source', position: { referencePanel: program, direction: 'left' } })
+    }
+    api.addPanel({ id: 'tools', component: 'tools', title: 'Tools', position: { referencePanel: program, direction: 'right' } })
+    api.addPanel({ id: 'inspector', component: 'inspector', title: 'Inspector', position: { referencePanel: 'tools', direction: 'within' } })
+    if (workspace === 'Editor' || workspace === 'Creator' || workspace === 'Director') {
+      api.addPanel({ id: 'transitions', component: 'transitions', title: 'Transitions', position: { referencePanel: 'inspector', direction: 'within' } })
+      api.addPanel({ id: 'titles', component: 'titles', title: 'Titles', position: { referencePanel: 'inspector', direction: 'within' } })
+      api.addPanel({ id: 'templates', component: 'templates', title: 'Templates', position: { referencePanel: 'inspector', direction: 'within' } })
+      api.addPanel({ id: 'extensions', component: 'extensions', title: 'Extensions', position: { referencePanel: 'inspector', direction: 'within' } })
+      api.addPanel({ id: 'transcript', component: 'transcript', title: 'Transcript', position: { referencePanel: 'inspector', direction: 'within' } })
+    }
   }
   const lock = workspace === 'Creator'
   api.groups.forEach((group) => { group.locked = lock })
-  api.getPanel('timeline')?.api.setConstraints({ minimumHeight: 80 })
+  api.getPanel('timeline')?.api.setConstraints({ minimumHeight: toolWorkspace ? 64 : 80 })
 }
 
 export function EditorDock({
@@ -627,6 +643,8 @@ export function EditorDock({
   const [bindCommand, setBindCommand] = useState<KeyCommand | ''>('')
   const [sourceId, setSourceId] = useState<string | null>(null)
   const [marks, setMarks] = useState({ inn: 0, out: 2 })
+  const requested = useUIStore((state) => state.workspace)
+  const hydrated = useRef(false)
   const storageKey = `cinema-editor:${userId ?? 'local'}`
 
   const frame = useMemo<Frame>(() => ({
@@ -721,10 +739,52 @@ export function EditorDock({
     setLocked(next === 'Creator')
     const full = next === 'Creator' || next === 'Director' || next === 'Editor'
     setTimelineMode(full ? 'full' : 'compact')
+    useUIStore.getState().setWorkspace(next)
     const api = apiRef.current
     if (!api) return
     place(api, next)
   }
+
+  useEffect(() => {
+    if (requested !== workspace) switchWorkspace(requested)
+  }, [requested])
+
+  useEffect(() => {
+    let cancelled = false
+    void fetch('/api/editor/workspaces', { credentials: 'include' })
+      .then(async (res) => {
+        if (!res.ok) return null
+        return res.json() as Promise<{ workspaces?: Array<{ name: string; timelineMode: string; updatedAt: string }> }>
+      })
+      .then((body) => {
+        if (cancelled || !body) return
+        const row = body.workspaces?.find((item) => item.name === workspace)
+        const local = window.localStorage.getItem(`${storageKey}:timeline-mode`)
+        if (row && (!local || row.updatedAt > (window.localStorage.getItem(`${storageKey}:timeline-at`) ?? ''))) {
+          if (row.timelineMode === 'full' || row.timelineMode === 'compact' || row.timelineMode === 'hidden') {
+            setTimelineMode(row.timelineMode)
+          }
+        }
+        hydrated.current = true
+      })
+      .catch((err) => {
+        console.warn('[workspace]', err instanceof Error ? err.message : err)
+        hydrated.current = true
+      })
+    return () => { cancelled = true }
+  }, [storageKey, workspace])
+
+  useEffect(() => {
+    if (!hydrated.current) return
+    const updatedAt = new Date().toISOString()
+    window.localStorage.setItem(`${storageKey}:timeline-at`, updatedAt)
+    void fetch('/api/editor/workspaces', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: workspace, timelineMode, updatedAt }),
+    }).catch((err) => console.warn('[workspace]', err instanceof Error ? err.message : err))
+  }, [workspace, timelineMode, storageKey])
 
   useEffect(() => {
     const panel = apiRef.current?.getPanel('timeline')
@@ -756,6 +816,16 @@ export function EditorDock({
             {WORKSPACES.map((name) => <option key={name} value={name}>{name === 'Editor' ? 'Edit' : name}</option>)}
           </select>
           <button type="button" className="rounded bg-white/10 px-2 py-0.5" onClick={() => switchWorkspace('Editor')}>Back to Edit</button>
+          <button type="button" className="rounded bg-white/10 px-2 py-0.5" onClick={() => {
+            setTimelineMode('full')
+            void fetch('/api/editor/workspaces', {
+              method: 'PUT',
+              credentials: 'include',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ name: workspace, timelineMode: 'full', reset: true, updatedAt: new Date().toISOString() }),
+            }).catch((err) => console.warn('[workspace]', err instanceof Error ? err.message : err))
+            if (apiRef.current) place(apiRef.current, workspace)
+          }}>Reset workspace</button>
           <button type="button" className="rounded bg-white/10 px-2 py-0.5" title="Cycle timeline: full, compact, hidden" onClick={() => setTimelineMode((current) => current === 'full' ? 'compact' : current === 'compact' ? 'hidden' : 'full')}>
             Timeline {timelineMode}
           </button>

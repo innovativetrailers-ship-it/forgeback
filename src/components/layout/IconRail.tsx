@@ -1,6 +1,7 @@
 'use client'
 
 import { useUIStore, type PanelId } from '@/store/ui'
+import type { WorkspaceName } from '@/lib/editor/foundation'
 import { cn } from '@/lib/utils'
 import {
   Wand2, Folder, Library, MapPin, Users, Sparkles,
@@ -45,14 +46,30 @@ const BOTTOM_ITEMS: RailItem[] = [
 ]
 
 export function IconRail() {
-  const { activePanel, togglePanel } = useUIStore()
+  const { activePanel, togglePanel, setWorkspace, setActivePanel } = useUIStore()
+  const workspaceFor: Partial<Record<PanelId, WorkspaceName>> = {
+    vfx: 'Compositor',
+    audio: 'Audio',
+    makeup: 'Look-dev',
+    greenscreen: 'Look-dev',
+    location: 'Look-dev',
+  }
 
   return (
     <aside className="flex flex-col items-center w-11 py-1.5 gap-0.5 bg-[var(--bg-elevated)] border-r border-[var(--border)] shrink-0 overflow-y-auto overflow-x-hidden">
       {TOP_ITEMS.map((item) => (
         <div key={item.id} className="w-full">
           {item.dividerBefore && <div className="mx-auto my-1 w-5 h-px bg-[var(--border)]" />}
-          <RailButton item={item} active={activePanel === item.id} coming={COMING[item.id]} onToggle={() => { if (!COMING[item.id]) togglePanel(item.id) }} />
+          <RailButton item={item} active={activePanel === item.id} coming={COMING[item.id]} onToggle={() => {
+            if (COMING[item.id]) return
+            const workspace = workspaceFor[item.id]
+            if (workspace) {
+              setWorkspace(workspace, item.id === 'greenscreen' ? 'greenscreen' : item.id === 'location' ? 'location' : item.id === 'makeup' ? 'makeup' : undefined)
+              setActivePanel(null)
+              return
+            }
+            togglePanel(item.id)
+          }} />
         </div>
       ))}
 

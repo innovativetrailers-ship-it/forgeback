@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { nanoid } from 'nanoid'
+import type { WorkspaceName } from '@/lib/editor/foundation'
 
 // ─── Panel / Tool / Right-Panel types ─────────────────────────────────────────
 
@@ -68,6 +69,8 @@ interface UIState {
   activeFilmTab: FilmToolbarTab | null
   /** @deprecated use activeFilmTab */
   filmToolbarTab: FilmToolbarTab | null
+  workspace: WorkspaceName
+  lookDev: 'makeup' | 'greenscreen' | 'location'
   editorMode: EditorMode
   activeModal: ModalId | null
   modalPayload: Record<string, unknown>
@@ -94,8 +97,8 @@ interface UIState {
 
   // Film toolbar
   setActiveFilmTab: (tab: FilmToolbarTab | null) => void
-  /** @deprecated use setActiveFilmTab */
   setFilmToolbarTab: (tab: FilmToolbarTab | null) => void
+  setWorkspace: (workspace: WorkspaceName, lookDev?: 'makeup' | 'greenscreen' | 'location') => void
 
   // Mode
   setEditorMode: (mode: EditorMode) => void
@@ -133,6 +136,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   activeRightPanel: 'properties',
   activeFilmTab: null,
   filmToolbarTab: null,
+  workspace: 'Creator',
+  lookDev: 'makeup',
   editorMode: 'advanced',
   activeModal: null,
   modalPayload: {},
@@ -155,6 +160,7 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   setActiveFilmTab: (tab) => set({ activeFilmTab: tab, filmToolbarTab: tab }),
   setFilmToolbarTab: (tab) => set({ filmToolbarTab: tab, activeFilmTab: tab }),
+  setWorkspace: (workspace, lookDev) => set(lookDev ? { workspace, lookDev } : { workspace }),
 
   setEditorMode: (editorMode) => set({ editorMode }),
 

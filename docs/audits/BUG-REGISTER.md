@@ -27,6 +27,8 @@ Schema for wave 2 is additive (`20260930234000_fix_wave_2`): `StudioClip.statusR
 
 Pause rule was not changed: an unset `GENERATION_PAUSED` still means paused.
 
+| P2-WS | open | Run 37 part 2 mounted tool workspaces and saved timeline mode per user. Browser screenshots at 1440×900 and 1280×720 were not taken. Do not mark the workspace rows done until that pass. |
+
 ## Fix wave 2
 
 | ID | Status | What landed |
