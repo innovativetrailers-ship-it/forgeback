@@ -219,7 +219,7 @@ export function InteractivePlayer(props: Props) {
   ]
 
   return (
-    <div className="flex flex-col bg-[#070d1a]">
+    <div className="flex h-full min-h-0 flex-col bg-[#070d1a]">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/8">
         <span className="text-[11px] text-white/50 font-medium">Preview</span>
         <button

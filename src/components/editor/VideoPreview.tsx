@@ -2,9 +2,8 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { Play, Pause, SkipBack, SkipForward, Maximize2, Loader2 } from 'lucide-react'
-import { PREVIEW_HEIGHT } from './constants'
-import type { Clip, Track } from '@/lib/timeline/schema'
 import { clipMediaPath } from '@/lib/media/clipPlayback'
+import type { Clip, Track } from '@/lib/timeline/schema'
 import { isVideoMediaUrl, canPlaySrc, playMedia, pauseAfterPlay } from '@/lib/timeline/playback'
 import { sampleControl } from '@/lib/timeline/controlLayer'
 import { sampleSpeed } from '@/lib/timeline/timeRemap'
@@ -12,6 +11,7 @@ import { usePlaybackStore } from '@/store/playbackStore'
 import { previewAt } from '@/lib/timeline/nleDepth'
 import { deepGradeCss, gradeHasDesktopDepth } from '@cinema/core'
 import { Scopes } from '@/components/editor/Scopes'
+import { useProgramScopesMounted, useProgramVideoRef } from '@/components/editor/programMedia'
 import { ClipControlBar } from '@/components/editor/ClipControlBar'
 
 interface ActiveJob {
@@ -77,7 +77,8 @@ export function VideoPreview({
   onSkipToEnd,
   onPlaybackEnded,
 }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const videoRef = useProgramVideoRef()
+  const scopesInDock = useProgramScopesMounted()
   const [isFullscreen, setIsFullscreen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map())
@@ -213,8 +214,7 @@ export function VideoPreview({
   return (
     <div
       ref={containerRef}
-      className="preview-container relative flex flex-col bg-black border-b border-white/8"
-      style={{ height: PREVIEW_HEIGHT }}
+      className="preview-container relative flex h-full min-h-[270px] min-w-0 flex-col bg-black border-b border-white/8"
     >
       <div className="relative flex flex-1 items-center justify-center bg-[#050508]">
         <div
@@ -248,8 +248,9 @@ export function VideoPreview({
               }}
             />
           ) : (
-            <div className="px-4 text-center text-sm text-red-400/80">
-              No media
+            <div className="flex flex-col items-center gap-1 px-4 text-center text-sm text-white/70">
+              <p>Select a clip</p>
+              <p className="text-[11px] text-white/40">or import media</p>
             </div>
           )}
           {control && (
@@ -284,10 +285,6 @@ export function VideoPreview({
           )}
         </div>
 
-        <div className="absolute top-2 left-3 font-mono text-xs text-white/70 bg-black/60 px-2 py-0.5 rounded">
-          {formatTimecode(playheadTime)}
-        </div>
-
         {hasGenerating && (
           <div className="absolute top-2 right-3 flex items-center gap-1.5 bg-[#00e5c8]/20 border border-[#00e5c8]/30
             text-[#00e5c8] text-[10px] px-2.5 py-1 rounded-full font-medium">
@@ -296,19 +293,12 @@ export function VideoPreview({
             {activeJobs[0]?.progress !== undefined && ` · ${activeJobs[0].progress}%`}
           </div>
         )}
-
-        <button
-          type="button"
-          onClick={toggleFullscreen}
-          title="Fullscreen (F)"
-          className="absolute bottom-2 right-3 p-1.5 rounded-lg bg-black/60 text-white/50
-            hover:text-white hover:bg-black/80 transition-colors"
-        >
-          <Maximize2 className="w-3.5 h-3.5" />
-        </button>
       </div>
 
       <div className="flex items-center justify-center gap-1 py-2 bg-[#0a0a12] border-t border-white/5 relative">
+        <span className="absolute left-4 font-mono text-[10px] text-white/70">
+          {formatTimecode(playheadTime)}
+        </span>
         <button
           type="button"
           onClick={onSkipToStart}
@@ -339,11 +329,19 @@ export function VideoPreview({
           <SkipForward className="w-3.5 h-3.5" />
         </button>
 
-        <span className="absolute right-4 font-mono text-[10px] text-white/30">
+        <span className="absolute right-4 flex items-center gap-2 font-mono text-[10px] text-white/30">
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            title="Fullscreen (F)"
+            className="p-1.5 rounded-lg text-white/50 hover:bg-white/8 hover:text-white"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
           {formatTimecode(duration)}
         </span>
       </div>
-      <Scopes videoRef={videoRef} />
+      {!scopesInDock && <Scopes videoRef={videoRef} />}
       {currentClip && <ClipControlBar clip={currentClip} />}
     </div>
   )

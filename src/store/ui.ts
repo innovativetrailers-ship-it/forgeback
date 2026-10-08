@@ -34,7 +34,7 @@ export type RightPanelId =
 export type FilmToolbarTab =
   | 'script' | 'storyboard' | 'director' | 'ai_director' | 'continuity'
   | 'cast' | 'locations' | 'colour' | 'vfx_mix' | 'audio_mix'
-  | 'greenscreen' | 'sfx_makeup' | 'cgi'
+  | 'greenscreen' | 'sfx_makeup' | 'cgi' | 'edit' | 'motion'
   | 'multicam' | 'transcript' | 'export_hub' | 'collab_grade' | 'plugin' | 'review'
   | 'emotion_lattice'
 

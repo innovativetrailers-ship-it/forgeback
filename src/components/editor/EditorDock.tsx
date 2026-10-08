@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { KEYMAP_PRESET_IDS, KEYMAP_PRESET_LABELS, migrateKeymapPreset, type KeymapPresetId } from '@cinema/core'
 import { WorkspaceTool } from '@/components/editor/WorkspaceTool'
+import { Scopes } from '@/components/editor/Scopes'
+import { ProgramVideoProvider, useProgramVideoRef } from '@/components/editor/programMedia'
 import { useUIStore } from '@/store/ui'
 import { TimelineDockProvider, type TimelineDockMode } from '@/components/editor/timelineDock'
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps } from 'dockview-react'
@@ -65,7 +67,15 @@ function useFrame(): Frame {
 }
 
 function ProgramPanel(_props: IDockviewPanelProps) {
-  return <div className="h-full overflow-hidden">{useFrame().program}</div>
+  return <div className="h-full min-h-0 min-w-0 overflow-hidden">{useFrame().program}</div>
+}
+function ScopesPanel(_props: IDockviewPanelProps) {
+  const videoRef = useProgramVideoRef()
+  return (
+    <div className="h-full min-h-[160px] min-w-[240px] overflow-hidden bg-[#070d1a] p-1">
+      <Scopes videoRef={videoRef} />
+    </div>
+  )
 }
 function TimelinePanel(_props: IDockviewPanelProps) {
   return <div className="flex h-full min-h-0 flex-col overflow-hidden">{useFrame().timeline}</div>
@@ -563,6 +573,7 @@ function WorkspaceToolPanel(_props: IDockviewPanelProps) {
 
 const PANELS = {
   program: ProgramPanel,
+  scopes: ScopesPanel,
   timeline: TimelinePanel,
   inspector: InspectorPanel,
   source: SourcePanel,
@@ -575,14 +586,35 @@ const PANELS = {
   'workspace-tool': WorkspaceToolPanel,
 }
 
+function isToolWorkspace(workspace: WorkspaceName) {
+  return workspace === 'Colour' || workspace === 'Audio' || workspace === 'VFX' || workspace === 'Compositor' || workspace === 'Motion' || workspace === 'Look-dev' || workspace === 'Review'
+}
+
+function defaultTimelineMode(workspace: WorkspaceName): TimelineDockMode {
+  return workspace === 'Creator' || workspace === 'Director' || workspace === 'Editor' ? 'full' : 'compact'
+}
+
 function place(api: DockviewApi, workspace: WorkspaceName) {
   api.clear()
-  const toolWorkspace = workspace === 'Colour' || workspace === 'Audio' || workspace === 'VFX' || workspace === 'Compositor' || workspace === 'Motion' || workspace === 'Look-dev' || workspace === 'Review'
+  const toolWorkspace = isToolWorkspace(workspace)
+  const narrow = typeof window !== 'undefined' && window.innerWidth < 1280
   if (toolWorkspace) {
     const tool = api.addPanel({ id: 'workspace-tool', component: 'workspace-tool', title: workspace })
-    api.addPanel({ id: 'program', component: 'program', title: 'Program', position: { referencePanel: tool, direction: 'right' } })
+    const program = api.addPanel({ id: 'program', component: 'program', title: 'Program', position: { referencePanel: tool, direction: 'above' } })
+    api.addPanel({
+      id: 'scopes',
+      component: 'scopes',
+      title: 'Scopes',
+      position: narrow
+        ? { referencePanel: program, direction: 'within' }
+        : { referencePanel: program, direction: 'right' },
+    })
     api.addPanel({ id: 'timeline', component: 'timeline', title: 'Timeline', position: { referencePanel: tool, direction: 'below' } })
-    api.addPanel({ id: 'inspector', component: 'inspector', title: 'Inspector', position: { referencePanel: 'program', direction: 'below' } })
+    api.addPanel({ id: 'inspector', component: 'inspector', title: 'Inspector', position: { referencePanel: tool, direction: 'within' } })
+    program.api.setConstraints({ minimumWidth: narrow ? 320 : 480, minimumHeight: 270 })
+    api.getPanel('scopes')?.api.setConstraints({ minimumWidth: 240, minimumHeight: 160 })
+    tool.api.setConstraints({ minimumHeight: 120 })
+    if (!narrow) program.api.setSize({ width: Math.round((api.width || window.innerWidth) * 0.55) })
   } else {
     const program = api.addPanel({ id: 'program', component: 'program', title: 'Program' })
     api.addPanel({ id: 'timeline', component: 'timeline', title: 'Timeline', position: { referencePanel: program, direction: 'below' } })
@@ -598,6 +630,7 @@ function place(api: DockviewApi, workspace: WorkspaceName) {
       api.addPanel({ id: 'extensions', component: 'extensions', title: 'Extensions', position: { referencePanel: 'inspector', direction: 'within' } })
       api.addPanel({ id: 'transcript', component: 'transcript', title: 'Transcript', position: { referencePanel: 'inspector', direction: 'within' } })
     }
+    program.api.setConstraints({ minimumWidth: 320, minimumHeight: 180 })
   }
   const lock = workspace === 'Creator'
   api.groups.forEach((group) => { group.locked = lock })
@@ -643,8 +676,11 @@ export function EditorDock({
   const [sourceId, setSourceId] = useState<string | null>(null)
   const [marks, setMarks] = useState({ inn: 0, out: 2 })
   const requested = useUIStore((state) => state.workspace)
-  const hydrated = useRef(false)
   const storageKey = `cinema-editor:${userId ?? 'local'}`
+  const suppressLayoutSave = useRef(true)
+  const timelineModeRef = useRef(timelineMode)
+  timelineModeRef.current = timelineMode
+  const pinTimelineRef = useRef<(mode: TimelineDockMode | 'cycle') => void>(() => undefined)
 
   const frame = useMemo<Frame>(() => ({
     program, timeline, inspector, recipe, playhead, selectedClipId,
@@ -683,7 +719,7 @@ export function EditorDock({
       }
       if (event.key === '\\' && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault()
-        setTimelineMode((current) => current === 'full' ? 'compact' : current === 'compact' ? 'hidden' : 'full')
+        pinTimelineRef.current('cycle')
         return
       }
       const command = commandFor(keymap, event)
@@ -719,31 +755,95 @@ export function EditorDock({
   function onReady(event: DockviewReadyEvent) {
     apiRef.current = event.api
     event.api.onDidLayoutChange(() => {
-      window.localStorage.setItem(`${storageKey}:layout-version`, '2')
+      if (suppressLayoutSave.current) return
+      window.localStorage.setItem(`${storageKey}:layout-version`, '3')
       window.localStorage.setItem(`${storageKey}:layout`, JSON.stringify(event.api.toJSON()))
     })
     const savedVer = window.localStorage.getItem(`${storageKey}:layout-version`)
-    const saved = savedVer === '2' ? window.localStorage.getItem(`${storageKey}:layout`) : null
+    const saved = savedVer === '3' ? window.localStorage.getItem(`${storageKey}:layout`) : null
+    suppressLayoutSave.current = true
     if (saved) {
       try {
         event.api.fromJSON(JSON.parse(saved))
-        return
       } catch (err) {
         console.warn('[editor] layout', err instanceof Error ? err.message : err)
+        place(event.api, useUIStore.getState().workspace)
       }
+    } else {
+      place(event.api, useUIStore.getState().workspace)
     }
-    place(event.api, useUIStore.getState().workspace)
+    queueMicrotask(() => { suppressLayoutSave.current = false })
   }
+
+  function readPin(name: string): TimelineDockMode | null {
+    try {
+      const pins = JSON.parse(window.localStorage.getItem(`${storageKey}:timeline-pins`) || '{}') as Record<string, { mode?: string }>
+      const mode = pins[name]?.mode
+      if (mode === 'full' || mode === 'compact' || mode === 'hidden') return mode
+    } catch (err) {
+      console.warn('[workspace]', err instanceof Error ? err.message : err)
+    }
+    return null
+  }
+
+  function pinTimeline(mode: TimelineDockMode | 'cycle') {
+    const current = timelineModeRef.current
+    const next: TimelineDockMode = mode === 'cycle'
+      ? (current === 'full' ? 'compact' : current === 'compact' ? 'hidden' : 'full')
+      : mode
+    setTimelineMode(next)
+    const updatedAt = new Date().toISOString()
+    let pins: Record<string, { mode: TimelineDockMode; updatedAt: string }> = {}
+    try {
+      pins = JSON.parse(window.localStorage.getItem(`${storageKey}:timeline-pins`) || '{}') as typeof pins
+    } catch (err) {
+      console.warn('[workspace]', err instanceof Error ? err.message : err)
+    }
+    pins[workspace] = { mode: next, updatedAt }
+    window.localStorage.setItem(`${storageKey}:timeline-pins`, JSON.stringify(pins))
+    void fetch('/api/editor/workspaces', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: workspace, timelineMode: next, layout: { v: 3, pinned: true }, updatedAt }),
+    }).catch((err) => console.warn('[workspace]', err instanceof Error ? err.message : err))
+  }
+  pinTimelineRef.current = pinTimeline
 
   function switchWorkspace(next: WorkspaceName) {
     setWorkspace(next)
     setLocked(next === 'Creator')
-    const full = next === 'Creator' || next === 'Director' || next === 'Editor'
-    setTimelineMode(full ? 'full' : 'compact')
+    setTimelineMode(readPin(next) ?? defaultTimelineMode(next))
     useUIStore.getState().setWorkspace(next)
     const api = apiRef.current
     if (!api) return
+    suppressLayoutSave.current = true
     place(api, next)
+    queueMicrotask(() => { suppressLayoutSave.current = false })
+  }
+
+  function resetWorkspace() {
+    try {
+      const pins = JSON.parse(window.localStorage.getItem(`${storageKey}:timeline-pins`) || '{}') as Record<string, unknown>
+      delete pins[workspace]
+      window.localStorage.setItem(`${storageKey}:timeline-pins`, JSON.stringify(pins))
+    } catch (err) {
+      console.warn('[workspace]', err instanceof Error ? err.message : err)
+    }
+    window.localStorage.removeItem(`${storageKey}:layout`)
+    window.localStorage.setItem(`${storageKey}:layout-version`, '3')
+    setTimelineMode(defaultTimelineMode(workspace))
+    const api = apiRef.current
+    if (!api) return
+    suppressLayoutSave.current = true
+    place(api, workspace)
+    queueMicrotask(() => { suppressLayoutSave.current = false })
+    void fetch('/api/editor/workspaces', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: workspace, timelineMode: defaultTimelineMode(workspace), layout: { v: 3, pinned: false }, updatedAt: new Date().toISOString() }),
+    }).catch((err) => console.warn('[workspace]', err instanceof Error ? err.message : err))
   }
 
   useEffect(() => {
@@ -755,37 +855,28 @@ export function EditorDock({
     void fetch('/api/editor/workspaces', { credentials: 'include' })
       .then(async (res) => {
         if (!res.ok) return null
-        return res.json() as Promise<{ workspaces?: Array<{ name: string; timelineMode: string; updatedAt: string }> }>
+        return res.json() as Promise<{ workspaces?: Array<{ name: string; timelineMode: string; layout: unknown; updatedAt: string }> }>
       })
       .then((body) => {
         if (cancelled || !body) return
         const row = body.workspaces?.find((item) => item.name === workspace)
-        const local = window.localStorage.getItem(`${storageKey}:timeline-mode`)
-        if (row && (!local || row.updatedAt > (window.localStorage.getItem(`${storageKey}:timeline-at`) ?? ''))) {
-          if (row.timelineMode === 'full' || row.timelineMode === 'compact' || row.timelineMode === 'hidden') {
-            setTimelineMode(row.timelineMode)
-          }
+        const layout = row?.layout
+        const pinned = Boolean(layout && typeof layout === 'object' && (layout as { v?: number; pinned?: boolean }).v === 3 && (layout as { pinned?: boolean }).pinned)
+        if (!row || !pinned) return
+        if (row.timelineMode !== 'full' && row.timelineMode !== 'compact' && row.timelineMode !== 'hidden') return
+        let localAt = ''
+        try {
+          const pins = JSON.parse(window.localStorage.getItem(`${storageKey}:timeline-pins`) || '{}') as Record<string, { updatedAt?: string }>
+          localAt = pins[workspace]?.updatedAt ?? ''
+        } catch (err) {
+          console.warn('[workspace]', err instanceof Error ? err.message : err)
         }
-        hydrated.current = true
+        if (localAt && localAt >= row.updatedAt) return
+        setTimelineMode(row.timelineMode)
       })
-      .catch((err) => {
-        console.warn('[workspace]', err instanceof Error ? err.message : err)
-        hydrated.current = true
-      })
+      .catch((err) => console.warn('[workspace]', err instanceof Error ? err.message : err))
     return () => { cancelled = true }
   }, [storageKey, workspace])
-
-  useEffect(() => {
-    if (!hydrated.current) return
-    const updatedAt = new Date().toISOString()
-    window.localStorage.setItem(`${storageKey}:timeline-at`, updatedAt)
-    void fetch('/api/editor/workspaces', {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: workspace, timelineMode, updatedAt }),
-    }).catch((err) => console.warn('[workspace]', err instanceof Error ? err.message : err))
-  }, [workspace, timelineMode, storageKey])
 
   useEffect(() => {
     const panel = apiRef.current?.getPanel('timeline')
@@ -793,8 +884,7 @@ export function EditorDock({
     const height = timelineMode === 'full' ? 280 : timelineMode === 'compact' ? 72 : 28
     panel.api.setConstraints({ minimumHeight: timelineMode === 'hidden' ? 28 : 64 })
     panel.api.setSize({ height })
-    window.localStorage.setItem(`${storageKey}:timeline-mode`, timelineMode)
-  }, [timelineMode, storageKey])
+  }, [timelineMode])
 
   function toggleLock() {
     const api = apiRef.current
@@ -805,7 +895,8 @@ export function EditorDock({
   }
 
   return (
-    <TimelineDockProvider mode={timelineMode} setMode={setTimelineMode}>
+    <ProgramVideoProvider>
+    <TimelineDockProvider mode={timelineMode} setMode={(mode) => pinTimelineRef.current(mode)}>
     <EditorFrameContext.Provider value={frame}>
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center gap-1 border-b border-white/10 px-2 py-0.5 text-[10px] text-white/70">
@@ -813,13 +904,13 @@ export function EditorDock({
           {workspace !== 'Editor' && workspace !== 'Creator' && (
             <button type="button" className="rounded bg-white/10 px-2 py-0.5" onClick={() => switchWorkspace('Editor')}>Back to Edit</button>
           )}
-          <button type="button" className="rounded bg-white/10 px-2 py-0.5" title="Cycle timeline: full, compact, hidden" onClick={() => setTimelineMode((current) => current === 'full' ? 'compact' : current === 'compact' ? 'hidden' : 'full')}>
+          <button type="button" className="rounded bg-white/10 px-2 py-0.5" title="Cycle timeline: full, compact, hidden" onClick={() => pinTimelineRef.current('cycle')}>
             {timelineMode === 'full' ? 'Full' : timelineMode === 'compact' ? 'Compact' : 'Hidden'}
           </button>
           <details className="relative">
             <summary className="cursor-pointer list-none rounded bg-white/10 px-2 py-0.5">Workspace</summary>
             <div className="absolute left-0 z-20 mt-1 flex w-44 flex-col gap-1 rounded border border-white/10 bg-black p-2">
-              <button type="button" onClick={() => { setTimelineMode('full'); if (apiRef.current) place(apiRef.current, workspace) }}>Reset workspace</button>
+              <button type="button" onClick={resetWorkspace}>Reset workspace</button>
               <button type="button" onClick={toggleLock}>{locked ? 'Unlock layout' : 'Lock layout'}</button>
               <button type="button" onClick={() => { const panel = apiRef.current?.getPanel('program'); if (panel) void apiRef.current?.addPopoutGroup(panel) }}>Pop out program</button>
               <select className="bg-black" value={preset} title={KEYMAP_PRESET_LABELS[preset]} onChange={(event) => {
@@ -848,5 +939,6 @@ export function EditorDock({
       </div>
     </EditorFrameContext.Provider>
     </TimelineDockProvider>
+    </ProgramVideoProvider>
   )
 }

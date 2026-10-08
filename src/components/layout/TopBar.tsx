@@ -74,14 +74,14 @@ const WORKSPACE_TABS: Array<{ key: string; id: FilmToolbarTab; label: string; wo
   { key: 'continuity', id: 'continuity', label: 'Continuity', workspace: 'Director' },
   { key: 'cast', id: 'cast', label: 'Cast', workspace: 'Creator' },
   { key: 'locations', id: 'locations', label: 'Locations', workspace: 'Look-dev', look: 'location' },
-  { key: 'edit', id: 'script', label: 'Edit', workspace: 'Editor', divider: true },
+  { key: 'edit', id: 'edit', label: 'Edit', workspace: 'Editor', divider: true },
   { key: 'colour', id: 'colour', label: 'Colour Grade', workspace: 'Colour', divider: true },
   { key: 'vfx', id: 'vfx_mix', label: 'VFX Mix', workspace: 'Compositor' },
   { key: 'audio', id: 'audio_mix', label: 'Audio Mix', workspace: 'Audio' },
   { key: 'green', id: 'greenscreen', label: 'Green Screen', workspace: 'Look-dev', look: 'greenscreen' },
   { key: 'makeup', id: 'sfx_makeup', label: 'SFX Makeup', workspace: 'Look-dev', look: 'makeup' },
   { key: 'cgi', id: 'cgi', label: 'CGI', workspace: 'Compositor' },
-  { key: 'motion', id: 'review', label: 'Motion & Camera', workspace: 'Motion' },
+  { key: 'motion', id: 'motion', label: 'Motion & Camera', workspace: 'Motion' },
   { key: 'review', id: 'review', label: 'Review', workspace: 'Review', divider: true },
 ]
 
@@ -117,7 +117,7 @@ export function TopBar() {
   const [purchaseOpen, setPurchaseOpen] = useState(false)
 
   const { mode, setMode, activeTier, setTier, zoom, setZoom, isPlaying, setIsPlaying } = useStudioStore()
-  const { setFilmToolbarTab, editTool, setEditTool, projectName, setProjectName, autoSaveStatus, setActivePanel, addToast, workspace, setWorkspace } = useUIStore()
+  const { filmToolbarTab, setFilmToolbarTab, editTool, setEditTool, projectName, setProjectName, autoSaveStatus, setActivePanel, addToast, workspace, setWorkspace, lookDev } = useUIStore()
 
   const isAdvancedOrUltimate = mode === 'advanced' || mode === 'ultimate'
   const isUltimate = mode === 'ultimate'
@@ -383,7 +383,12 @@ export function TopBar() {
               }}
               className={cn(
                 'shrink-0 px-2 py-1 rounded text-[11px] font-medium',
-                workspace === tab.workspace && (tab.look ? useUIStore.getState().lookDev === tab.look : true)
+                (() => {
+                  if (workspace !== tab.workspace) return false
+                  if (tab.look && lookDev !== tab.look) return false
+                  const twins = WORKSPACE_TABS.filter((other) => other.workspace === tab.workspace && other.look === tab.look)
+                  return twins.length < 2 || filmToolbarTab === tab.id
+                })()
                   ? 'bg-[var(--teal-glow)] text-[var(--teal-bright)]'
                   : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]',
                 tab.divider && 'ml-2 border-l border-[var(--border)] pl-2'

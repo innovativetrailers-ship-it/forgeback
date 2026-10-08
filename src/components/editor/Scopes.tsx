@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-type ScopeMode = 'waveform' | 'vectorscope' | 'parade'
+type ScopeMode = 'waveform' | 'vectorscope' | 'parade' | 'histogram'
 
 interface Props {
   videoRef?: React.RefObject<HTMLVideoElement | null>
@@ -72,6 +72,30 @@ export function Scopes({ videoRef, mode = 'waveform' }: Props) {
         ctx.globalAlpha = 1
       }
 
+      if (activeMode === 'histogram') {
+        const bins = [0, 0, 0, 0].map(() => new Array<number>(64).fill(0))
+        for (let i = 0; i < data.length; i += 16) {
+          bins[0][data[i] >> 2] += 1
+          bins[1][data[i + 1] >> 2] += 1
+          bins[2][data[i + 2] >> 2] += 1
+          const y = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
+          bins[3][Math.min(63, y >> 2)] += 1
+        }
+        const colours = ['#ff4444', '#44ff44', '#4444ff', '#00e5c8']
+        const peak = Math.max(1, ...bins.flat())
+        bins.forEach((row, channel) => {
+          ctx.strokeStyle = colours[channel]
+          ctx.beginPath()
+          row.forEach((count, bin) => {
+            const x = (bin / 63) * W
+            const y = H - (count / peak) * H
+            if (bin === 0) ctx.moveTo(x, y)
+            else ctx.lineTo(x, y)
+          })
+          ctx.stroke()
+        })
+      }
+
       if (activeMode === 'vectorscope') {
         // Vectorscope: Cb/Cr chrominance plot
         ctx.strokeStyle = '#333'
@@ -108,9 +132,9 @@ export function Scopes({ videoRef, mode = 'waveform' }: Props) {
   }, [videoRef, activeMode])
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex h-full min-h-[160px] flex-col gap-1">
       <div className="flex gap-1 px-1">
-        {(['waveform', 'parade', 'vectorscope'] as ScopeMode[]).map(m => (
+        {(['waveform', 'parade', 'vectorscope', 'histogram'] as ScopeMode[]).map(m => (
           <button
             key={m}
             onClick={() => setMode(m)}
@@ -124,9 +148,9 @@ export function Scopes({ videoRef, mode = 'waveform' }: Props) {
       </div>
       <canvas
         ref={canvasRef}
-        width={240}
-        height={120}
-        className="rounded bg-[#0d1117] border border-[#1a1f2e]"
+        width={320}
+        height={180}
+        className="h-full min-h-[140px] w-full rounded border border-[#1a1f2e] bg-[#0d1117]"
       />
     </div>
   )
