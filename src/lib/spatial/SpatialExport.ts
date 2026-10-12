@@ -4,7 +4,7 @@
  */
 
 import { uploadToR2 }  from '@/lib/storage/r2'
-import { execSync }    from 'child_process'
+import { runArgv } from '@/lib/shell/argv'
 import { mkdirSync,
          rmSync,
          readFileSync } from 'fs'
@@ -41,25 +41,23 @@ export async function encodeSpatialVideo(params: SpatialVideoParams): Promise<Sp
 
     // MV-HEVC encoding using FFmpeg with Apple Spatial Video metadata
     // Requires FFmpeg built with HEVC MV support (Apple Silicon Macs)
-    execSync([
-      'ffmpeg',
-      `-i "${leftEyeUrl}"`,      // input 0: left eye
-      `-i "${rightEyeUrl}"`,     // input 1: right eye
-      '-filter_complex "[0:v][1:v]hstack[v]"',
-      '-map "[v]"',
-      '-map 0:a?',               // audio from left channel if present
-      '-c:v hevc_videotoolbox',  // Apple hardware HEVC encoder
-      '-tag:v hvc1',
-      '-vf "scale=iw/2:ih"',     // each eye at half width after hstack
-      // Spatial video metadata (Apple-specific)
-      `-metadata:s:v:0 "projected-media-type=1"`,  // rectilinear
-      `-metadata:s:v:0 "horizontal-field-of-view=${fov}"`,
-      `-metadata:s:v:0 "baseline=${Math.round(baselineM * 1000)}"`,
-      `-metadata:s:v:0 "disparity=${disparity}"`,
-      '-movflags +faststart',
-      `"${outFile}"`,
-      '-y 2>/dev/null',
-    ].join(' '), { timeout: 300_000 })
+    runArgv('ffmpeg', [
+      '-i', leftEyeUrl,
+      '-i', rightEyeUrl,
+      '-filter_complex', '[0:v][1:v]hstack[v]',
+      '-map', '[v]',
+      '-map', '0:a?',
+      '-c:v', 'hevc_videotoolbox',
+      '-tag:v', 'hvc1',
+      '-vf', 'scale=iw/2:ih',
+      '-metadata:s:v:0', 'projected-media-type=1',
+      '-metadata:s:v:0', `horizontal-field-of-view=${fov}`,
+      '-metadata:s:v:0', `baseline=${Math.round(baselineM * 1000)}`,
+      '-metadata:s:v:0', `disparity=${disparity}`,
+      '-movflags', '+faststart',
+      outFile,
+      '-y',
+    ])
 
     const buffer  = readFileSync(outFile)
     const key     = `spatial/${randomUUID()}.mov`

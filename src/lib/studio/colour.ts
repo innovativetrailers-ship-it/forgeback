@@ -1,6 +1,6 @@
+import { runArgv } from '../shell/argv'
 import { uploadToR2 } from '../storage/r2'
-import { execSync } from 'child_process'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 import { FILM_EMULATION_LUTS } from './filmLuts'
@@ -28,16 +28,12 @@ export async function applyLUT(params: {
     // Apply LUT with intensity blend using FFmpeg lut3d + hue/sat/brightness
     if (intensity < 1.0) {
       // Blend original + graded
-      execSync(
-        `ffmpeg -i "${videoUrl}" -vf "split[orig][graded];[graded]lut3d='${lutPath}'[graded_out];[orig][graded_out]blend=all_expr='A*${(1 - intensity).toFixed(3)}+B*${intensity.toFixed(3)}'" -c:v libx264 -crf 18 -c:a copy "${outputPath}" -y 2>/dev/null`
-      )
+      runArgv('ffmpeg', ['-i', videoUrl, '-vf', `split[orig][graded];[graded]lut3d='${lutPath}'[graded_out];[orig][graded_out]blend=all_expr='A*${(1 - intensity).toFixed(3)}+B*${intensity.toFixed(3)}'`, '-c:v', 'libx264', '-crf', '18', '-c:a', 'copy', outputPath, '-y'])
     } else {
-      execSync(
-        `ffmpeg -i "${videoUrl}" -vf "lut3d='${lutPath}'" -c:v libx264 -crf 18 -c:a copy "${outputPath}" -y 2>/dev/null`
-      )
+      runArgv("ffmpeg", ["-i", videoUrl, "-vf", `lut3d='${lutPath}'`, "-c:v", "libx264", "-crf", "18", "-c:a", "copy", outputPath, "-y"])
     }
 
-    const buffer = execSync(`cat "${outputPath}"`)
+    const buffer = readFileSync(outputPath)
     const outputUrl = await uploadToR2(buffer, `colour/${jobId}_lut.mp4`, 'video/mp4')
     return { outputUrl }
   } finally {
@@ -71,11 +67,9 @@ export async function applyASCCDL(params: {
     const brightnessFilter = `eq=brightness=${((lr + lg + lb) / 3).toFixed(4)}:saturation=${saturation}`
     const gammaFilter = `eq=gamma=${((gr + gg + gb) / 3).toFixed(4)}`
 
-    execSync(
-      `ffmpeg -i "${videoUrl}" -vf "${colorchannelFilter},${brightnessFilter},${gammaFilter}" -c:v libx264 -crf 18 -c:a copy "${outputPath}" -y 2>/dev/null`
-    )
+    runArgv("ffmpeg", ["-i", videoUrl, "-vf", `${colorchannelFilter},${brightnessFilter},${gammaFilter}`, "-c:v", "libx264", "-crf", "18", "-c:a", "copy", outputPath, "-y"])
 
-    const buffer = execSync(`cat "${outputPath}"`)
+    const buffer = readFileSync(outputPath)
     const outputUrl = await uploadToR2(buffer, `colour/${jobId}_cdl.mp4`, 'video/mp4')
     return { outputUrl }
   } finally {

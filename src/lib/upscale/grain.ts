@@ -1,6 +1,6 @@
+import { runArgv, runArgvText } from '../shell/argv'
 import { uploadToR2 } from '../storage/r2'
-import { execSync } from 'child_process'
-import { existsSync, mkdirSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, rmSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 
@@ -32,11 +32,9 @@ export async function matchAndRestoreGrain(params: {
     const outputPath = join(tmpDir, 'grained.mp4')
     const grainExpr = buildGrainExpression(profile, strength)
 
-    execSync(
-      `ffmpeg -i "${upscaledVideoUrl}" -vf "geq=${grainExpr}" -c:v libx264 -crf 18 -c:a copy "${outputPath}" -y 2>/dev/null`
-    )
+    runArgv("ffmpeg", ["-i", upscaledVideoUrl, "-vf", `geq=${grainExpr}`, "-c:v", "libx264", "-crf", "18", "-c:a", "copy", outputPath, "-y"])
 
-    const buffer = execSync(`cat "${outputPath}"`)
+    const buffer = readFileSync(outputPath)
     const grainedUrl = await uploadToR2(buffer, `grained/${jobId}.mp4`, 'video/mp4')
     return { grainedUrl }
   } finally {
@@ -47,13 +45,12 @@ export async function matchAndRestoreGrain(params: {
 async function analyseGrainProfile(videoUrl: string, tmpDir: string): Promise<GrainProfile> {
   // Extract a sample frame and analyse its frequency content via FFT
   const framePath = join(tmpDir, 'sample.png')
-  execSync(`ffmpeg -i "${videoUrl}" -vframes 1 -ss 00:00:01 "${framePath}" -y 2>/dev/null`)
+  runArgv("ffmpeg", ["-i", videoUrl, "-vframes", "1", "-ss", "00:00:01", framePath, "-y"])
 
   // Use ffmpeg signalstats to measure noise characteristics
   try {
-    const stats = execSync(
-      `ffmpeg -i "${framePath}" -vf "signalstats" -f null - 2>&1 | grep -E "RMS|PSNR" | head -5`
-    ).toString()
+    const statsRun = runArgvText('ffmpeg', ['-i', framePath, '-vf', 'signalstats', '-f', 'null', '-'])
+    const stats = `${statsRun.stdout}\n${statsRun.stderr}`
 
     // Parse RMS values to approximate grain
     const rmsMatch = stats.match(/RMS=([0-9.]+)/)
