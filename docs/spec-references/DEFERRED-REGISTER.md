@@ -34,6 +34,7 @@ Tier-2 residuals:
 - Trainers in the registry are in the training picker except Stable Audio, which stays registry-only because scores use Suno.
 - Subtitle translation already goes through `claudeCall` with source `translate` and writes an SRT.
 - The in-app error dashboard stays deferred. ShotError remains the error net. Unused Sentry and PostHog DSNs stay unwired.
+- Desktop local gateway key stays dev/internal-only until the server-relay run. The desktop does not sign webhook tokens. Trigger: the server-relay run removes the local key path.
 
 VFX-T5 is in the web compositor schema (`Cryptomatte`, `DeepMerge`, `VectorWarp`, plus particles and OFX). The desktop app does not host that graph yet. Web keeps the basic mask and says so.
 
