@@ -33,6 +33,16 @@ export async function register() {
     )
   }
 
+  try {
+    const { auditInternalFlags } = await import('@/app/api/cron/internal-audit/route')
+    const unexpected = await auditInternalFlags()
+    if (unexpected.length > 0) {
+      console.error('[internal-audit] high-severity unexpected internal flag', unexpected.join(','))
+    }
+  } catch (err) {
+    console.error('[internal-audit] startup', err instanceof Error ? err.message : err)
+  }
+
   for (const [group, keys] of Object.entries(OPTIONAL)) {
     const missingOptional = keys.filter(k => !process.env[k])
     if (missingOptional.length > 0) {

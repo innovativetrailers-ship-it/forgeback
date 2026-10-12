@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { getEffectiveTier, resolveSubscriptionTier } from '@/lib/access/tiers'
 import { requireUser } from '@/lib/auth/requireUser'
+import { isUngatedAccount } from '@/lib/billing/accountAllow'
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const session = await auth()
@@ -17,12 +18,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       subscriptionTier: true,
       subscriptionStatus: true,
       isInternal: true,
+      email: true,
     },
   })
 
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  if (user.role === 'ADMIN' || user.isInternal) {
+  if (isUngatedAccount(user.email, user.isInternal)) {
     return NextResponse.json({
       isAdmin:            true,
       credits:            9_999_999,

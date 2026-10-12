@@ -59,8 +59,8 @@
       "schedule": "0 2 * * 0"
     },
     {
-      "path": "/api/cron/endpoint-drift",
-      "schedule": "0 4 * * *"
+      "path": "/api/cron/internal-audit",
+      "schedule": "30 4 * * *"
     }
   ]
 }

@@ -3,6 +3,7 @@
  */
 
 import { db } from '@/lib/db'
+import { isUngatedAccount } from '@/lib/billing/accountAllow'
 
 export class EscrowError extends Error {
   constructor(message: string) {
@@ -24,14 +25,24 @@ export async function openHold(
 
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { creditBalance: true, role: true, heldCredits: true, isInternal: true, allocationCredits: true, purchasedCredits: true },
+    select: { creditBalance: true, role: true, heldCredits: true, isInternal: true, email: true, allocationCredits: true, purchasedCredits: true },
   })
   if (!user) throw new EscrowError('User not found')
-  if (user.isInternal) {
+  if (isUngatedAccount(user.email, user.isInternal)) {
     await db.creditHold.upsert({
       where: { jobId },
       create: { userId, jobId, amountHeld: 0, amountUsed: 0, status: 'ACTIVE', budgetCap },
       update: { budgetCap },
+    })
+    await db.creditTransaction.create({
+      data: {
+        userId,
+        amount: 0,
+        type: 'internal',
+        description: 'Ungated account — no charge',
+        jobId,
+        balanceAfter: user.creditBalance,
+      },
     })
     return 0
   }
@@ -108,10 +119,10 @@ export async function settleHold(jobId: string): Promise<{ used: number; refunde
   const unused = Math.max(0, hold.amountHeld - hold.amountUsed)
   const user = await db.user.findUnique({
     where: { id: hold.userId },
-    select: { creditBalance: true, isInternal: true },
+    select: { creditBalance: true, isInternal: true, email: true },
   })
 
-  if (user?.isInternal || hold.amountHeld <= 0) {
+  if (!user || isUngatedAccount(user.email, user.isInternal) || hold.amountHeld <= 0) {
     await db.creditHold.update({
       where: { jobId },
       data: { status: 'SETTLED', settledAt: new Date() },
@@ -167,9 +178,9 @@ export async function releaseHold(jobId: string): Promise<void> {
   if (!hold || hold.status !== 'ACTIVE') return
   const user = await db.user.findUnique({
     where: { id: hold.userId },
-    select: { creditBalance: true, isInternal: true },
+    select: { creditBalance: true, isInternal: true, email: true },
   })
-  if (!user || user.isInternal || hold.amountHeld <= 0) {
+  if (!user || isUngatedAccount(user.email, user.isInternal) || hold.amountHeld <= 0) {
     await db.creditHold.update({
       where: { jobId },
       data: { status: 'REFUNDED', settledAt: new Date() },

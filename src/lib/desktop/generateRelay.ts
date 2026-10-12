@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { Prisma } from '@/generated/prisma/client'
 import { openHold, releaseHold, settleHold } from '@/lib/credits/escrow'
+import { isUngatedAccount } from '@/lib/billing/accountAllow'
 import { RelayRefused, runMetered } from '@/lib/billing/relayMeter'
 import { allowRate } from '@/lib/http/rateLimit'
 import { resolveEntitlement } from '@/lib/entitlement/resolve'
@@ -32,7 +33,7 @@ export async function submitGenerateRelay(
   }
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { id: true, creditBalance: true, isInternal: true },
+    select: { id: true, creditBalance: true, isInternal: true, email: true },
   })
   if (!user) throw new RelayRefused('Account not found.')
   const entitlement = await resolveEntitlement(userId)
@@ -40,7 +41,8 @@ export async function submitGenerateRelay(
     throw new RelayRefused('This account cannot use hosted generation.')
   }
   const active = await db.creditHold.count({ where: { userId, status: 'ACTIVE' } })
-  if (!withinConcurrent(active) && !user.isInternal) {
+  const ungated = isUngatedAccount(user.email, user.isInternal)
+  if (!withinConcurrent(active) && !ungated) {
     throw new RelayRefused('Too many jobs are already running.')
   }
   const job = await db.renderJob.create({
@@ -62,7 +64,7 @@ export async function submitGenerateRelay(
   try {
     await runMetered({
       balance: user.creditBalance,
-      isInternal: user.isInternal,
+      isInternal: ungated,
       estimate: target.estimate,
       openHold: async () => { await openHold(userId, job.id, target.estimate) },
       settle: async () => {},

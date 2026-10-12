@@ -1,9 +1,10 @@
 // Single source of truth for ALL access decisions.
-// ADMIN: always allowed, credits never deducted.
+// Only the one ungated account skips the credit check. An admin role does not.
 // Pro (Simple): credits-only OK — no active subscription required.
 // Studio/Ultimate: require active billing (active | past_due).
 
 import { db } from '@/lib/db'
+import { isUngatedAccount } from '@/lib/billing/accountAllow'
 import { shouldMeter } from '@/lib/credits/meter'
 import {
   getEffectiveTier,
@@ -64,6 +65,7 @@ async function loadUserAccess(userId: string) {
       subscriptionTier: true,
       subscriptionStatus: true,
       isInternal: true,
+      email: true,
     },
   })
 }
@@ -107,12 +109,8 @@ export async function checkAccess(
 
   const { tier, effectiveTier, isAdmin, isInternal } = tierFromUser(user)
 
-  if (isInternal) {
+  if (isUngatedAccount(user.email, isInternal)) {
     return { allowed: true, isAdmin: true, credits: 0, tier: 'admin' }
-  }
-
-  if (isAdmin) {
-    return { allowed: true, isAdmin: true, credits: user.creditBalance ?? 0, tier: 'admin' }
   }
 
   const perms = TIER_PERMISSIONS[tier]
@@ -162,7 +160,7 @@ export async function checkAccess(
     }
   }
 
-  return { allowed: true, isAdmin: false, credits: balance, tier: effectiveTier }
+  return { allowed: true, isAdmin, credits: balance, tier: effectiveTier }
 }
 
 export async function checkTierAccess(

@@ -1,6 +1,8 @@
 import { describe, expect, it } from '@jest/globals'
+import { spawnSync } from 'node:child_process'
 import { allocationDraw, assertEstimate, serverEstimate, settleWithinHold, withinConcurrent } from '../../src/lib/billing/relayPolicy'
 import { pauseReason, resolveRelayTarget } from '../../src/lib/desktop/relayTarget'
+import { isUngatedAccount, ALLOWED_INTERNAL_EMAIL } from '../../src/lib/billing/accountAllow'
 import { RelayRefused, runMetered } from '../../src/lib/billing/relayMeter'
 
 describe('relay policy', () => {
@@ -79,5 +81,22 @@ describe('relay policy', () => {
       release: async () => { releases += 1 },
     })).rejects.toThrow('provider failed')
     expect(releases).toBe(1)
+  })
+
+  it('other email can never be marked internal by the script', () => {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+      import { assertInternalEmail, ALLOWED_INTERNAL_EMAIL } from './scripts/grant-internal.mjs'
+      let refused = false
+      try { assertInternalEmail('other@example.com') } catch { refused = true }
+      if (!refused) process.exit(2)
+      if (assertInternalEmail(ALLOWED_INTERNAL_EMAIL) !== ALLOWED_INTERNAL_EMAIL) process.exit(3)
+    `], { cwd: process.cwd(), encoding: 'utf8' })
+    expect(result.status).toBe(0)
+  })
+
+  it('an internal flag on another email is ignored', () => {
+    expect(isUngatedAccount('other@example.com', true)).toBe(false)
+    expect(isUngatedAccount(ALLOWED_INTERNAL_EMAIL.toUpperCase(), true)).toBe(true)
+    expect(isUngatedAccount(ALLOWED_INTERNAL_EMAIL, false)).toBe(false)
   })
 })
