@@ -116,3 +116,16 @@ describe('billing and camera ownership', () => {
   })
 })
 
+describe('audited package upgrades', () => {
+  it('installs patched next, next-auth, auth core, sharp, axios, and ws', () => {
+    const lock = require('../../package-lock.json') as { packages: Record<string, { version?: string }> }
+    const version = (name: string) => lock.packages[`node_modules/${name}`]?.version
+    expect(version('next')).toBe('16.4.0')
+    expect(version('next-auth')?.startsWith('5.0.0-beta.32')).toBe(true)
+    expect(version('@auth/core')).toBe('0.41.3')
+    expect(version('sharp')).toBe('0.35.5')
+    expect(version('axios')).toBe('1.20.0')
+    expect(version('ws')).toBe('8.22.0')
+  })
+})
+
