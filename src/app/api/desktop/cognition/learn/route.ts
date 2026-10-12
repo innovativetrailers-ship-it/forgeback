@@ -1,7 +1,7 @@
-import { logCaught } from '@/lib/diagnostics/caught'
 import { type NextRequest, NextResponse } from 'next/server'
 import { learn } from '@/lib/cognition'
 import { validateDesktopCloudRequest } from '@/lib/desktop/cloudAuth'
+import { meterDesktopRelay } from '@/lib/desktop/meterRelay'
 import type { CreativeBrief } from '@/lib/cognition/director'
 
 export const maxDuration = 60
@@ -21,12 +21,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   if (!body.jobId) return NextResponse.json({ error: 'jobId required' }, { status: 400 })
 
-  void learn({
+  await meterDesktopRelay(userId, 'learn', () => learn({
     userId,
-    jobId: body.jobId,
+    jobId: body.jobId!,
     result: body.result ?? {},
     brief: body.brief ?? null,
-  }).catch((err) => logCaught('app/api/desktop/cognition/learn/route', err))
+  }))
 
   return NextResponse.json({ ok: true })
 }

@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { releaseHold } from '@/lib/credits/escrow'
+import { jobIdsToRelease } from '@/lib/billing/relayMeter'
 
 const STUCK_AFTER_MS = 15 * 60 * 1000
 
@@ -14,12 +15,11 @@ export async function sweepStuckShots(): Promise<number> {
     where: { id: { in: stuck.map((clip) => clip.id) } },
     data: { status: 'FAILED', generatingAt: null, statusReason: 'Stuck generation was stopped' },
   })
-  for (const clip of stuck) {
-    if (!clip.generateClaimJobId) continue
+  for (const jobId of jobIdsToRelease(stuck.map((clip) => clip.generateClaimJobId))) {
     try {
-      await releaseHold(clip.generateClaimJobId)
+      await releaseHold(jobId)
     } catch (err) {
-      console.warn('[watchdog] release', clip.id, err instanceof Error ? err.message : err)
+      console.warn('[watchdog] release', jobId, err instanceof Error ? err.message : err)
     }
   }
   console.warn('[watchdog] swept stuck shots:', stuck.length)

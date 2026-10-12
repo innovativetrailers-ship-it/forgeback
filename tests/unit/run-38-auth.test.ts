@@ -65,5 +65,54 @@ describe('billing and camera ownership', () => {
     expect(diagnosticsBypassAllowed({ NODE_ENV: 'development', DIAGNOSTICS_DEV: 'true' } as NodeJS.ProcessEnv)).toBe(true)
     expect(() => diagnosticsBypassAllowed({ NODE_ENV: 'production', DIAGNOSTICS_DEV: 'true' } as NodeJS.ProcessEnv)).toThrow(/DIAGNOSTICS_DEV/)
   })
+
+  it('refuses an unfunded bearer relay and holds then settles a funded one', async () => {
+    const { runMetered } = await import('../../src/lib/billing/relayMeter')
+    const events: string[] = []
+    await expect(runMetered({
+      balance: 0,
+      isInternal: false,
+      estimate: 2,
+      run: async () => { events.push('run') },
+      openHold: async () => { events.push('open') },
+      settle: async () => { events.push('settle') },
+      release: async () => { events.push('release') },
+    })).rejects.toThrow(/Insufficient credits/)
+    expect(events).toEqual([])
+    events.length = 0
+    const value = await runMetered({
+      balance: 10,
+      isInternal: false,
+      estimate: 2,
+      run: async () => 'ok',
+      openHold: async () => { events.push('open') },
+      settle: async () => { events.push('settle') },
+      release: async () => { events.push('release') },
+    })
+    expect(value).toBe('ok')
+    expect(events).toEqual(['open', 'settle'])
+  })
+
+  it('subscription invoice.paid increments credits and does not replace them', async () => {
+    const { subscriptionCreditData } = await import('../../src/lib/billing/relayMeter')
+    expect(subscriptionCreditData(400)).toEqual({ creditBalance: { increment: 400 } })
+    expect(subscriptionCreditData(400)).not.toEqual({ creditBalance: 400 })
+  })
+
+  it('concurrent holds cannot overdraw', async () => {
+    const { debitIfCovered } = await import('../../src/lib/billing/relayMeter')
+    let balance = 10
+    const first = debitIfCovered(balance, 8)
+    balance = first.balance
+    const second = debitIfCovered(balance, 8)
+    expect(first.ok).toBe(true)
+    expect(second.ok).toBe(false)
+    expect(second.balance).toBe(2)
+  })
+
+  it('stuck-shot sweep releases the hold exactly once', async () => {
+    const { jobIdsToRelease } = await import('../../src/lib/billing/relayMeter')
+    expect(jobIdsToRelease(['job-1', 'job-1', null, undefined])).toEqual(['job-1'])
+  })
 })
 

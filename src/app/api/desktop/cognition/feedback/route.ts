@@ -1,7 +1,7 @@
-import { logCaught } from '@/lib/diagnostics/caught'
 import { type NextRequest, NextResponse } from 'next/server'
 import { updateRoutingPolicy } from '@/lib/cognition/memory/procedural'
 import { validateDesktopCloudRequest } from '@/lib/desktop/cloudAuth'
+import { meterDesktopRelay } from '@/lib/desktop/meterRelay'
 
 const REWARD_MAP: Record<string, number> = {
   export: 1.0,
@@ -27,7 +27,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (reward == null) return NextResponse.json({ error: 'Unknown signal' }, { status: 400 })
 
   if (body.model && body.contentType) {
-    await updateRoutingPolicy(body.contentType, body.model, reward > 0 ? 0.8 : 0.3, 30).catch((err) => logCaught('app/api/desktop/cognition/feedback/route', err))
+    const model = body.model
+    const contentType = body.contentType
+    await meterDesktopRelay(userId, 'feedback', () =>
+      updateRoutingPolicy(contentType, model, reward > 0 ? 0.8 : 0.3, 30),
+    )
   }
 
   return NextResponse.json({ ok: true, reward })

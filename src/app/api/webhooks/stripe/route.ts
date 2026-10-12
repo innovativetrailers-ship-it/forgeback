@@ -6,6 +6,7 @@ import {
   SUBSCRIPTION_PLAN_CREDITS,
 } from '@/lib/payments/stripePrices'
 import { hasStripeSignature } from '@/lib/payments/stripeWebhook'
+import { subscriptionCreditData } from '@/lib/billing/relayMeter'
 import { upsertSubscription } from '@/lib/entitlement/resolve'
 import type { SubscriptionTier } from '@/lib/access/tiers'
 
@@ -145,11 +146,11 @@ export async function POST(req: Request) {
         const credits = SUBSCRIPTION_PLAN_CREDITS[tier]
         const updated = await db.user.update({
           where: { id: userId },
-          data: {
-            creditBalance: { increment: credits },
-            subscriptionTier: tier,
-            subscriptionStatus: 'active',
-          },
+            data: {
+              ...subscriptionCreditData(credits),
+              subscriptionTier: tier,
+              subscriptionStatus: 'active',
+            },
           select: { creditBalance: true },
         })
         await db.creditTransaction.create({

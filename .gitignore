@@ -28,6 +28,7 @@ src/workers/__worker_probe.ts
 /build
 
 # misc
+.cursor/
 .DS_Store
 *.pem
 *.p12
