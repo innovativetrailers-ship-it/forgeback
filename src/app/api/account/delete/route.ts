@@ -12,13 +12,22 @@ export async function POST(req: NextRequest) {
   if (body?.confirm !== true) {
     return NextResponse.json({ error: 'Export your data first. Deletion starts only when you confirm it.' }, { status: 400 })
   }
+  const retiredAt = new Date()
   await db.user.update({
     where: { id: userId },
-    data: { deletionRequestedAt: new Date() },
+    data: { deletionRequestedAt: retiredAt },
+  })
+  await db.vaultCharacter.updateMany({
+    where: { project: { userId }, retiredAt: null },
+    data: { retiredAt },
+  })
+  await db.studioClip.updateMany({
+    where: { scene: { project: { userId } }, orphanedAt: null },
+    data: { orphanedAt: retiredAt, statusReason: 'deletion requested' },
   })
   return NextResponse.json({
     requested: true,
     deleted: false,
-    note: 'The request is recorded. Projects, clips, and characters were not removed.',
+    message: 'Your deletion request is recorded. Characters and clips are marked retired. The files were kept. Nothing was removed.',
   })
 }

@@ -4,6 +4,7 @@ import { checkAndDeductCredits, refundOperationCredits } from '@/lib/credits'
 import { SFXMakeupEngine } from '@/lib/makeup/SFXMakeupEngine'
 import type { MakeupEffect } from '@/lib/casting/types'
 import { requireUser } from '@/lib/auth/requireUser'
+import { recordConsent } from '@/lib/privacy/consent'
 
 const engine = new SFXMakeupEngine()
 
@@ -20,11 +21,17 @@ export async function POST(req: NextRequest) {
     makeupReferenceImageUrl?: string
     characterId?: string
     mode?: 'post_generation' | 'reference_transfer' | 'natural_language'
+    likenessConsent?: boolean
+    notMinor?: boolean
   }
 
   if (!body.videoUrl) {
     return NextResponse.json({ error: 'videoUrl is required' }, { status: 400 })
   }
+  if (body.likenessConsent !== true || body.notMinor !== true) {
+    return NextResponse.json({ error: 'Likeness consent is required, and the person must not be a minor. Makeup was not applied.' }, { status: 400 })
+  }
+  await recordConsent(userId, 'likeness', 'makeup.apply')
 
   const mode = body.mode ?? (body.naturalLanguageRequest ? 'natural_language'
     : body.makeupReferenceImageUrl ? 'reference_transfer'
