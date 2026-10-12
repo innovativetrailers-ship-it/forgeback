@@ -7,6 +7,7 @@ import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { checkAccess } from '@/lib/access/guard'
+import { EscrowError, withCreditHold } from '@/lib/billing/withCreditHold'
 import { IMAGE_FAL_TIMEOUT_MS, runFal } from '@/lib/fal/client'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { forgeAssetFromRow } from '@/lib/assets/shape'
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest) {
     const built = plan.model === 'nano-banana-2-edit'
       ? buildImagePayload({ model: 'nano-banana-2-edit', prompt, imageUrls: plan.imageUrls, numImages: 1 })
       : buildFluxDevT2iInput(parsed.data.prompt)
-    const result = await runFal<{ images?: Array<{ url?: string }> }>(
+    const result = await withCreditHold(userId, 1, () => runFal<{ images?: Array<{ url?: string }> }>(
       built.endpoint,
       built.input,
       undefined,
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
       undefined,
       undefined,
       plan.model === 'nano-banana-2-edit' ? 'asset.reference' : 'asset.t2i',
-    )
+    ))
     const imageUrl = result.images?.[0]?.url
     if (!imageUrl) return NextResponse.json({ error: 'Image model returned no image' }, { status: 502 })
     const bytes = Buffer.from(await (await fetch(imageUrl)).arrayBuffer())
@@ -140,6 +141,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ asset: forgeAssetFromRow(row), model: plan.model, referenceCount: plan.imageUrls.length })
   } catch (err) {
     console.warn('[asset-t2i]', err instanceof Error ? err.message : err)
+    if (err instanceof EscrowError) return NextResponse.json({ error: err.message }, { status: 402 })
     if (isGenerationPausedError(err)) {
       return NextResponse.json({ error: 'Generation is paused. The reference was not submitted.' }, { status: 503 })
     }

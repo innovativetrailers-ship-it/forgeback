@@ -1,6 +1,7 @@
 import { buildFluxDevT2iInput } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAccess } from '@/lib/access/guard'
+import { EscrowError, withCreditHold } from '@/lib/billing/withCreditHold'
 import { runFal, IMAGE_FAL_TIMEOUT_MS } from '@/lib/fal/client'
 import { isGenerationPausedError } from '@/lib/generation/pause'
 import { db } from '@/lib/db'
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
   if (!access.allowed) return NextResponse.json({ error: access.reason }, { status: access.code })
   try {
     const built = buildFluxDevT2iInput(prompt)
-    const data = await runFal<{ images?: Array<{ url?: string }> }>(built.endpoint, built.input, undefined, IMAGE_FAL_TIMEOUT_MS, undefined, undefined, 'location.aerial')
+    const data = await withCreditHold(userId, AERIAL_CREDITS, () => runFal<{ images?: Array<{ url?: string }> }>(built.endpoint, built.input, undefined, IMAGE_FAL_TIMEOUT_MS, undefined, undefined, 'location.aerial'))
     const imageUrl = data.images?.[0]?.url
     if (!imageUrl) return NextResponse.json({ error: 'The aerial plate did not return an image' }, { status: 502 })
     const bytes = Buffer.from(await (await fetch(imageUrl)).arrayBuffer())
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ assetId: asset.id, plateId: plate.id, imageUrl: stored, estimateCredits: AERIAL_CREDITS, libraryTake: true })
   } catch (err) {
     console.warn('[aerial]', err instanceof Error ? err.message : err)
+    if (err instanceof EscrowError) return NextResponse.json({ error: err.message }, { status: 402 })
     if (isGenerationPausedError(err)) {
       return NextResponse.json({ error: 'Generation is paused. The aerial plate was not submitted.' }, { status: 503 })
     }

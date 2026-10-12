@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
+import { EscrowError, withCreditHold } from '@/lib/billing/withCreditHold'
 import { generateImage } from '@/lib/engines/imageGen'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { requireUser } from '@/lib/auth/requireUser'
@@ -44,10 +45,16 @@ export async function POST(req: NextRequest) {
 ${prompt}
 Photorealistic, composed exactly as the first frame before motion begins.`
 
-  const [rawUrl] = await generateImage(imagePrompt, {
+  let rawUrl: string | undefined
+  try {
+  ;[rawUrl] = await withCreditHold(userId, 1, () => generateImage(imagePrompt, {
     quality: 'reference',
     aspectRatio: clip.aspectRatio || '16:9',
-  })
+  }))
+  } catch (err) {
+    if (err instanceof EscrowError) return NextResponse.json({ error: err.message }, { status: 402 })
+    throw err
+  }
   if (!rawUrl) {
     return NextResponse.json({ error: 'Image model returned no URL' }, { status: 502 })
   }

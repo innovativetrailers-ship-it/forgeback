@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { readDialogue } from '@/lib/audio/dialogueIntent'
+import { EscrowError, withCreditHold } from '@/lib/billing/withCreditHold'
 import { isGenerationPausedError } from '@/lib/generation/pause'
 import { rememberDialogueTake, synthesiseVoiceTake } from '@/lib/audio/voiceTake'
 import { applyLipSyncToShot } from '@/lib/orchestration/lipSyncPass'
@@ -106,10 +107,11 @@ export async function POST(req: NextRequest) {
     }
     let videoUrl: string | null = null
     if (!found.lipSyncReady) {
-      videoUrl = await applyLipSyncToShot(found.shotId, found.clip.scene.projectId, 'draft')
+      videoUrl = await withCreditHold(userId, Math.max(1, found.estimateCredits), () => applyLipSyncToShot(found.shotId, found.clip.scene.projectId, 'draft'))
     }
     return NextResponse.json({ voiceMediaId, videoUrl, estimateCredits: found.estimateCredits })
   } catch (err) {
+    if (err instanceof EscrowError) return NextResponse.json({ error: err.message }, { status: 402 })
     if (isGenerationPausedError(err)) {
       return NextResponse.json({ error: 'Generation is paused. The video can still be placed silent.' }, { status: 503 })
     }

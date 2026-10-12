@@ -1,6 +1,7 @@
 import { compileProductionPlan } from '@cinema/core'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { EscrowError, withCreditHold } from '@/lib/billing/withCreditHold'
 import { isGenerationPausedError } from '@/lib/generation/pause'
 import { orchestrate } from '@/lib/orchestration'
 import { loadEntityResolutions, loadProductionBreakdown } from '@/lib/studio/productionBoard'
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
     : ['gemini-omni', 'veo-3.1', 'kling-3.0', 'seedance-2.0', 'runway-gen4', 'grok-imagine-video', 'wan-2.7', 'ltx-2.3-fast']
   const compiledPlan = compileProductionPlan({ breakdown, entities: entityResolutions })
   try {
-    const result = await orchestrate({
+    const result = await withCreditHold(userId, Math.max(1, Math.ceil(parsed.data.totalDuration / 5)), () => orchestrate({
       direct: true,
       breakdown,
       entityResolutions,
@@ -34,9 +35,10 @@ export async function POST(req: NextRequest) {
       selectedModels,
       userId,
       projectId: parsed.data.projectId,
-    })
+    }))
     return NextResponse.json({ compiledPlan: result.compiledPlan ?? compiledPlan, paused: false })
   } catch (err) {
+    if (err instanceof EscrowError) return NextResponse.json({ error: err.message, compiledPlan }, { status: 402 })
     if (!isGenerationPausedError(err)) {
       const message = err instanceof Error ? err.message : 'Direct failed'
       return NextResponse.json({ error: message, compiledPlan }, { status: 400 })

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { EscrowError, withCreditHold } from '@/lib/billing/withCreditHold'
 import { db } from '@/lib/db'
 import { requireUser } from '@/lib/auth/requireUser'
 
@@ -26,8 +27,9 @@ export async function POST(
 
   try {
     const { renderQueue } = await import('@/lib/queue')
-    await renderQueue.add('audio-generate', { trackId: id })
-  } catch {
+    await withCreditHold(userId, 1, () => renderQueue.add('audio-generate', { trackId: id }))
+  } catch (err) {
+    if (err instanceof EscrowError) return NextResponse.json({ error: err.message }, { status: 402 })
     if (process.env.VERCEL) {
       const { processAudioTrackJob } = await import('@/lib/jobs/processAudioTrackJob')
       void processAudioTrackJob(id).catch((err) => console.error('[audio-generate] inline failed:', err))

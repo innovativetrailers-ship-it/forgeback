@@ -1,6 +1,7 @@
 import { falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAccess } from '@/lib/access/guard'
+import { EscrowError, withCreditHold } from '@/lib/billing/withCreditHold'
 import { runFal } from '@/lib/fal/client'
 import { isGenerationPausedError } from '@/lib/generation/pause'
 import { uploadToR2 } from '@/lib/storage/r2'
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
   const access = await checkAccess(userId, estimateCredits)
   if (!access.allowed) return NextResponse.json({ error: access.reason }, { status: access.code })
   try {
-    const data = await runFal(
+    const data = await withCreditHold(userId, estimateCredits, () => runFal(
       falEndpoint('bytedance/omnihuman/v1.5'),
       { image_url: body.imageUrl, audio_url: body.audioUrl, resolution, turbo_mode: false, prompt: body.prompt?.slice(0, 400) },
       undefined,
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
       undefined,
       undefined,
       'omnihuman',
-    )
+    ))
     const remote = (data as { video?: { url?: string } }).video?.url
     if (!remote) return NextResponse.json({ error: 'OmniHuman did not return a video' }, { status: 502 })
     const stored = await uploadToR2(Buffer.from(await (await fetch(remote)).arrayBuffer()), `avatar/${userId}/${Date.now()}.mp4`, 'video/mp4')
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (err) {
     console.warn('[avatar]', err instanceof Error ? err.message : err)
+    if (err instanceof EscrowError) return NextResponse.json({ error: err.message }, { status: 402 })
     if (isGenerationPausedError(err)) {
       return NextResponse.json({ error: 'Generation is paused. The avatar was not submitted.' }, { status: 503 })
     }

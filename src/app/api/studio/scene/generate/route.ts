@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
+import { EscrowError, withCreditHold } from '@/lib/billing/withCreditHold'
 import { MODEL_COSTS } from '@/lib/routing/engineRegistry'
 import { requireUser } from '@/lib/auth/requireUser'
 
@@ -64,7 +65,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const { renderQueue } = await import('@/lib/queue')
-    await renderQueue.add('scene-generate', {
+    const estimate = Math.max(1, selectedModels.reduce((sum, id) => sum + (MODEL_COSTS[id as keyof typeof MODEL_COSTS] ?? 1), 0))
+    await withCreditHold(userId, estimate, () => renderQueue.add('scene-generate', {
       jobId: job.id,
       userId,
       projectId: body.projectId,
@@ -75,9 +77,10 @@ export async function POST(req: NextRequest) {
       selectedModels,
       mode: body.mode,
       source: 'manual',
-    })
+    }))
   } catch (err) {
     console.warn("[caught] src/app/api/studio/scene/generate/route.ts:78", err instanceof Error ? { name: err.name, message: err.message } : err)
+    if (err instanceof EscrowError) return NextResponse.json({ error: err.message }, { status: 402 })
 
     return NextResponse.json({ error: 'Render queue unavailable' }, { status: 503 })
   }

@@ -3,6 +3,7 @@ import { buildImagePayload } from '@cinema/core'
 import { NextRequest, NextResponse } from 'next/server'
 import { nanoid } from 'nanoid'
 import { checkAccess } from '@/lib/access/guard'
+import { EscrowError, withCreditHold } from '@/lib/billing/withCreditHold'
 import { IMAGE_FAL_TIMEOUT_MS, runFal } from '@/lib/fal/client'
 import { isGenerationPausedError } from '@/lib/generation/pause'
 import { db } from '@/lib/db'
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
     const built = plan.imageUrls.length
       ? buildImagePayload({ model: 'nano-banana-2-edit', prompt, imageUrls: plan.imageUrls, numImages: 1 })
       : buildImagePayload({ model: 'nano-banana-2', prompt, numImages: 1 })
-    const result = await runFal<{ images?: Array<{ url?: string }> }>(built.endpoint, built.input, undefined, IMAGE_FAL_TIMEOUT_MS, undefined, undefined, 'makeup.bake')
+    const result = await withCreditHold(userId, 1, () => runFal<{ images?: Array<{ url?: string }> }>(built.endpoint, built.input, undefined, IMAGE_FAL_TIMEOUT_MS, undefined, undefined, 'makeup.bake'))
     const imageUrl = result.images?.[0]?.url
     if (!imageUrl) return NextResponse.json({ error: 'The look bake returned no image' }, { status: 502 })
     const stored = await uploadToR2(Buffer.from(await (await fetch(imageUrl)).arrayBuffer()), `looks/${userId}/${Date.now()}.png`, 'image/png')
@@ -124,6 +125,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ assetId: created.id, imageUrl: stored, libraryTake: true, estimateCredits: 1, loraPlate: true })
   } catch (err) {
     console.warn('[looks]', err instanceof Error ? err.message : err)
+    if (err instanceof EscrowError) return NextResponse.json({ error: err.message }, { status: 402 })
     if (isGenerationPausedError(err)) {
       return NextResponse.json({ error: 'Generation is paused. The look was not submitted.' }, { status: 503 })
     }

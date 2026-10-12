@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { EscrowError, withCreditHold } from '@/lib/billing/withCreditHold'
 import { isGenerationPausedError } from '@/lib/generation/pause'
 import { readDialogue } from '@/lib/audio/dialogueIntent'
 import { rememberDialogueTake, synthesiseVoiceTake } from '@/lib/audio/voiceTake'
@@ -50,13 +51,13 @@ export async function POST(req: NextRequest) {
     takes: readDialogue([{ lineId: parsed.data.lineId, text: parsed.data.text, params: parsed.data.params }])[0]?.takes ?? [],
   }
   try {
-    const take = await synthesiseVoiceTake({
+    const take = await withCreditHold(userId, 1, () => synthesiseVoiceTake({
       userId,
       projectId: parsed.data.projectId,
       shotId: parsed.data.shotId,
       sceneId: parsed.data.sceneId,
       line,
-    })
+    }))
     if (take.skipped || !take.mediaId || !take.mediaPath || !take.storedUrl) {
       return NextResponse.json({ skipped: take.skipped ?? 'no-voice', dialogue: [line] })
     }
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ mediaId: take.mediaId, mediaPath: take.mediaPath, dialogue })
   } catch (err) {
     console.warn('[voice_take]', err instanceof Error ? err.message : err)
+    if (err instanceof EscrowError) return NextResponse.json({ error: err.message }, { status: 402 })
     if (isGenerationPausedError(err)) {
       return NextResponse.json({ error: 'Generation is paused. Voice was not submitted.' }, { status: 503 })
     }

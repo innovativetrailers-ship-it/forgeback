@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { executeCompositorGraphToPng, type CompositorGraph } from '@/lib/compositor'
 import { AI_MATTE_CREDITS } from '@/lib/compositor/vfx'
 import { checkAccess } from '@/lib/access/guard'
+import { EscrowError, withCreditHold } from '@/lib/billing/withCreditHold'
 import { runFal } from '@/lib/fal/client'
 import { isGenerationPausedError } from '@/lib/generation/pause'
 import { uploadToR2 } from '@/lib/storage/r2'
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
     const access = await checkAccess(userId, AI_MATTE_CREDITS)
     if (!access.allowed) return NextResponse.json({ error: access.reason }, { status: access.code })
     try {
-      const matte = await runFal(
+      const matte = await withCreditHold(userId, AI_MATTE_CREDITS, () => runFal(
         falEndpoint('birefnet'),
         { image_url: subjectUrl },
         undefined,
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
         undefined,
         undefined,
         'greenscreen.remove-background',
-      )
+      ))
       const cutoutRemote = (matte as { image?: { url?: string } }).image?.url
       if (!cutoutRemote) return NextResponse.json({ error: 'BiRefNet returned no cutout.' }, { status: 502 })
       const png = await executeCompositorGraphToPng(parsed.data.graph as CompositorGraph, {
@@ -87,7 +88,8 @@ export async function POST(req: NextRequest) {
       })
     } catch (err) {
       console.warn('[greenscreen]', err instanceof Error ? err.message : err)
-      if (isGenerationPausedError(err)) {
+      if (err instanceof EscrowError) return NextResponse.json({ error: err.message }, { status: 402 })
+    if (isGenerationPausedError(err)) {
         return NextResponse.json({ error: 'Generation is paused. The AI matte was not submitted.' }, { status: 503 })
       }
       return NextResponse.json({ error: err instanceof Error ? err.message : 'The matte did not run' }, { status: 502 })
@@ -119,11 +121,12 @@ export async function POST(req: NextRequest) {
     }
     const access = await checkAccess(userId, AI_MATTE_CREDITS)
     if (!access.allowed) return NextResponse.json({ error: access.reason, url }, { status: access.code })
-    const matte = await runFal(falEndpoint('birefnet'), { image_url: url, output_mask: true }, undefined, 120_000, undefined, undefined, 'compositor.ai-matte')
+    const matte = await withCreditHold(userId, AI_MATTE_CREDITS, () => runFal(falEndpoint('birefnet'), { image_url: url, output_mask: true }, undefined, 120_000, undefined, undefined, 'compositor.ai-matte'))
     const matteUrl = (matte as { image?: { url?: string } }).image?.url ?? null
     return NextResponse.json({ url, matteUrl, key, size: png.length, estimateCredits: AI_MATTE_CREDITS, libraryTake: true })
   } catch (err) {
     console.warn("[caught] src/app/api/studio/compositor/render/route.ts:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+    if (err instanceof EscrowError) return NextResponse.json({ error: err.message }, { status: 402 })
     if (isGenerationPausedError(err)) {
       return NextResponse.json({ error: 'Generation is paused. The AI matte was not submitted.' }, { status: 503 })
     }
