@@ -70,10 +70,36 @@ export default function AerialViewerPage() {
         } catch (err) {
           console.warn('[cesium] buildings', err instanceof Error ? err.message : err)
         }
-        viewer.camera.flyTo({
+        if (!viewer) return
+        const live = viewer
+        live.camera.flyTo({
           destination: Cesium.Cartesian3.fromDegrees(lng, lat, 500),
           duration: 1.5,
         })
+        const pin = live.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+          point: { pixelSize: 14, color: Cesium.Color.fromCssColorString('#00e5c8') },
+        })
+        const handler = new Cesium.ScreenSpaceEventHandler(live.scene.canvas)
+        let dragging = false
+        handler.setInputAction((event: { position: unknown }) => {
+          const picked = live.scene.pick(event.position)
+          dragging = Boolean(picked && picked.id === pin)
+        }, Cesium.ScreenSpaceEventType.LEFT_DOWN)
+        handler.setInputAction((event: { endPosition: unknown }) => {
+          if (!dragging) return
+          const ray = live.camera.getPickRay(event.endPosition)
+          const cartesian = ray ? live.scene.globe.pick(ray, live.scene) : undefined
+          if (!cartesian) return
+          pin.position = cartesian
+          const carto = Cesium.Cartographic.fromCartesian(cartesian)
+          setPlace({
+            lat: Cesium.Math.toDegrees(carto.latitude),
+            lng: Cesium.Math.toDegrees(carto.longitude),
+            label: 'Pinned place',
+          })
+        }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)
+        handler.setInputAction(() => { dragging = false }, Cesium.ScreenSpaceEventType.LEFT_UP)
         if (!cancelled) {
           setStatus('ready')
           setReason('')
@@ -165,15 +191,32 @@ export default function AerialViewerPage() {
 interface CesiumApi {
   Ion: { defaultAccessToken: string }
   Viewer: new (el: HTMLDivElement, opts: unknown) => {
-    camera: { flyTo: (opts: unknown) => void; setView: (opts: unknown) => void; frustum?: { fov: number } }
-    scene: { primitives: { add: (tiles: unknown) => void } }
+    camera: {
+      flyTo: (opts: unknown) => void
+      setView: (opts: unknown) => void
+      frustum?: { fov: number }
+      getPickRay: (position: unknown) => unknown
+    }
+    scene: {
+      primitives: { add: (tiles: unknown) => void }
+      canvas: unknown
+      pick: (position: unknown) => { id?: unknown } | undefined
+      globe: { pick: (ray: unknown, scene: unknown) => unknown }
+    }
+    entities: { add: (entity: unknown) => { position: unknown } }
     canvas?: { toDataURL: (type?: string, quality?: number) => string }
     destroy: () => void
   }
   createWorldTerrainAsync: () => Promise<unknown>
   createOsmBuildingsAsync: () => Promise<unknown>
   Cartesian3: { fromDegrees: (lng: number, lat: number, height: number) => unknown }
-  Math: { toRadians: (deg: number) => number }
+  Math: { toRadians: (deg: number) => number; toDegrees: (rad: number) => number }
+  Color: { fromCssColorString: (value: string) => unknown }
+  Cartographic: { fromCartesian: (value: unknown) => { latitude: number; longitude: number } }
+  ScreenSpaceEventHandler: new (canvas: unknown) => {
+    setInputAction: (fn: (event: never) => void, type: unknown) => void
+  }
+  ScreenSpaceEventType: { LEFT_DOWN: unknown; MOUSE_MOVE: unknown; LEFT_UP: unknown }
 }
 
 function loadCesium(): Promise<CesiumApi> {
