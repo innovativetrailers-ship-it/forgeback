@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { resolveCollabAccess, assertCanComment } from '@/lib/collab/access'
 import { broadcastCollab } from '@/lib/collab/hub'
+import { checkAccess } from '@/lib/access/guard'
+import { enforcePermission } from '@/lib/access/enforce'
 import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -62,6 +64,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const gate = await checkAccess(userId, 0)
+  if (!gate.allowed) return NextResponse.json({ error: gate.reason }, { status: gate.code })
+  const perm = enforcePermission(gate.tier, 'collaborate')
+  if (!perm.allowed) return NextResponse.json({ error: perm.reason, upgrade: perm.upgrade }, { status: 403 })
 
   let raw: unknown
   try { raw = await req.json() } catch (err) {

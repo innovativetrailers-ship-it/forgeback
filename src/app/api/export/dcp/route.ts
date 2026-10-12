@@ -8,7 +8,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth }                       from '@/lib/auth'
 import { checkAndDeductCredits,
          refundCredits }              from '@/lib/credits'
-import { checkTierAccess }            from '@/lib/access/guard'
+import { checkAccess, checkTierAccess } from '@/lib/access/guard'
+import { enforcePermission }            from '@/lib/access/enforce'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -16,6 +17,10 @@ export async function POST(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   // DCP export requires Ultimate tier
+  const exportGate = await checkAccess(userId, 0)
+  if (!exportGate.allowed) return NextResponse.json({ error: exportGate.reason }, { status: exportGate.code })
+  const exportPerm = enforcePermission(exportGate.tier, 'export_4k')
+  if (!exportPerm.allowed) return NextResponse.json({ error: exportPerm.reason, upgrade: exportPerm.upgrade }, { status: 403 })
   const tierAccess = await checkTierAccess(userId, 'export_dcp')
   if (!tierAccess.allowed) {
     return NextResponse.json({

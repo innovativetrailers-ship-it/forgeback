@@ -2,6 +2,7 @@ import { cloneVoice }                                from '@/lib/engines/elevenL
 import { deductCredits, OPERATION_COSTS }            from '@/lib/credits'
 import { db }                                        from '@/lib/db'
 import { checkAccess, checkTierAccess }              from '@/lib/access/guard'
+import { enforcePermission }                         from '@/lib/access/enforce'
 import { isGenerationPaused }                        from '@/lib/generation/pause'
 import { requireUser } from '@/lib/auth/requireUser'
 
@@ -41,6 +42,8 @@ export async function POST(req: Request) {
   const cost = OPERATION_COSTS['elevenlabs_clone_voice']
   const access = await checkAccess(userId, cost)
   if (!access.allowed) return Response.json({ error: access.reason }, { status: access.code })
+  const voicePerm = enforcePermission(access.tier, 'voice_clone')
+  if (!voicePerm.allowed) return Response.json({ error: voicePerm.reason, upgrade: voicePerm.upgrade }, { status: 403 })
 
   await deductCredits(db, userId, cost, `Clone voice: ${name}`)
   const { voiceId } = await cloneVoice({ name, description, audioUrls })
