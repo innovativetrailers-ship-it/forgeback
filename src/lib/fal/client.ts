@@ -1,7 +1,7 @@
 // Single source for all FAL calls — routes through falQueue (URL-based polling).
 
 import { fal as falSdk } from '@fal-ai/client'
-import { requireCallerSource } from '@cinema/core'
+import { guardedFalSubmit, requireCallerSource } from '@cinema/core'
 import { getFalKey } from '@/lib/config/keys'
 import { assertGenerationNotPaused } from '@/lib/generation/pause'
 import { currentGen } from '@/lib/diagnostics/correlation'
@@ -76,9 +76,21 @@ const guardedQueue = {
     options: { input: Record<string, unknown> } & Record<string, unknown>,
   ) => {
     const source = requireCallerSource(typeof options.source === 'string' ? options.source : '')
-    assertGenerationNotPaused(endpoint)
     chokepointSubmitLog(endpoint, source, String(options.input?.prompt ?? '').slice(0, 50))
-    return falSdk.queue.submit(endpoint, options)
+    const submission = await guardedFalSubmit({
+      endpoint,
+      input: options.input,
+      source,
+      falKey: getFalKey(),
+      pausedEnv: process.env.GENERATION_PAUSED,
+      webhookUrl: typeof options.webhookUrl === 'string' ? options.webhookUrl : undefined,
+    })
+    return {
+      request_id: submission.requestId,
+      status_url: submission.statusUrl,
+      response_url: submission.responseUrl,
+      cancel_url: submission.cancelUrl,
+    }
   },
 }
 

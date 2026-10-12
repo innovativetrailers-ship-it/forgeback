@@ -8,6 +8,7 @@
  * allowed to call it, before wiring the client.
  */
 import { readdirSync, readFileSync, statSync, writeFileSync, unlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 
 const root = new URL('..', import.meta.url).pathname
@@ -128,7 +129,7 @@ function walk(dir, out = []) {
   return out
 }
 
-const SUBMIT_CALL = /fal\.queue\.submit\s*\(/
+const SUBMIT_CALL = /\bfal\w*\.queue\.submit\s*\(/
 const QUEUE_FETCH = /fetch\s*\(\s*[`'"][^`'"]*queue\.fal\.run/
 const WEB_SUBMIT = 'packages/core/src/fal/guardedSubmit.ts'
 
@@ -171,7 +172,7 @@ function guardedSubmitCopy(lines, index) {
   }
   const body = chunk.join('\n')
   const pauseAt = body.search(/throw new GenerationPausedError|assertGenerationNotPaused|generationPausedFromEnv|guardedFalSubmit/)
-  const submitAt = body.search(/fal\.queue\.submit\s*\(/)
+  const submitAt = body.search(/\bfal\w*\.queue\.submit\s*\(/)
   if (submitAt < 0) return pauseAt >= 0
   return pauseAt >= 0 && pauseAt < submitAt
 }
@@ -338,7 +339,7 @@ function selfTest() {
     process.exit(1)
   }
 
-  const planted = join(root, 'src/lib/__chokepoint_bypass_probe.ts')
+  const planted = join(tmpdir(), `forge-chokepoint-probe-${process.pid}.ts`)
   writeFileSync(planted, [
     'export async function sneak() {',
     "  return fal.queue.submit('fal-ai/probe', { input: {} })",
@@ -373,22 +374,22 @@ function selfTest() {
     const hit = collectSubmitBypass(plantedRel, plantedLines).filter((row) => row.kind === 'violation')
     if (!hit.length) {
       console.error('check-chokepoints: self-test missed planted fal.queue.submit bypass')
-      process.exit(1)
+      throw new Error('check-chokepoints self-test failed')
     }
     const llmHit = collectViolations(plantedRel, plantedLines).filter((row) => row.includes('messages.create'))
     if (!llmHit.length) {
       console.error('check-chokepoints: self-test missed planted messages.create bypass')
-      process.exit(1)
+      throw new Error('check-chokepoints self-test failed')
     }
     const runwayHit = collectViolations(plantedRel, plantedLines).filter((row) => row.includes('imageToVideo.create'))
     if (!runwayHit.length) {
       console.error('check-chokepoints: self-test missed planted Runway submit')
-      process.exit(1)
+      throw new Error('check-chokepoints self-test failed')
     }
     const replicateHit = collectViolations(plantedRel, plantedLines).filter((row) => row.includes('predictions.create'))
     if (!replicateHit.length) {
       console.error('check-chokepoints: self-test missed planted Replicate submit')
-      process.exit(1)
+      throw new Error('check-chokepoints self-test failed')
     }
     const plantedHits = collectViolations(plantedRel, plantedLines)
     const requiredHosts = [
@@ -407,7 +408,7 @@ function selfTest() {
     const missedHosts = requiredHosts.filter((host) => !plantedHits.some((row) => row.includes(host)))
     if (missedHosts.length) {
       console.error(`check-chokepoints: self-test missed planted hosts ${missedHosts.join(', ')}`)
-      process.exit(1)
+      throw new Error('check-chokepoints self-test failed')
     }
     console.log('check-chokepoints: self-test RED (planted paid hosts)')
     const seen = new Set()

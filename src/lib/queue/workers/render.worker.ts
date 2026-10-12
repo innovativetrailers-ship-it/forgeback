@@ -326,12 +326,8 @@ async function pollUntilComplete(
         result = await wan.pollStatus(externalJobId, i2v ? WAN_I2V_MODEL : WAN_T2V_MODEL)
         break
       }
-      default: {
-        console.warn(`[worker] pollUntilComplete: unknown model "${modelId}" — falling back to wan`)
-        const wan = await import('../../models/wan')
-        result = await wan.pollStatus(externalJobId, undefined, pollUrl)
-        break
-      }
+      default:
+        throw new Error(`Unknown model ${modelId}. Nothing was submitted as a substitute.`)
     }
 
     // Broadcast progress
