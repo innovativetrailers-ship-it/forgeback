@@ -53,7 +53,7 @@ const BLOG_FEATURES = [
   {
     icon: <Globe className="w-5 h-5" />,
     title: 'ForgeReview',
-    desc: 'Timestamped annotations, approval workflows, client portal links, and content credentials.',
+    desc: 'Timestamped annotations, approval workflows, and client portal links.',
   },
   {
     icon: <Zap className="w-5 h-5" />,

@@ -6,6 +6,16 @@ import { isGenerationPausedError } from '@/lib/generation/pause'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { omniCredits, omniMaxSeconds, splitPerformance, type OmniResolution } from '@/lib/orchestration/omniHuman'
 import { requireUser } from '@/lib/auth/requireUser'
+import { recordConsent } from '@/lib/privacy/consent'
+import { opaqueObjectKey } from '@/lib/upload/sniff'
+import { safeFetch } from '@/lib/net/safeFetch'
+
+function splitPrompt(prompt: string): string[] {
+  if (prompt.length <= 400) return prompt ? [prompt] : []
+  const chunks: string[] = []
+  for (let i = 0; i < prompt.length; i += 400) chunks.push(prompt.slice(i, i + 400))
+  return chunks
+}
 
 export async function POST(req: NextRequest) {
   const userId = (await requireUser(req))?.id ?? null
@@ -31,10 +41,11 @@ export async function POST(req: NextRequest) {
   if (!body?.imageUrl || !body.audioUrl) {
     return NextResponse.json({ error: 'A portrait and an audio file are required', parts, max }, { status: 400 })
   }
-  if (seconds > max) {
+  if (seconds > max || (body.prompt?.length ?? 0) > 400) {
     return NextResponse.json({
-      error: `This is longer than ${max}s at ${resolution}. It is split into ${parts.join('s, ')}s and was not truncated or submitted.`,
+      error: `This take is split into ${parts.join('s, ')}s. It was not cut down and was not submitted as one clip.`,
       parts,
+      promptSegments: splitPrompt(body.prompt ?? ''),
     }, { status: 400 })
   }
   const estimateCredits = omniCredits(seconds)
@@ -42,12 +53,13 @@ export async function POST(req: NextRequest) {
   if (body.likenessConsent !== true || body.audioRights !== true || body.notMinor !== true) {
     return NextResponse.json({ error: 'Likeness, audio rights, and a not-a-minor confirmation are required' }, { status: 400 })
   }
+  await recordConsent(userId, 'likeness', 'studio.avatar')
   const access = await checkAccess(userId, estimateCredits)
   if (!access.allowed) return NextResponse.json({ error: access.reason }, { status: access.code })
   try {
     const data = await runFal(
       falEndpoint('bytedance/omnihuman/v1.5'),
-      { image_url: body.imageUrl, audio_url: body.audioUrl, resolution, turbo_mode: false, prompt: body.prompt?.slice(0, 400) },
+      { image_url: body.imageUrl, audio_url: body.audioUrl, resolution, turbo_mode: false, prompt: body.prompt ?? '' },
       undefined,
       12 * 60_000,
       undefined,
@@ -56,12 +68,13 @@ export async function POST(req: NextRequest) {
     )
     const remote = (data as { video?: { url?: string } }).video?.url
     if (!remote) return NextResponse.json({ error: 'OmniHuman did not return a video' }, { status: 502 })
-    const stored = await uploadToR2(Buffer.from(await (await fetch(remote)).arrayBuffer()), `avatar/${userId}/${Date.now()}.mp4`, 'video/mp4')
+    const remoteRes = await safeFetch(remote, [])
+    const stored = await uploadToR2(Buffer.from(await remoteRes.arrayBuffer()), opaqueObjectKey('mp4'), 'video/mp4')
     return NextResponse.json({
       videoUrl: stored,
       estimateCredits,
       libraryTake: true,
-      note: 'AI-generated talking portrait. C2PA is not embedded. The original files were not replaced.',
+      note: 'AI-generated talking portrait. This file is not a signed content-credentials manifest. The original files were not replaced.',
     })
   } catch (err) {
     console.warn('[avatar]', err instanceof Error ? err.message : err)

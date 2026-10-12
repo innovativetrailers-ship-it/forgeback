@@ -8,6 +8,7 @@ import { signedUrlForStoredKey } from '@/lib/media/resolveStoredMedia'
 import { objectKeyFromStored } from '@/lib/storage/r2'
 import { omniCredits, omniMaxSeconds, splitPerformance, type OmniResolution } from '@/lib/orchestration/omniHuman'
 import { requireUser } from '@/lib/auth/requireUser'
+import { recordConsent } from '@/lib/privacy/consent'
 
 export async function POST(req: NextRequest) {
   const userId = (await requireUser(req))?.id ?? null
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
   if (body.likenessConsent !== true || body.audioRights !== true) {
     return NextResponse.json({ error: 'Likeness consent and audio rights are required' }, { status: 400 })
   }
+  await recordConsent(userId, 'likeness', 'studio.shot.performance')
   const imageUrl = clip.anchorFrameUrl || clip.keyframeUrl
   if (!imageUrl) return NextResponse.json({ error: 'A performance shot needs a still of the performer' }, { status: 400 })
   const line = await db.audioTrack.findFirst({
