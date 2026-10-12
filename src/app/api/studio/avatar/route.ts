@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     audioRights?: boolean
     notMinor?: boolean
     confirm?: boolean
+    voiceId?: string
   } | null
   const resolution: OmniResolution = body?.resolution === '720p' ? '720p' : '1080p'
   const seconds = Math.max(1, Math.ceil(body?.seconds ?? 0))
@@ -43,10 +44,12 @@ export async function POST(req: NextRequest) {
   }
   if (seconds > max || (body.prompt?.length ?? 0) > 400) {
     return NextResponse.json({
-      error: `This take is split into ${parts.join('s, ')}s. It was not cut down and was not submitted as one clip.`,
-      parts,
+      submitted: false,
+      segments: parts,
       promptSegments: splitPrompt(body.prompt ?? ''),
-    }, { status: 400 })
+      voiceId: body.voiceId ?? null,
+      message: `Split into ${parts.join('s, ')}s. Nothing was cut down and nothing was submitted. Shorten the take, or confirm each segment on its own.`,
+    })
   }
   const estimateCredits = omniCredits(seconds)
   if (!body.confirm) return NextResponse.json({ estimateCredits, metered: true, parts, max })

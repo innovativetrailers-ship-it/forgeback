@@ -317,6 +317,18 @@ export function AvatarPanel() {
   const [quote, setQuote] = useState<number | null>(null)
   const [note, setNote] = useState('OmniHuman v1.5. 1080p stops at 30s. 720p stops at 60s. A longer script is split, not cut off.')
   const [takeUrl, setTakeUrl] = useState('')
+  const [voices, setVoices] = useState<Array<{ id: string; name: string }>>([])
+  const [voiceId, setVoiceId] = useState('')
+
+  useEffect(() => {
+    void fetch('/api/studio/voices', { credentials: 'include' })
+      .then(async (res) => {
+        if (!res.ok) return
+        const body = await res.json() as { voices?: Array<{ id: string; name: string }> }
+        setVoices(body.voices ?? [])
+      })
+      .catch((err) => console.warn('[avatar]', err instanceof Error ? err.message : err))
+  }, [])
 
   const spoken = Math.max(seconds, Math.ceil(script.trim().split(/\s+/).filter(Boolean).length / 2.2))
 
@@ -335,14 +347,18 @@ export function AvatarPanel() {
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        imageUrl, audioUrl, seconds: spoken, resolution, prompt: script,
+        imageUrl, audioUrl, seconds: spoken, resolution, prompt: script, voiceId: voiceId || undefined,
         likenessConsent: likeness, audioRights: rights, notMinor, confirm,
       }),
     })
-    const body = await res.json() as { error?: string; estimateCredits?: number; videoUrl?: string; note?: string; parts?: number[] }
+    const body = await res.json() as { error?: string; estimateCredits?: number; videoUrl?: string; note?: string; parts?: number[]; message?: string; segments?: number[]; submitted?: boolean }
+    if (body.submitted === false) {
+      setNote(body.message || 'Split into segments. Nothing was submitted.')
+      return
+    }
     if (!confirm) {
       setQuote(body.estimateCredits ?? null)
-      setNote(body.error || (body.parts ? `Segments: ${body.parts.join('s, ')}s` : 'Quoted. Nothing was submitted.'))
+      setNote(body.error || (body.segments ? `Segments: ${body.segments.join('s, ')}s` : 'Quoted. Nothing was submitted.'))
       return
     }
     if (!res.ok || !body.videoUrl) {
@@ -366,7 +382,13 @@ export function AvatarPanel() {
         if (!file) return
         void upload(file, 'audio').then(setAudioUrl).catch((err) => { console.warn('[avatar]', err instanceof Error ? err.message : err); setNote(err instanceof Error ? err.message : 'Upload failed') })
       }} />
-      <textarea value={script} onChange={(event) => setScript(event.target.value)} placeholder="Script. A long script shows its split and is not submitted as one cut-down clip." className="h-16 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1" />
+      <label className="block">Voice
+        <select value={voiceId} onChange={(event) => setVoiceId(event.target.value)} className="ml-1 bg-transparent">
+          <option value="">Upload an audio file. Speech is not synthesised here.</option>
+          {voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name}</option>)}
+        </select>
+      </label>
+      <textarea value={script} onChange={(event) => setScript(event.target.value)} placeholder="Script. A long script is split into segments and is not submitted as one cut-down clip." className="h-16 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1" />
       <label className="block">Seconds {seconds}<input type="range" min={1} max={120} value={seconds} onChange={(event) => setSeconds(Number(event.target.value))} className="w-full" /></label>
       <select value={resolution} onChange={(event) => setResolution(event.target.value as '1080p' | '720p')} className="bg-transparent"><option value="1080p">1080p · 30s</option><option value="720p">720p · 60s</option></select>
       <label className="flex gap-2"><input type="checkbox" checked={likeness} onChange={(event) => setLikeness(event.target.checked)} /> Likeness consent</label>
