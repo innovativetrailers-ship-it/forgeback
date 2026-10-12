@@ -1,12 +1,12 @@
+import { creditsForStripePrice } from '@cinema/core'
 import { stripe, usdCentsToCredits } from '@/lib/payments/stripe'
 import { db } from '@/lib/db'
+import { grantCredits } from '@/lib/credits'
 import {
-  STRIPE_CREDIT_PACK_PRICES,
   STRIPE_PRICE_TO_TIER,
   SUBSCRIPTION_PLAN_CREDITS,
 } from '@/lib/payments/stripePrices'
 import { hasStripeSignature } from '@/lib/payments/stripeWebhook'
-import { subscriptionCreditData } from '@/lib/billing/relayMeter'
 import { upsertSubscription } from '@/lib/entitlement/resolve'
 import type { SubscriptionTier } from '@/lib/access/tiers'
 
@@ -42,16 +42,11 @@ export async function POST(req: Request) {
       const vendorCents = parseInt(pi.metadata.vendorCents ?? '0')
       const credits     = usdCentsToCredits(vendorCents)
 
-      await db.$transaction([
-        db.stripeDeposit.update({
-          where: { paymentIntentId: pi.id },
-          data:  { status: 'completed' },
-        }),
-        db.user.update({
-          where: { id: userId },
-          data:  { creditBalance: { increment: credits } },
-        }),
-      ])
+      await db.stripeDeposit.update({
+        where: { paymentIntentId: pi.id },
+        data:  { status: 'completed' },
+      })
+      await grantCredits(db, userId, 'stripe', `${event.id}:deposit`, credits, 'deposit')
 
       const record = await db.stripeCustomer.findUnique({ where: { userId } })
       if (record) {
@@ -66,19 +61,6 @@ export async function POST(req: Request) {
           },
         })
       }
-
-      const updatedUser = await db.user.findUnique({
-        where:  { id: userId },
-        select: { creditBalance: true },
-      })
-      await db.creditTransaction.create({
-        data: {
-          userId,
-          amount:      credits,
-          description: `Deposit: $${pi.amount / 100}`,
-          balanceAfter: updatedUser?.creditBalance ?? credits,
-        },
-      })
 
       console.log(`[Stripe] Deposit: $${pi.amount / 100} → ${credits} credits for ${userId}`)
       break
@@ -107,10 +89,8 @@ export async function POST(req: Request) {
       const refundedCents = charge.amount_refunded as number
       const credits       = usdCentsToCredits(refundedCents)
 
-      await db.$transaction([
-        db.user.update({ where: { id: userId }, data: { creditBalance: { decrement: credits } } }),
-        db.stripeDeposit.updateMany({ where: { paymentIntentId: pi.id }, data: { status: 'refunded' } }),
-      ])
+      await db.stripeDeposit.updateMany({ where: { paymentIntentId: pi.id }, data: { status: 'refunded' } })
+      await grantCredits(db, userId, 'stripe', `${event.id}:refund`, -credits, 'refund')
       break
     }
 
@@ -133,52 +113,19 @@ export async function POST(req: Request) {
       if (user?.role === 'ADMIN') break
 
       const tier = priceId ? STRIPE_PRICE_TO_TIER[priceId] : undefined
-      const creditPackCredits: Record<string, number> = {
-        [STRIPE_CREDIT_PACK_PRICES.credits_100]:   100,
-        [STRIPE_CREDIT_PACK_PRICES.credits_500]:   500,
-        [STRIPE_CREDIT_PACK_PRICES.credits_2000]:  2000,
-        [STRIPE_CREDIT_PACK_PRICES.credits_10000]: 10000,
-      }
-
+      const packCredits = priceId ? creditsForStripePrice(priceId, process.env) : null
       const isSubscription = !!invoice.subscription
 
       if (isSubscription && tier && tier !== 'free' && tier !== 'admin') {
         const credits = SUBSCRIPTION_PLAN_CREDITS[tier]
-        const updated = await db.user.update({
+        await db.user.update({
           where: { id: userId },
-            data: {
-              ...subscriptionCreditData(credits),
-              subscriptionTier: tier,
-              subscriptionStatus: 'active',
-            },
-          select: { creditBalance: true },
+          data: { subscriptionTier: tier, subscriptionStatus: 'active' },
         })
-        await db.creditTransaction.create({
-          data: {
-            userId,
-            amount: credits,
-            type: 'subscription',
-            description: `Subscription refresh — ${tier} plan`,
-            stripeId: event.id,
-            balanceAfter: updated.creditBalance,
-          },
-        })
+        await grantCredits(db, userId, 'stripe', `${event.id}:subscription`, credits, 'subscription')
         console.log(`[Stripe] Subscription paid: ${credits} credits, tier=${tier} for ${userId}`)
-      } else if (priceId && creditPackCredits[priceId]) {
-        const packCredits = creditPackCredits[priceId]
-        const updated = await db.user.update({
-          where: { id: userId },
-          data:  { creditBalance: { increment: packCredits } },
-          select: { creditBalance: true },
-        })
-        await db.creditTransaction.create({
-          data: {
-            userId,
-            amount:       packCredits,
-            description:  `Credit pack purchase — ${packCredits} credits`,
-            balanceAfter: updated.creditBalance,
-          },
-        })
+      } else if (packCredits) {
+        await grantCredits(db, userId, 'stripe', event.id, packCredits, 'credit_pack')
         console.log(`[Stripe] Credit pack: ${packCredits} credits for ${userId}`)
       }
       break
@@ -263,24 +210,7 @@ export async function POST(req: Request) {
       const userId  = session.metadata?.userId as string | undefined
       const credits = parseInt(session.metadata?.credits ?? '0')
       if (userId && credits > 0) {
-        await db.$transaction(async (tx) => {
-          await tx.processedStripeEvent.create({ data: { eventId: event.id, type: event.type } })
-          const updated = await tx.user.update({
-            where: { id: userId },
-            data: { creditBalance: { increment: credits } },
-            select: { creditBalance: true },
-          })
-          await tx.creditTransaction.create({
-            data: {
-              userId,
-              amount: credits,
-              type: 'purchase',
-              description: 'Credit pack',
-              stripeId: event.id,
-              balanceAfter: updated.creditBalance,
-            },
-          })
-        })
+        await grantCredits(db, userId, 'stripe', `${event.id}:checkout`, credits, 'purchase')
         return Response.json({ received: true })
       }
       break

@@ -1,5 +1,7 @@
 export const CORE_VERSION = '0.0.1'
 
+export { CREDIT_PACKS, creditPackById, creditsForStripePrice, type CreditPack } from './logic/creditPacks'
+
 export type {
   Project,
   ProjectSettings,

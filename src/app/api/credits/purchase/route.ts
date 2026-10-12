@@ -1,3 +1,4 @@
+import { CREDIT_PACKS } from '@cinema/core'
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { requireUser } from '@/lib/auth/requireUser'
@@ -5,13 +6,6 @@ import { requireUser } from '@/lib/auth/requireUser'
 const getStripe = () => new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-04-22.dahlia',
 })
-
-const CREDIT_PACKS = [
-  { credits: 100, price: 500, label: '100 Credits' },
-  { credits: 500, price: 2000, label: '500 Credits' },
-  { credits: 2000, price: 6500, label: '2,000 Credits' },
-  { credits: 10000, price: 25000, label: '10,000 Credits' },
-]
 
 export async function GET() {
   return NextResponse.json({ packs: CREDIT_PACKS })
@@ -52,12 +46,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       line_items: [
         {
           price_data: {
-            currency: 'usd',
+            currency: 'aud',
             product_data: {
               name: `CINÉMA — ${pack.label}`,
               description: `${pack.credits} credits for CINÉMA AI video production`,
             },
-            unit_amount: pack.price,
+            unit_amount: pack.priceAudCents,
           },
           quantity: 1,
         },

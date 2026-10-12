@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
+import { CREDIT_PACKS as PACK_CATALOG } from '@cinema/core'
 
 export interface CreditBalance {
   credits:            number
@@ -14,23 +15,11 @@ export interface CreditBalance {
   tier:               string
 }
 
-export const CREDIT_PACKS = [
-  { credits: 100, priceUsd: 5, label: '100 Credits', description: 'Great for trying out' },
-  {
-    credits: 500,
-    priceUsd: 20,
-    label: '500 Credits',
-    description: 'For regular creators',
-    popular: true,
-  },
-  { credits: 2000, priceUsd: 65, label: '2,000 Credits', description: 'Power users' },
-  {
-    credits: 10000,
-    priceUsd: 250,
-    label: '10,000 Credits',
-    description: 'Studios & teams',
-  },
-] as const
+export const CREDIT_PACKS = PACK_CATALOG.map((pack) => ({
+  ...pack,
+  priceAud: pack.priceAudCents / 100,
+  description: pack.popular ? 'Most chosen' : 'Credit pack',
+}))
 
 export function useCredits() {
   const { data: session } = useSession()

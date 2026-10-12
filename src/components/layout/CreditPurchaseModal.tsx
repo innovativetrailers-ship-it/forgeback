@@ -1,22 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { CREDIT_PACKS, type CreditPack } from '@cinema/core'
 import { useUIStore } from '@/store/ui'
 import { useQueryClient } from '@tanstack/react-query'
-
-interface CreditPack {
-  credits: number
-  priceUSD: number
-  label: string
-  popular?: boolean
-}
-
-const CREDIT_PACKS: CreditPack[] = [
-  { credits: 100,   priceUSD: 5,   label: '100 Credits' },
-  { credits: 500,   priceUSD: 20,  label: '500 Credits' },
-  { credits: 2000,  priceUSD: 65,  label: '2,000 Credits', popular: true },
-  { credits: 10000, priceUSD: 250, label: '10,000 Credits' },
-]
 
 export function CreditPurchaseModal() {
   const { activeModal, closeModal } = useUIStore()
@@ -91,9 +78,9 @@ export function CreditPurchaseModal() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <span className="text-white font-semibold">{pack.label}</span>
-                  <span className="ml-2 text-gray-500 text-sm">${pack.priceUSD}</span>
+                  <span className="ml-2 text-gray-500 text-sm">A${(pack.priceAudCents / 100).toFixed(0)}</span>
                   <span className="ml-1 text-gray-600 text-xs">
-                    (${(pack.priceUSD / pack.credits * 100).toFixed(1)}¢/cr)
+                    (A${((pack.priceAudCents / 100) / pack.credits * 100).toFixed(1)}¢/cr)
                   </span>
                 </div>
               </div>

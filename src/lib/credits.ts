@@ -174,20 +174,16 @@ export async function deductCredits(
   vendor?:     string,
   vendorCostUSD?: number,
 ): Promise<void> {
-  const user = await db.user.findUnique({
-    where:  { id: userId },
-    select: { creditBalance: true, role: true },
-  })
-
-  if (user?.role === 'ADMIN') return
-
-  if ((user?.creditBalance ?? 0) < credits) {
-    throw new Error(`Insufficient credits: need ${credits}, have ${user?.creditBalance ?? 0}`)
-  }
-
-  const newBalance = user!.creditBalance - credits
-
   await db.$transaction(async (tx: any) => {
+    const user = await tx.user.findUnique({
+      where:  { id: userId },
+      select: { creditBalance: true, role: true },
+    })
+    if (user?.role === 'ADMIN') return
+    if ((user?.creditBalance ?? 0) < credits) {
+      throw new CreditError(`Insufficient credits: need ${credits}, have ${user?.creditBalance ?? 0}`)
+    }
+    const newBalance = user.creditBalance - credits
     await tx.user.update({ where: { id: userId }, data: { creditBalance: { decrement: credits } } })
     await tx.creditTransaction.create({
       data: { userId, amount: -credits, description, balanceAfter: newBalance },
@@ -198,25 +194,38 @@ export async function deductCredits(
       })
     }
   })
+}
 
-  // Best-effort Stripe balance sync
-  try {
-    const stripeCustomer = await db.stripeCustomer?.findUnique({ where: { userId } })
-    if (stripeCustomer?.stripeCustomerId) {
-      const { stripe, creditsToUSDCents } = await import('./payments/stripe')
-      const debitCents = creditsToUSDCents(credits)
-      await stripe.customers.createBalanceTransaction(
-        stripeCustomer.stripeCustomerId,
-        { amount: debitCents, currency: 'usd', description: `Usage: ${description}` }
-      )
-      await db.stripeCustomer.update({
-        where: { userId },
-        data:  { stripeBalanceCents: { decrement: debitCents } },
-      })
-    }
-  } catch (err: unknown) {
-    console.error('[credits] Stripe balance sync failed:', err instanceof Error ? err.message : err)
-  }
+/** The only way credits are added. The same provider + external id is a no-op. */
+export async function grantCredits(
+  db: { $transaction: (fn: (tx: any) => Promise<unknown>) => Promise<unknown> },
+  userId: string,
+  provider: string,
+  externalId: string,
+  amount: number,
+  source: string,
+): Promise<{ granted: boolean; balanceAfter: number }> {
+  const stripeId = `${provider}:${externalId}`
+  return db.$transaction(async (tx: any) => {
+    const existing = await tx.creditTransaction.findFirst({ where: { stripeId } })
+    if (existing) return { granted: false, balanceAfter: existing.balanceAfter as number }
+    const updated = await tx.user.update({
+      where: { id: userId },
+      data: { creditBalance: { increment: amount } },
+      select: { creditBalance: true },
+    })
+    await tx.creditTransaction.create({
+      data: {
+        userId,
+        amount,
+        type: source,
+        description: source,
+        stripeId,
+        balanceAfter: updated.creditBalance,
+      },
+    })
+    return { granted: true, balanceAfter: updated.creditBalance as number }
+  }) as Promise<{ granted: boolean; balanceAfter: number }>
 }
 
 export async function refundCredits(
@@ -255,7 +264,10 @@ export async function checkAndDeductCredits(
     const { db } = await import('./db')
     const userId       = dbOrUserId
     const operationKey = userIdOrOperationKey
-    const cost         = OPERATION_COSTS[operationKey] ?? 0
+    if (!(operationKey in OPERATION_COSTS)) {
+      throw new CreditError(`Unknown operation: ${operationKey}`)
+    }
+    const cost = OPERATION_COSTS[operationKey]
     if (cost === 0) return
     return deductCredits(db, userId, cost, operationKey)
   }

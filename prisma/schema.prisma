@@ -1625,6 +1625,7 @@ model Subscription {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([provider, providerSubId])
   @@index([userId])
 }
 

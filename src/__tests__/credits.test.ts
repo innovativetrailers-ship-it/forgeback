@@ -20,10 +20,10 @@ describe('OPERATION_COSTS', () => {
     expect(OPERATION_COSTS.proxy_draft).toBe(0)
   })
 
-  it('maintains cost hierarchy (veo3 > kling_pro > kling_standard > luma)', () => {
+  it('keeps the live cost order (veo3 > kling_pro > luma > kling_standard)', () => {
     expect(OPERATION_COSTS.generate_veo3).toBeGreaterThan(OPERATION_COSTS.generate_kling_pro)
-    expect(OPERATION_COSTS.generate_kling_pro).toBeGreaterThan(OPERATION_COSTS.generate_kling_standard)
-    expect(OPERATION_COSTS.generate_kling_standard).toBeGreaterThan(OPERATION_COSTS.generate_luma)
+    expect(OPERATION_COSTS.generate_kling_pro).toBeGreaterThan(OPERATION_COSTS.generate_luma)
+    expect(OPERATION_COSTS.generate_luma).toBeGreaterThan(OPERATION_COSTS.generate_kling_standard)
   })
 })
 
