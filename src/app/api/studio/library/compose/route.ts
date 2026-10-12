@@ -106,8 +106,9 @@ export async function POST(req: NextRequest) {
       voiceMediaId = take.mediaId
     }
     let videoUrl: string | null = null
-    if (!found.lipSyncReady) {
-      videoUrl = await withCreditHold(userId, Math.max(1, found.estimateCredits), () => applyLipSyncToShot(found.shotId, found.clip.scene.projectId, 'draft'))
+    if (!found.lipSyncReady && found.clip) {
+      const projectId = found.clip.scene.projectId
+      videoUrl = await withCreditHold(userId, Math.max(1, found.estimateCredits), () => applyLipSyncToShot(found.shotId, projectId, 'draft'))
     }
     return NextResponse.json({ voiceMediaId, videoUrl, estimateCredits: found.estimateCredits })
   } catch (err) {
