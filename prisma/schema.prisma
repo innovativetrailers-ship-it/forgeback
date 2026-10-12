@@ -137,6 +137,8 @@ model User {
   hasUsedDesktopTrial Boolean @default(false)
   /** Designated Forge accounts. Unmetered. Pause and the submit chokepoint still apply. */
   isInternal          Boolean   @default(false)
+  /** Dev account may call a provider with a key that stays on this computer. */
+  canUseOwnKeys       Boolean   @default(false)
 
   @@index([email])
 }
