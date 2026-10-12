@@ -899,7 +899,7 @@ export function EditorDock({
     <TimelineDockProvider mode={timelineMode} setMode={(mode) => pinTimelineRef.current(mode)}>
     <EditorFrameContext.Provider value={frame}>
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center gap-1 border-b border-white/10 px-2 py-0.5 text-[10px] text-white/70">
+        <div className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-white/70">
           <span className="text-white/80">{workspace}</span>
           {workspace !== 'Editor' && workspace !== 'Creator' && (
             <button type="button" className="rounded bg-white/10 px-2 py-0.5" onClick={() => switchWorkspace('Editor')}>Back to Edit</button>

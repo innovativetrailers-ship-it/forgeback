@@ -282,14 +282,7 @@ export function Timeline({
       ref={timelineRef}
       className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0c0c14] select-none"
     >
-      <div className="flex shrink-0 items-center gap-1 border-b border-white/8 px-2 py-1 text-[9px] text-white/45">
-        <span>Track height</span>
-        {(['S', 'M', 'L'] as const).map((mode) => (
-          <button key={mode} type="button" className={`rounded px-1.5 ${heightMode === mode ? 'bg-[#00e5c8]/20 text-[#00e5c8]' : 'bg-white/5'}`} onClick={() => chooseHeight(mode)}>{mode}</button>
-        ))}
-        <button type="button" className={`rounded px-1.5 ${heightMode === 'fit' ? 'bg-[#00e5c8]/20 text-[#00e5c8]' : 'bg-white/5'}`} onClick={fitTracks}>Fit all tracks</button>
-      </div>
-      {/* Ruler */}
+      {/* Ruler. Height controls sit in the label column, not on a second bar. */}
       <div
         ref={rulerRef}
         className="flex-shrink-0 relative border-b border-white/8 bg-[#0a0a12] cursor-pointer"
@@ -297,7 +290,12 @@ export function Timeline({
         onClick={handleRulerClick}
       >
         {/* Track label spacer */}
-        <div className="absolute left-0 top-0 bottom-0 border-r border-white/8" style={{ width: TRACK_LABEL_WIDTH }} />
+        <div className="absolute left-0 top-0 bottom-0 flex items-center gap-0.5 border-r border-white/8 px-1 text-[9px] text-white/45" style={{ width: TRACK_LABEL_WIDTH }}>
+          {(['S', 'M', 'L'] as const).map((mode) => (
+            <button key={mode} type="button" className={heightMode === mode ? 'text-[#00e5c8]' : ''} onClick={(event) => { event.stopPropagation(); chooseHeight(mode) }}>{mode}</button>
+          ))}
+          <button type="button" className={heightMode === 'fit' ? 'text-[#00e5c8]' : ''} onClick={(event) => { event.stopPropagation(); fitTracks() }}>Fit</button>
+        </div>
 
         {/* Tick marks */}
         {ticks.map((t) => {
