@@ -52,6 +52,7 @@ const BILLABLE_JOB_NAMES = new Set([
   'shot-generate',
   'scene-generate',
   'render-simple',
+  'relay-generate',
 ])
 
 async function skipIfGenerationPaused(
@@ -709,6 +710,14 @@ const workerProcessor = async (job: { name: string; data: RenderJobPayload; id?:
       return
     }
 
+    if (job.name === 'relay-generate') {
+      const { jobId } = data as unknown as { jobId: string }
+      if (await skipIfGenerationPaused('relay-generate', jobId)) return
+      const { dispatchRelayJob } = await import('@/lib/desktop/generateRelay')
+      await dispatchRelayJob(jobId)
+      return
+    }
+
     if (job.name === 'render-simple') {
       const { jobId, prompt, duration, engine, userId } = data as unknown as {
         jobId: string; prompt: string; duration: number; engine: string; userId: string
@@ -923,6 +932,9 @@ const WORKER_OPTS = {
 let renderWorker: Worker<RenderJobPayload> | null = null
 
 async function startRenderWorker(): Promise<void> {
+  if (!process.env.FAL_WEBHOOK_SECRET?.trim()) {
+    throw new Error('FAL_WEBHOOK_SECRET is not set')
+  }
   await bootSelfTest()
 
   console.log('[worker_generation_pause]', JSON.stringify({

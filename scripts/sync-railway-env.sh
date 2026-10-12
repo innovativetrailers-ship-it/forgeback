@@ -74,7 +74,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   value="$(echo "$value" | sed -e 's/^["'\'']//' -e 's/["'\'']$//')"
 
   [[ -z "$value" ]] && continue
-  # Canonical name on Railway is FAL_KEY (legacy FAL_API_KEY is remapped)
+  # Canonical name on Railway is FAL_KEY (legacy FAL_API_KEY is remapped).
+  # FAL_WEBHOOK_SECRET must be the same value on Vercel and every service that submits to the provider.
   if [[ "$key" == "FAL_API_KEY" ]]; then
     key="FAL_KEY"
   fi

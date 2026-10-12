@@ -7,7 +7,7 @@ export const maxDuration = 300
 
 import { fastEstimateCost, estimateRenderSeconds } from '@/lib/orchestration/fastEstimate'
 import { calculateSimpleCost }                     from '@/lib/credits'
-import { checkAccess, deductUserCredits }          from '@/lib/access/guard'
+import { checkAccess }          from '@/lib/access/guard'
 import { MODEL_COUNCIL_DISPLAY, MODEL_COSTS, TIER_ENGINE_MAP } from '@/lib/routing/engineRegistry'
 import { parseQualityTier } from '@/lib/orchestration/tierPolicy'
 import { parseCreativeLicense } from '@/lib/cognition/license'
@@ -131,7 +131,7 @@ export async function POST(req: Request) {
       progressPct:   0,
       statusMessage: mode === 'director' ? 'Queued — starting director orchestration…' : 'Queued — waiting for an available worker',
       etaSeconds,
-      creditsCharged: creditCost,
+      creditsCharged: 0,
       metadata: {
         selectedModels,
         generationMode,
@@ -164,6 +164,18 @@ export async function POST(req: Request) {
     }).catch((err) => logCaught('app/api/generate/route', err))
   }
 
+  const { openHold, releaseHold } = await import('@/lib/credits/escrow')
+  try {
+    await openHold(userId, job.id, creditCost)
+  } catch (err) {
+    console.warn('[generate] hold', err instanceof Error ? err.message : err)
+    await db.renderJob.update({
+      where: { id: job.id },
+      data: { status: 'FAILED', errorMessage: err instanceof Error ? err.message : 'Not enough credits.', completedAt: new Date() },
+    })
+    return Response.json({ error: err instanceof Error ? err.message : 'Not enough credits.' }, { status: 402 })
+  }
+
   const queuePayload = {
     jobId: job.id,
     userId,
@@ -191,15 +203,12 @@ export async function POST(req: Request) {
     )
   } catch (err) {
     console.warn('[generate] queue failed', err instanceof Error ? err.message : err)
+    await releaseHold(job.id)
     await db.renderJob.update({
       where: { id: job.id },
       data:  { status: 'FAILED', errorMessage: 'Queue unavailable — check REDIS_URL', statusMessage: 'Queue unavailable' },
     })
     return Response.json({ error: 'Render queue unavailable. Try again shortly.' }, { status: 503 })
-  }
-
-  if (mode !== 'director') {
-    await deductUserCredits(userId, creditCost, `${mode}: ${prompt.slice(0, 40)}`, 'fal')
   }
 
   return Response.json({

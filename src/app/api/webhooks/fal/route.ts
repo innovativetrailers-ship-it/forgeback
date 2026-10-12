@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { broadcastJobEvent } from '@/lib/queue/events'
 
 interface FalWebhookPayload {
   request_id: string
@@ -70,7 +69,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true })
   }
 
-  // Find the job linked to this fal request
   const renderJob = await db.renderJob.findFirst({
     where: { id: subjectId },
   })
@@ -79,43 +77,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true })
   }
 
+  const meta = renderJob.metadata && typeof renderJob.metadata === 'object' && !Array.isArray(renderJob.metadata)
+    ? renderJob.metadata as Record<string, unknown>
+    : {}
+  if (typeof meta.falRequestId === 'string' && meta.falRequestId !== requestId) {
+    return NextResponse.json({ error: 'Webhook does not match this job' }, { status: 401 })
+  }
+  if (renderJob.status === 'COMPLETE' || renderJob.status === 'FAILED' || renderJob.status === 'CANCELLED') {
+    return NextResponse.json({ received: true })
+  }
+
+  const { finishRelayJob } = await import('@/lib/desktop/generateRelay')
   if (status === 'OK') {
-    const outputUrl =
-      [payload?.video?.url, payload?.images?.[0]?.url].find((item) => isFalMediaUrl(item))
-
-    await db.renderJob.update({
-      where: { id: renderJob.id },
-      data: {
-        status: 'COMPLETE',
-        outputUrl,
-        progressPct: 100,
-        completedAt: new Date(),
-      },
-    })
-
-    await broadcastJobEvent({
-      jobId: renderJob.id,
-      status: 'complete',
-      progress: 100,
-      outputUrl,
-    })
+    const outputUrl = [payload?.video?.url, payload?.images?.[0]?.url].find((item) => isFalMediaUrl(item))
+    await finishRelayJob(renderJob.id, true, outputUrl)
   } else {
-    const errorMsg = error ?? payload?.error ?? 'fal.ai processing failed'
-
-    await db.renderJob.update({
-      where: { id: renderJob.id },
-      data: {
-        status: 'FAILED',
-        errorMessage: errorMsg,
-        completedAt: new Date(),
-      },
-    })
-
-    await broadcastJobEvent({
-      jobId: renderJob.id,
-      status: 'failed',
-      error: errorMsg,
-    })
+    await finishRelayJob(renderJob.id, false, undefined, error ?? payload?.error ?? 'The provider failed.')
   }
 
   return NextResponse.json({ received: true })

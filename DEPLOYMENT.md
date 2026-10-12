@@ -157,7 +157,8 @@ See `.env.example` for all required variables with descriptions.
 - `REDIS_URL` — Redis connection string
 - `NEXTAUTH_SECRET` — Generate: `openssl rand -base64 32`
 - `NEXTAUTH_URL` — Your production URL
-- `FAL_KEY` — fal.ai API key (core AI processing)
+- `FAL_KEY` — fal.ai API key (core AI processing). Server only. The desktop app does not have this value.
+- `FAL_WEBHOOK_SECRET` — signs provider webhooks. The value must be identical on Vercel and every Railway service that submits a paid job.
 - `R2_*` — Cloudflare R2 credentials (file storage)
 
 ### Optional but recommended

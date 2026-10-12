@@ -26,6 +26,7 @@ export async function register() {
 
   const missing = CRITICAL.filter(k => !process.env[k])
   if (!hasFalKey()) missing.push(FAL_KEY_ENV)
+  if (!process.env.FAL_WEBHOOK_SECRET?.trim()) missing.push('FAL_WEBHOOK_SECRET')
   if (missing.length > 0) {
     throw new Error(
       `[CINEMA] Missing critical env vars:\n${missing.map(k => `  • ${k}`).join('\n')}`
