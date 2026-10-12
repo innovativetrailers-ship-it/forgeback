@@ -25,8 +25,8 @@ export async function syncScenesFromShots(
   })
   for (const stale of staleScenes) {
     if (!sceneNumbers.has(stale.sceneNumber)) {
-      await db.studioClip.deleteMany({ where: { sceneId: stale.id } })
-      await db.studioScene.delete({ where: { id: stale.id } })
+      await db.studioClip.updateMany({ where: { sceneId: stale.id }, data: { orphanedAt: new Date(), statusReason: 'orphaned from plan' } })
+      await db.studioScene.update({ where: { id: stale.id }, data: { orphanedAt: new Date() } })
     }
   }
 
@@ -152,8 +152,9 @@ export async function syncScenesFromShots(
       where: { sceneId: row.id, clipNumber: { gt: scene.shots.length } },
     })
     if (extraClips.length > 0) {
-      await db.studioClip.deleteMany({
+      await db.studioClip.updateMany({
         where: { sceneId: row.id, clipNumber: { gt: scene.shots.length } },
+        data: { orphanedAt: new Date(), statusReason: 'orphaned from plan' },
       })
     }
 
