@@ -82,9 +82,9 @@ export function Timeline({
 
   useEffect(() => {
     const saved = window.localStorage.getItem(heightKey)
-    if (saved === 'S' || saved === 'M' || saved === 'L') {
+    if (saved === 'S' || saved === 'M' || saved === 'L' || saved === 'fit') {
       setHeightMode(saved)
-      setRowHeight(saved === 'S' ? 28 : saved === 'L' ? 72 : TRACK_HEIGHT)
+      if (saved !== 'fit') setRowHeight(saved === 'S' ? 28 : saved === 'L' ? 72 : TRACK_HEIGHT)
     }
   }, [heightKey])
 
@@ -112,6 +112,14 @@ export function Timeline({
     console.log('[timeline_render]', { clips: videoTrackCount(rendered) })
   }, [rendered])
   const totalDuration = computeTimelineDuration(tracks, recipe?.durationSeconds ?? 60)
+
+  useEffect(() => {
+    if (heightMode !== 'fit') return
+    const box = tracksRef.current
+    if (!box || box.clientHeight <= 0) return
+    const count = Math.max(1, tracks.length)
+    setRowHeight(Math.max(22, Math.floor(box.clientHeight / count)))
+  }, [heightMode, tracks.length])
 
   // Ruler tick marks
   const tickInterval = zoomLevel >= 100 ? 1 : zoomLevel >= 40 ? 5 : 10

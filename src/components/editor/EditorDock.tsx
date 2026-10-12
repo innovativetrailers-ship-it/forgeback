@@ -676,7 +676,7 @@ export function EditorDock({
   const [sourceId, setSourceId] = useState<string | null>(null)
   const [marks, setMarks] = useState({ inn: 0, out: 2 })
   const requested = useUIStore((state) => state.workspace)
-  const storageKey = `cinema-editor:${userId ?? 'local'}`
+  const storageKey = `cinema-editor:${userId ?? 'local'}:${workspace}`
   const suppressLayoutSave = useRef(true)
   const timelineModeRef = useRef(timelineMode)
   timelineModeRef.current = timelineMode
