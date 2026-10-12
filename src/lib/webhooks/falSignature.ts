@@ -3,7 +3,9 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 const FAL_HOSTS = ['.fal.media', '.fal.ai']
 
 function secret(): string {
-  return process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || ''
+  const key = process.env.FAL_WEBHOOK_SECRET?.trim()
+  if (!key) throw new Error('FAL_WEBHOOK_SECRET is not set')
+  return key
 }
 
 export function signFalWebhookToken(subjectId: string, ttlSec = 86_400, nowSec = Math.floor(Date.now() / 1000)): string {
@@ -15,8 +17,12 @@ export function signFalWebhookToken(subjectId: string, ttlSec = 86_400, nowSec =
 }
 
 export function verifyFalWebhookToken(token: string, nowSec = Math.floor(Date.now() / 1000)): string | null {
-  const key = secret()
-  if (!key || !token) return null
+  let key = ''
+  try { key = secret() } catch (err) {
+    console.warn('[fal-webhook]', err instanceof Error ? err.message : err)
+    return null
+  }
+  if (!token) return null
   const parts = token.split('.')
   if (parts.length !== 3) return null
   const [subjectId, expRaw, sig] = parts

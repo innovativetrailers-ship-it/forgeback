@@ -3,11 +3,12 @@ import { db } from '@/lib/db'
 import { captureCodeError, codeErrorStats } from '@/lib/diagnostics/captureCode'
 import { queryShotErrors } from '@/lib/diagnostics/query'
 import { requireUser } from '@/lib/auth/requireUser'
+import { diagnosticsBypassAllowed } from '@/lib/http/rateLimit'
 
 async function requireDiagnostics(req: NextRequest): Promise<string | NextResponse> {
   const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (process.env.DIAGNOSTICS_DEV === 'true') return userId
+  if (diagnosticsBypassAllowed()) return userId
   const user = await db.user.findUnique({ where: { id: userId }, select: { role: true } })
   if (user?.role !== 'ADMIN' && req.method === 'GET') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

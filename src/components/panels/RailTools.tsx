@@ -67,7 +67,7 @@ export function TransitionsPanel() {
     usePlaybackStore.getState().commitRecipe(applyLocalTransition(current, clipId, type, 0.5))
     setNote(type === 'generative-bridge'
       ? 'The joint is marked. A generative bridge take is not started from here and spends nothing.'
-      : `${type} is on the clip. Preview and export read this transition.`)
+      : `${type} is on the clip. Export reads this transition. Preview does not.`)
   }
 
   return (
@@ -120,7 +120,7 @@ export function AudioStudioPanel() {
 
   return (
     <div className="space-y-2 p-3 text-[11px]">
-      <p>Volume is heard in preview and on export.</p>
+      <p>Volume is applied on export. Preview does not play it.</p>
       <label className="block">Volume {volume.toFixed(2)}
         <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(event) => { const value = Number(event.target.value); setVolume(value); write(value, { low, mid, high }) }} className="w-full" />
       </label>

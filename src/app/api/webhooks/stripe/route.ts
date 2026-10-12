@@ -143,24 +143,25 @@ export async function POST(req: Request) {
 
       if (isSubscription && tier && tier !== 'free' && tier !== 'admin') {
         const credits = SUBSCRIPTION_PLAN_CREDITS[tier]
-        await db.$transaction([
-          db.user.update({
-            where: { id: userId },
-            data: {
-              creditBalance:      credits,
-              subscriptionTier:   tier,
-              subscriptionStatus: 'active',
-            },
-          }),
-          db.creditTransaction.create({
-            data: {
-              userId,
-              amount:       credits,
-              description:  `Subscription refresh — ${tier} plan`,
-              balanceAfter: credits,
-            },
-          }),
-        ])
+        const updated = await db.user.update({
+          where: { id: userId },
+          data: {
+            creditBalance: { increment: credits },
+            subscriptionTier: tier,
+            subscriptionStatus: 'active',
+          },
+          select: { creditBalance: true },
+        })
+        await db.creditTransaction.create({
+          data: {
+            userId,
+            amount: credits,
+            type: 'subscription',
+            description: `Subscription refresh — ${tier} plan`,
+            stripeId: event.id,
+            balanceAfter: updated.creditBalance,
+          },
+        })
         console.log(`[Stripe] Subscription paid: ${credits} credits, tier=${tier} for ${userId}`)
       } else if (priceId && creditPackCredits[priceId]) {
         const packCredits = creditPackCredits[priceId]

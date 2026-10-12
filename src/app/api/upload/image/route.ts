@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { nanoid } from 'nanoid'
 import { requireUser } from '@/lib/auth/requireUser'
+import { allowRate } from '@/lib/http/rateLimit'
 
 const MAX_SIZE = 20 * 1024 * 1024 // 20MB
 
 export async function POST(request: NextRequest) {
   const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!allowRate(`upload-image:${userId}`, 30, 60 * 60_000)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+  }
 
   const formData = await request.formData()
   const file = formData.get('image') as File | null

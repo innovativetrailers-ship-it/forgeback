@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { queryQualityLogs, qualityTrends, unexplainedQualityBucket } from '@/lib/diagnostics/qualityQuery'
 import { requireUser } from '@/lib/auth/requireUser'
+import { diagnosticsBypassAllowed } from '@/lib/http/rateLimit'
 
 async function requireDiagnostics(req: NextRequest): Promise<string | NextResponse> {
   const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (process.env.DIAGNOSTICS_DEV === 'true') return userId
+  if (diagnosticsBypassAllowed()) return userId
   const user = await db.user.findUnique({ where: { id: userId }, select: { role: true } })
   if (user?.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   return userId

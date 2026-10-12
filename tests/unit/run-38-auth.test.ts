@@ -22,9 +22,9 @@ describe('spoofed identity headers', () => {
 })
 
 describe('forged FAL webhook', () => {
-  const prev = process.env.NEXTAUTH_SECRET
-  beforeAll(() => { process.env.NEXTAUTH_SECRET = 'test-secret' })
-  afterAll(() => { process.env.NEXTAUTH_SECRET = prev })
+  const prev = process.env.FAL_WEBHOOK_SECRET
+  beforeAll(() => { process.env.FAL_WEBHOOK_SECRET = 'test-secret' })
+  afterAll(() => { process.env.FAL_WEBHOOK_SECRET = prev })
 
   it('rejects a missing or stale token and a foreign media URL', () => {
     expect(verifyFalWebhookToken('')).toBeNull()
@@ -54,6 +54,16 @@ describe('billing and camera ownership', () => {
     const { hasStripeSignature } = await import('../../src/lib/payments/stripeWebhook')
     expect(hasStripeSignature(null)).toBe(false)
     expect(hasStripeSignature('t=1,v1=abc')).toBe(true)
+  })
+
+  it('rate-limits a caller and refuses the diagnostics bypass in production', async () => {
+    const { allowRate, resetRateBuckets, diagnosticsBypassAllowed } = await import('../../src/lib/http/rateLimit')
+    resetRateBuckets()
+    expect(allowRate('login-test', 2, 60_000, 1_000)).toBe(true)
+    expect(allowRate('login-test', 2, 60_000, 1_001)).toBe(true)
+    expect(allowRate('login-test', 2, 60_000, 1_002)).toBe(false)
+    expect(diagnosticsBypassAllowed({ NODE_ENV: 'development', DIAGNOSTICS_DEV: 'true' } as NodeJS.ProcessEnv)).toBe(true)
+    expect(() => diagnosticsBypassAllowed({ NODE_ENV: 'production', DIAGNOSTICS_DEV: 'true' } as NodeJS.ProcessEnv)).toThrow(/DIAGNOSTICS_DEV/)
   })
 })
 

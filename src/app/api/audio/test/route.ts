@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pingElevenLabs } from '@/lib/elevenlabs/client'
+import { requireUser } from '@/lib/auth/requireUser'
+import { allowRate } from '@/lib/http/rateLimit'
 
 export async function GET(req: NextRequest) {
-  const key = req.headers.get('x-elevenlabs-key') ?? process.env.ELEVENLABS_API_KEY
+  const user = await requireUser(req)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!allowRate(`audio-test:${user.id}`, 10, 60_000)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+  }
+  const key = req.headers.get('x-elevenlabs-key')
   if (!key) return NextResponse.json({ ok: false, reason: 'no key' }, { status: 401 })
   try {
     await pingElevenLabs(key)
