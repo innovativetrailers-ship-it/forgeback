@@ -1,3 +1,4 @@
+import { opaqueObjectKey } from '@/lib/upload/sniff'
 /**
  * Video stabilisation engine (A07).
  * Two-pass FFmpeg vidstabdetect + vidstabtransform via BullMQ.
@@ -41,7 +42,7 @@ export async function stabiliseClip(params: StabiliseParams): Promise<StabiliseR
 
   const preset = STRENGTH_PRESETS[strength]
   const jobId = `stabilise-${randomUUID()}`
-  const outputR2Key = `stabilised/${userId}/${jobId}.mp4`
+  const outputR2Key = opaqueObjectKey('mp4')
 
   const payload: StabiliseJobPayload = {
     jobId, clipUrl,

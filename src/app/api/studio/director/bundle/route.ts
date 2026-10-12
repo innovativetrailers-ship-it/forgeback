@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 import AdmZip from 'adm-zip'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
     for (const entry of entriesOf(file.name, buffer)) {
       const media = mediaKind(entry.path)
       if (media) {
-        const stored = await uploadToR2(entry.buffer, `bundle/${userId}/${Date.now()}-${entry.path.split('/').pop()}`, 'application/octet-stream')
+        const stored = await storeForUser(userId, entry.buffer, 'bin', 'application/octet-stream')
         mediaUrls[entry.path] = stored
         inputs.push({ path: entry.path, role: roles[entry.path] })
         continue

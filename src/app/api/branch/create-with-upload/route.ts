@@ -1,3 +1,5 @@
+import { rememberObject } from '@/lib/storage/objects'
+import { opaqueObjectKey } from '@/lib/upload/sniff'
 import { type NextRequest, NextResponse } from 'next/server'
 import {
   generateBranchingEmbed,
@@ -60,7 +62,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const buffer = Buffer.from(await clip.arrayBuffer())
     const ext = clip.type.includes('webm') ? 'webm' : 'mp4'
     const contentType = ext === 'webm' ? 'video/webm' : 'video/mp4'
-    const key = `embeds/branch/${userId}/${stub.id}-${Date.now()}.${ext}`
+    const key = opaqueObjectKey(ext)
+    await rememberObject(userId, key)
     const clipUrl = await uploadToR2(buffer, key, contentType)
     nodes.push({
       id: stub.id,

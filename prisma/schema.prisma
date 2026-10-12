@@ -130,6 +130,7 @@ model User {
   trainedAssets   TrainedAsset[]
   assets          Asset[]
   consentRecords  ConsentRecord[]
+  storedObjects   StoredObject[]
   playbooks       Playbook[]
   projectMemberships ProjectMember[]
   filmTemplates   FilmTemplate[]
@@ -493,6 +494,17 @@ model CreditHold {
 
   @@index([userId])
   @@index([status])
+}
+
+model StoredObject {
+  id         String   @id @default(cuid())
+  ownerId    String?
+  storageKey String   @unique
+  createdAt  DateTime @default(now())
+
+  owner      User?    @relation(fields: [ownerId], references: [id])
+
+  @@index([ownerId])
 }
 
 model ConsentRecord {

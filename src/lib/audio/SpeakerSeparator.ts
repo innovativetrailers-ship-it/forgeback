@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 /**
  * Speaker separation engine (F09).
  * Calls fal.ai audio-separator to decompose mixed audio into stems.
@@ -68,8 +69,7 @@ export async function separateSpeakers(audioUrl: string, userId: string): Promis
     if (!response.ok) throw new Error(`[SpeakerSeparator] Failed to fetch stem "${label}": HTTP ${response.status}`)
 
     const buffer = Buffer.from(await response.arrayBuffer())
-    const r2Key = `stems/${userId}/${batchId}/${label}.wav`
-    const r2Url = await uploadToR2(buffer, r2Key, 'audio/wav')
+    const r2Url = await storeForUser(userId, buffer, 'wav', 'audio/wav')
     stems.push({ label, url: r2Url })
   }
 

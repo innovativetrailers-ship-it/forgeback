@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 import { buildQwenAnglesInput } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
     const remote = result.images?.[0]?.url?.trim()
     if (!remote) return NextResponse.json({ error: `Angle ${preset.label} returned no image` }, { status: 502 })
     const bytes = Buffer.from(await (await fetch(remote)).arrayBuffer())
-    const stored = await uploadToR2(bytes, `assets/${userId}/angles/${Date.now()}-${preset.label}.png`, 'image/png')
+    const stored = await storeForUser(userId, bytes, 'png', 'image/png')
     bucket.push({ name: `${parentName} · ${preset.label}`, imageUrl: stored })
   }
 

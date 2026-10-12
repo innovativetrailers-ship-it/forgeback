@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 import { autoGenSelection, buildImagePayload, buildPayload, referenceDagCredits, referenceDagFor } from '@cinema/core'
 import { buildFluxDevT2iInput } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
     const imageUrl = await generateReference(node.prompt, derive ? parentUrl : undefined)
     if (!imageUrl) continue
     const bytes = Buffer.from(await (await fetch(imageUrl)).arrayBuffer())
-    const stored = await uploadToR2(bytes, `assets/${userId}/${Date.now()}.png`, 'image/png')
+    const stored = await storeForUser(userId, bytes, 'png', 'image/png')
     const referenceUrl = stored.startsWith('http') ? stored : imageUrl
     images.set(node.id, referenceUrl)
     const assetId = productionAssetId(parsed.data.projectId, node.entityId)

@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 const TEARDOWN_MSGS = ['Connection is closed', "stream isn't writeable", 'ECONNRESET']
 process.on('uncaughtException', (err) => {
   if (TEARDOWN_MSGS.some((m) => err.message?.includes(m))) return
@@ -68,8 +69,7 @@ export const exportWorker = new Worker<ExportJobPayload>(
       await broadcastJobEvent({ jobId, status: 'processing', progress: 80, message: 'Uploading export…' })
 
       const outputBuffer = readFileSync(outputPath)
-      const key = `exports/${userId}/${projectId}/${nanoid()}.${ext}`
-      const exportUrl = await uploadToR2(outputBuffer, key, `video/${ext === 'mp4' ? 'mp4' : 'quicktime'}`)
+      const exportUrl = await storeForUser(userId, outputBuffer, ext, `video/${ext === 'mp4' ? 'mp4' : 'quicktime'}`)
 
       await db.renderJob.update({
         where: { id: jobId },

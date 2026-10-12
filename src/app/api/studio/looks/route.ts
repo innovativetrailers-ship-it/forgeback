@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 import { makeupLook } from '@cinema/core'
 import { buildImagePayload } from '@cinema/core'
 import { NextRequest, NextResponse } from 'next/server'
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
     const result = await runFal<{ images?: Array<{ url?: string }> }>(built.endpoint, built.input, undefined, IMAGE_FAL_TIMEOUT_MS, undefined, undefined, 'makeup.bake')
     const imageUrl = result.images?.[0]?.url
     if (!imageUrl) return NextResponse.json({ error: 'The look bake returned no image' }, { status: 502 })
-    const stored = await uploadToR2(Buffer.from(await (await fetch(imageUrl)).arrayBuffer()), `looks/${userId}/${Date.now()}.png`, 'image/png')
+    const stored = await storeForUser(userId, Buffer.from(await (await fetch(imageUrl)).arrayBuffer()), 'png', 'image/png')
     const variantId = nanoid()
     const created = await db.asset.create({
       data: {

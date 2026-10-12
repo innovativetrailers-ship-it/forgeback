@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 import { buildImagePayload } from '@cinema/core'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
   const remote = result.images?.[0]?.url?.trim()
   if (!remote) return NextResponse.json({ error: 'Keyframe returned no image' }, { status: 502 })
   const bytes = Buffer.from(await (await fetch(remote)).arrayBuffer())
-  const stored = await uploadToR2(bytes, `assets/${userId}/keyframes/${Date.now()}.png`, 'image/png')
+  const stored = await storeForUser(userId, bytes, 'png', 'image/png')
   await saveKeyframeCheckpoint(jobId, shotIndex, stored)
   return NextResponse.json({ shotIndex, imageUrl: stored })
 }

@@ -1,8 +1,8 @@
 import { logCaught } from '@/lib/diagnostics/caught'
 import { db } from '@/lib/db'
 import { isEphemeralVideoUrl } from '@/lib/media/ephemeralUrls'
+import { storeForUser } from '@/lib/storage/objects'
 import {
-  uploadToR2,
   objectExists,
   renderVideoKey,
   clipVideoKey,
@@ -32,7 +32,8 @@ export async function persistVideoToR2(
     throw new Error('Downloaded video file is too small — provider may have returned an error page')
   }
 
-  return uploadToR2(buffer, renderVideoKey(userId, jobId), 'video/mp4')
+  if (await objectExists(renderVideoKey(userId, jobId))) return publicUrlForKey(renderVideoKey(userId, jobId))
+  return storeForUser(userId, buffer, 'mp4', 'video/mp4')
 }
 
 /** Mirror a studio clip video to R2 — server fetch bypasses browser CORS. */
@@ -41,8 +42,8 @@ export async function persistClipVideoToR2(
   projectId: string,
   clipId: string,
 ): Promise<string> {
-  const key = clipVideoKey(projectId, clipId)
-  if (await objectExists(key)) return publicUrlForKey(key)
+  const legacy = clipVideoKey(projectId, clipId)
+  if (await objectExists(legacy)) return publicUrlForKey(legacy)
 
   const publicBase = process.env.R2_PUBLIC_URL?.replace(/\/$/, '')
   if (publicBase && sourceUrl.startsWith(publicBase)) return sourceUrl
@@ -60,7 +61,7 @@ export async function persistClipVideoToR2(
     throw new Error('Mirrored clip video is too small — provider may have returned an error page')
   }
 
-  return uploadToR2(buffer, key, 'video/mp4')
+  return storeForUser(null, buffer, 'mp4', 'video/mp4')
 }
 
 /**
