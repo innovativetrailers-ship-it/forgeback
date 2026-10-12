@@ -64,6 +64,12 @@ export default function AerialViewerPage() {
           baseLayerPicker: false,
         })
         viewerRef.current = viewer
+        try {
+          const buildings = await Cesium.createOsmBuildingsAsync()
+          viewer.scene.primitives.add(buildings)
+        } catch (err) {
+          console.warn('[cesium] buildings', err instanceof Error ? err.message : err)
+        }
         viewer.camera.flyTo({
           destination: Cesium.Cartesian3.fromDegrees(lng, lat, 500),
           duration: 1.5,
@@ -105,12 +111,15 @@ export default function AerialViewerPage() {
 
   function capture() {
     if (!place) return
+    const frame = viewerRef.current?.canvas?.toDataURL?.('image/jpeg', 0.7)
+    if (frame) sessionStorage.setItem('cinema-scout-frame', frame)
     localStorage.setItem('cinema-scout-camera', JSON.stringify({
       ...place,
       ...camera,
       time,
       season,
       weather,
+      frameStored: Boolean(frame),
       at: Date.now(),
     }))
     setReason('Camera view saved. Return to Location Scout and generate the plate. The globe itself does not relight for time of day.')
@@ -135,7 +144,7 @@ export default function AerialViewerPage() {
       )}
       <div className="absolute left-3 top-3 w-64 space-y-2 rounded bg-black/70 p-3 text-[11px]">
         <p className="font-medium">{place?.label ?? 'Aerial viewer'}</p>
-        <p className="text-white/50">Desktop does not host this Cesium page. The desktop scout still downloads Mapillary plates into the bin.</p>
+        <p className="text-white/50">Buildings © OpenStreetMap contributors. Desktop does not host this Cesium page. The desktop scout still downloads Mapillary plates into the bin.</p>
         {(['height', 'heading', 'pitch', 'fov'] as const).map((key) => (
           <label key={key} className="block">
             {key} {camera[key]}
@@ -157,9 +166,12 @@ interface CesiumApi {
   Ion: { defaultAccessToken: string }
   Viewer: new (el: HTMLDivElement, opts: unknown) => {
     camera: { flyTo: (opts: unknown) => void; setView: (opts: unknown) => void; frustum?: { fov: number } }
+    scene: { primitives: { add: (tiles: unknown) => void } }
+    canvas?: { toDataURL: (type?: string, quality?: number) => string }
     destroy: () => void
   }
   createWorldTerrainAsync: () => Promise<unknown>
+  createOsmBuildingsAsync: () => Promise<unknown>
   Cartesian3: { fromDegrees: (lng: number, lat: number, height: number) => unknown }
   Math: { toRadians: (deg: number) => number }
 }
