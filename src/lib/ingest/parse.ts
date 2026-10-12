@@ -11,6 +11,7 @@ import {
   type ParsedScript,
 } from '@cinema/core'
 import { exec } from '@/lib/media/ffmpegExec'
+import { safeFetch } from '@/lib/net/safeFetch'
 
 const MAX_FETCH_BYTES = 2_000_000
 const PRIVATE_HOST = /^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.0\.0\.0|::1)/i
@@ -114,9 +115,7 @@ export async function fetchPublicText(url: string): Promise<string> {
   if (PRIVATE_HOST.test(parsed.hostname) || parsed.hostname.endsWith('.local')) {
     throw new Error('That address is not allowed')
   }
-  const res = await fetch(parsed.toString(), {
-    redirect: 'follow',
-    signal: AbortSignal.timeout(12_000),
+  const res = await safeFetch(parsed.toString(), [], {
     headers: { 'User-Agent': 'CinematicForge-Ingest/1.0' },
   })
   if (!res.ok) throw new Error(`Could not fetch link (${res.status})`)
@@ -195,7 +194,7 @@ async function analyseVideo(
     if (buffer?.length) {
       await writeFile(videoPath, buffer)
     } else if (url) {
-      const res = await fetch(url, { signal: AbortSignal.timeout(20_000) })
+      const res = await safeFetch(url, [])
       if (!res.ok) throw new Error(`Video fetch failed (${res.status})`)
       await writeFile(videoPath, Buffer.from(await res.arrayBuffer()))
     }

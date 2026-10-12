@@ -18,10 +18,16 @@ export async function assertPublicHost(hostname: string): Promise<void> {
   }
 }
 
+const MAX_BYTES = 26_214_400
+
 export async function safeFetch(url: string, allow: readonly string[], init?: RequestInit): Promise<Response> {
   const parsed = new URL(url)
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('Unsupported protocol')
-  if (!hostAllowed(parsed.hostname, allow)) throw new Error('Host is not allowed')
+  if (allow.length > 0 && !hostAllowed(parsed.hostname, allow)) throw new Error('Host is not allowed')
   await assertPublicHost(parsed.hostname)
-  return fetch(parsed, { ...init, redirect: 'manual', signal: AbortSignal.timeout(15_000) })
+  const res = await fetch(parsed, { ...init, redirect: 'manual', signal: AbortSignal.timeout(15_000) })
+  if (res.status >= 300 && res.status < 400) throw new Error('Redirects are not followed')
+  const declared = Number(res.headers.get('content-length') ?? 0)
+  if (declared > MAX_BYTES) throw new Error('Response is too large')
+  return res
 }

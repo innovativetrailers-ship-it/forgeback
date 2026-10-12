@@ -1,6 +1,7 @@
 // V2 — photo / text ingestion for VaultCharacter (FAL schemas aligned to fal.ai docs).
 
 import { falEndpoint } from '@cinema/core/endpoints'
+import { safeFetch } from '@/lib/net/safeFetch'
 import { hasFalKey } from '@/lib/config/keys'
 import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
 import { runFal, uploadToFal } from '@/lib/fal/client'
@@ -41,15 +42,9 @@ export async function ensureFalImageUrl(
   if (/fal\.media|fal\.run|falcdn/i.test(sourceUrl)) {
     return sourceUrl
   }
-  try {
-    const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(15_000) })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return uploadToFal(Buffer.from(await res.arrayBuffer()))
-  } catch (err) {
-    console.warn("[caught] src/lib/character/ingestion.ts:46", err instanceof Error ? { name: err.name, message: err.message } : err)
-
-    return sourceUrl
-  }
+  const res = await safeFetch(sourceUrl, [])
+  if (!res.ok) throw new CharacterIngestionError(`The reference image could not be fetched (${res.status})`)
+  return uploadToFal(Buffer.from(await res.arrayBuffer()))
 }
 
 async function analyseAppearanceWithClaude(imageUrl: string): Promise<CharacterAppearance> {
