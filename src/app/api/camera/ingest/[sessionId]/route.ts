@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { recordChunkMetadata, getCameraSession } from '@/lib/camera/WirelessIngest'
 import { renderQueue } from '@/lib/queue'
+import { cameraChunkAllowed } from '@/lib/camera/ownership'
 import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(
@@ -15,6 +16,7 @@ export async function POST(
   const { sessionId } = await params
   const session = await getCameraSession(sessionId)
   if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+  if (!cameraChunkAllowed(session.userId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (session.status === 'stopped') return NextResponse.json({ error: 'Session stopped' }, { status: 409 })
 
   const rawIndex = req.headers.get('x-chunk-index')

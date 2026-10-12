@@ -5,6 +5,7 @@ import {
   STRIPE_PRICE_TO_TIER,
   SUBSCRIPTION_PLAN_CREDITS,
 } from '@/lib/payments/stripePrices'
+import { hasStripeSignature } from '@/lib/payments/stripeWebhook'
 import { upsertSubscription } from '@/lib/entitlement/resolve'
 import type { SubscriptionTier } from '@/lib/access/tiers'
 
@@ -12,7 +13,10 @@ export const runtime = 'nodejs'
 
 export async function POST(req: Request) {
   const body      = await req.text()
-  const signature = req.headers.get('stripe-signature')!
+  const signature = req.headers.get('stripe-signature')
+  if (!hasStripeSignature(signature)) {
+    return Response.json({ error: 'Missing stripe-signature' }, { status: 400 })
+  }
 
   let event: ReturnType<typeof stripe.webhooks.constructEvent>
   try {
@@ -22,6 +26,9 @@ export async function POST(req: Request) {
     console.error('[Stripe Webhook] Invalid signature:', msg)
     return Response.json({ error: 'Invalid signature' }, { status: 400 })
   }
+
+  const already = await db.processedStripeEvent.findUnique({ where: { eventId: event.id } })
+  if (already) return Response.json({ received: true })
 
   switch (event.type) {
 
@@ -254,10 +261,35 @@ export async function POST(req: Request) {
       const userId  = session.metadata?.userId as string | undefined
       const credits = parseInt(session.metadata?.credits ?? '0')
       if (userId && credits > 0) {
-        await db.user.update({ where: { id: userId }, data: { creditBalance: { increment: credits } } })
+        await db.$transaction(async (tx) => {
+          await tx.processedStripeEvent.create({ data: { eventId: event.id, type: event.type } })
+          const updated = await tx.user.update({
+            where: { id: userId },
+            data: { creditBalance: { increment: credits } },
+            select: { creditBalance: true },
+          })
+          await tx.creditTransaction.create({
+            data: {
+              userId,
+              amount: credits,
+              type: 'purchase',
+              description: 'Credit pack',
+              stripeId: event.id,
+              balanceAfter: updated.creditBalance,
+            },
+          })
+        })
+        return Response.json({ received: true })
       }
       break
     }
+  }
+
+  try {
+    await db.processedStripeEvent.create({ data: { eventId: event.id, type: event.type } })
+  } catch (err) {
+    console.warn('[Stripe Webhook] duplicate', event.id, err instanceof Error ? err.message : err)
+    return Response.json({ received: true })
   }
 
   return Response.json({ received: true })

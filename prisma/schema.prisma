@@ -526,6 +526,13 @@ model CreditTransaction {
 
   @@index([userId])
   @@index([createdAt])
+  @@index([stripeId])
+}
+
+model ProcessedStripeEvent {
+  eventId     String   @id
+  type        String
+  processedAt DateTime @default(now())
 }
 
 model TrainingData {

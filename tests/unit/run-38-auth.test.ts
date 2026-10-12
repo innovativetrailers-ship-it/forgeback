@@ -37,3 +37,23 @@ describe('forged FAL webhook', () => {
     expect(isFalMediaUrl('http://v3.fal.media/files/out.mp4')).toBe(false)
   })
 })
+
+describe('billing and camera ownership', () => {
+  it('pack purchase survives reconcile', async () => {
+    const { reportedLedgerBalance } = await import('../../src/lib/credits/ledgerDrift')
+    expect(reportedLedgerBalance(600, 0)).toBe(600)
+  })
+
+  it('refuses a camera chunk from another account', async () => {
+    const { cameraChunkAllowed } = await import('../../src/lib/camera/ownership')
+    expect(cameraChunkAllowed('owner', 'owner')).toBe(true)
+    expect(cameraChunkAllowed('owner', 'other')).toBe(false)
+  })
+
+  it('rejects a stripe delivery with no signature header', async () => {
+    const { hasStripeSignature } = await import('../../src/lib/payments/stripeWebhook')
+    expect(hasStripeSignature(null)).toBe(false)
+    expect(hasStripeSignature('t=1,v1=abc')).toBe(true)
+  })
+})
+

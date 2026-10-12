@@ -4,6 +4,7 @@ import { isGenerationPaused } from '@/lib/generation/pause'
 import { rollupScene } from '@/lib/studio/sceneRollup'
 import { canonicalAssetState, clipReason, MISSING_FAIL_REASON } from '@/lib/reconcile/wave2Reasons'
 import { ledgerBalance } from '@/lib/credits/meter'
+import { reportedLedgerBalance } from '@/lib/credits/ledgerDrift'
 
 const TRAINING_TIMEOUT_MS = 6 * 60 * 60 * 1000
 
@@ -64,6 +65,8 @@ export async function reconcileClipBacklog(): Promise<Pick<ReconcileReport, 'cli
   return { clipsRetagged, clipsRetryEligible, jobsClosed: stuck.count }
 }
 
+/** A purchase that is in the balance but not yet in an older ledger sum must not be wiped. */
+
 /** Internal accounts stay at balance 0 and are not rewritten from the historical ledger. */
 export async function reconcileLedgers(): Promise<number> {
   await db.creditTransaction.updateMany({ where: { type: null, amount: { gt: 0, lt: 100000 } }, data: { type: 'signup_grant' } })
@@ -85,12 +88,9 @@ export async function reconcileLedgers(): Promise<number> {
     // Subtracting active holds again would charge the hold twice.
     const ledger = ledgerBalance(txns)
     const activeHeld = held._sum.amountHeld ?? 0
-    if (user.creditBalance !== ledger || user.heldCredits !== activeHeld) {
-      await db.user.update({
-        where: { id: user.id },
-        data: { creditBalance: ledger, heldCredits: activeHeld },
-      })
-      console.warn('[ledger]', user.id, 'balance', user.creditBalance, '->', ledger)
+    const kept = reportedLedgerBalance(user.creditBalance, ledger)
+    if (kept !== ledger || user.heldCredits !== activeHeld) {
+      console.warn('[ledger] drift', user.id, 'balance', user.creditBalance, 'ledger', ledger, 'held', user.heldCredits, 'activeHeld', activeHeld)
       corrected += 1
     }
   }
