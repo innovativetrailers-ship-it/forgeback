@@ -28,8 +28,8 @@ export async function loadActivePlaybook(userId: string, projectId?: string | nu
 export async function listPlaybooks(userId: string, projectId?: string): Promise<Playbook[]> {
   const rows = await db.playbook.findMany({
     where: projectId
-      ? { userId, OR: [{ projectId }, { projectId: null }] }
-      : { userId },
+      ? { userId, retiredAt: null, OR: [{ projectId }, { projectId: null }] }
+      : { userId, retiredAt: null },
     orderBy: { updatedAt: 'desc' },
   })
   return rows.map(toPlaybook).filter((row): row is Playbook => Boolean(row))

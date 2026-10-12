@@ -54,6 +54,6 @@ export async function DELETE(
   const track = await assertTrackOwner(id, userId)
   if (!track) return NextResponse.json({ error: 'Track not found' }, { status: 404 })
 
-  await db.audioTrack.delete({ where: { id } })
-  return NextResponse.json({ ok: true })
+  await db.audioTrack.update({ where: { id }, data: { retiredAt: new Date() } })
+  return NextResponse.json({ ok: true, kept: true, message: 'The track was retired. The audio file was kept.' })
 }

@@ -52,6 +52,6 @@ export async function DELETE(
   const { id } = await context.params
   const existing = await db.playbook.findFirst({ where: { id, userId }, select: { id: true } })
   if (!existing) return NextResponse.json({ error: 'Playbook not found' }, { status: 404 })
-  await db.playbook.delete({ where: { id } })
-  return NextResponse.json({ ok: true })
+  await db.playbook.update({ where: { id }, data: { retiredAt: new Date() } })
+  return NextResponse.json({ ok: true, kept: true, message: 'The playbook was retired. It was not deleted.' })
 }

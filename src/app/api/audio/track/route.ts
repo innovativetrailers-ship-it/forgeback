@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
   const tracks = await db.audioTrack.findMany({
-    where: { projectId },
+    where: { projectId, retiredAt: null },
     orderBy: [{ type: 'asc' }, { createdAt: 'asc' }],
   })
 
