@@ -349,7 +349,10 @@ export function TopBar() {
                 >
                   <Download className="w-3.5 h-3.5" /> Forge Extreme Download
                 </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-[12px] cursor-pointer text-[var(--text-secondary)]">
+                <DropdownMenuItem
+                  onClick={() => setActivePanel('settings')}
+                  className="gap-2 text-[12px] cursor-pointer text-[var(--text-secondary)]"
+                >
                   <Settings className="w-3.5 h-3.5" /> Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-[var(--border)]" />

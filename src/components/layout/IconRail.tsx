@@ -5,6 +5,7 @@ import type { WorkspaceName } from '@/lib/editor/foundation'
 import { cn } from '@/lib/utils'
 import {
   Wand2, Library, Image, Palette, Settings, Boxes,
+  UserRound, Clapperboard, Languages, Blend, Box, AudioLines, Sparkles,
 } from 'lucide-react'
 
 type RailItem = { id: PanelId; icon: React.ReactNode; label: string; dividerBefore?: boolean }
@@ -23,6 +24,16 @@ const COMING: Partial<Record<PanelId, string>> = {
   storyboard: 'Coming — storyboard is not mounted',
   settings: 'Coming — settings are not on this rail',
 }
+
+const TOOL_ITEMS: RailItem[] = [
+  { id: 'avatar', icon: <UserRound size={16} />, label: 'Avatar', dividerBefore: true },
+  { id: 'highlight', icon: <Clapperboard size={16} />, label: 'Highlights' },
+  { id: 'translate', icon: <Languages size={16} />, label: 'Translate' },
+  { id: 'transitions', icon: <Blend size={16} />, label: 'Transitions' },
+  { id: 'cgi', icon: <Box size={16} />, label: 'CGI' },
+  { id: 'audio', icon: <AudioLines size={16} />, label: 'Audio' },
+  { id: 'vfx', icon: <Sparkles size={16} />, label: 'VFX' },
+]
 
 const BOTTOM_ITEMS: RailItem[] = [
   { id: 'settings', icon: <Settings size={16} />, label: 'Settings' },
@@ -53,6 +64,13 @@ export function IconRail() {
             }
             togglePanel(item.id)
           }} />
+        </div>
+      ))}
+
+      {TOOL_ITEMS.map((item) => (
+        <div key={item.id} className="w-full">
+          {item.dividerBefore && <div className="mx-auto my-1 w-5 h-px bg-[var(--border)]" />}
+          <RailButton item={item} active={activePanel === item.id} onToggle={() => togglePanel(item.id)} />
         </div>
       ))}
 
