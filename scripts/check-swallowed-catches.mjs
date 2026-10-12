@@ -5,7 +5,7 @@
  *
  * Scope: src/** and cinematic-forge-v3/src/**
  */
-import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const root = new URL('..', import.meta.url).pathname
@@ -16,6 +16,7 @@ const THROWS = /\bthrow\b|\bwrapSdkError\s*\(|\breject\b/
 const SWALLOW_OK = /swallow-ok:\s*\S+/
 
 function walk(dir, out = []) {
+  if (!existsSync(dir)) return out
   for (const name of readdirSync(dir)) {
     if (name === 'node_modules' || name.startsWith('.')) continue
     const full = join(dir, name)

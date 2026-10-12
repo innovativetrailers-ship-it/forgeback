@@ -51,9 +51,13 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
+    "setupFiles": [
+      "<rootDir>/tests/jest-setup.ts"
+    ],
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/src/$1",
-      "^@cinema/core$": "<rootDir>/packages/core/src/index.ts"
+      "^@cinema/core$": "<rootDir>/packages/core/src/index.ts",
+      "^.+/generated/prisma/client$": "<rootDir>/tests/stubs/prismaClient.ts"
     },
     "transform": {
       "^.+\\.tsx?$": [
