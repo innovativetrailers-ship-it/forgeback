@@ -25,9 +25,10 @@
     "workers": "concurrently \"npm run worker:render\" \"npm run worker:training\" \"npm run worker:export\" \"npm run worker:das\"",
     "db:seed": "npx prisma db seed",
     "test": "jest --passWithNoTests",
+    "test:e2e": "playwright test",
+    "test:e2e:launch": "node --test e2e/launch-smoke.test.mjs",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage --passWithNoTests",
-    "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
     "dev:next": "next dev",
@@ -40,7 +41,6 @@
     "check:endpoints": "node scripts/check-endpoints.mjs",
     "verify:static": "node scripts/verify-static.mjs",
     "verify": "node scripts/verify.mjs",
-    "test:e2e:launch": "node --test e2e/launch-smoke.test.mjs",
     "check:capability-net": "node scripts/check-capability-net.mjs",
     "check:code-net": "node scripts/check-code-net.mjs",
     "lint:code-net": "eslint src/lib/diagnostics/boundary.ts src/lib/diagnostics/captureCode.ts src/lib/diagnostics/codeGuards.ts src/components/diagnostics/CodeErrorBridge.tsx src/app/api/dev/code/route.ts src/__tests__/code-net.test.ts",
@@ -51,9 +51,13 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
+    "setupFiles": [
+      "<rootDir>/tests/jest-setup.ts"
+    ],
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/src/$1",
-      "^@cinema/core$": "<rootDir>/packages/core/src/index.ts"
+      "^@cinema/core$": "<rootDir>/packages/core/src/index.ts",
+      "^.+/generated/prisma/client$": "<rootDir>/tests/stubs/prismaClient.ts"
     },
     "transform": {
       "^.+\\.tsx?$": [
@@ -162,6 +166,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",
