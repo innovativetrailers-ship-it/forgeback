@@ -29,9 +29,9 @@ export async function loadProjectGenerationContext(input: {
       where: { projectId: input.projectId },
       select: { name: true, referenceUrls: true },
     }),
-    db.vaultLocation.findMany({
-      where: { projectId: input.projectId },
-      select: { name: true, referenceUrls: true, metaJson: true },
+    db.asset.findMany({
+      where: { kind: 'location', boundary: { path: ['projectId'], equals: input.projectId } },
+      select: { label: true, sourceRefs: true, boundary: true },
     }),
     db.clonedVoice.findMany({
       where: { userId: input.userId },
@@ -50,7 +50,7 @@ export async function loadProjectGenerationContext(input: {
   const styleFromLoc = projectMemory
     ? locations
       .map((row) => {
-        const meta = row.metaJson as { look?: { summary?: string } } | null
+        const meta = row.boundary as { look?: { summary?: string } } | null
         return meta?.look?.summary
       })
       .find((s): s is string => Boolean(s))
@@ -70,8 +70,8 @@ export async function loadProjectGenerationContext(input: {
         embedUrl: row.referenceUrls[0],
       })),
     locations: locations
-      .filter((row) => row.referenceUrls[0])
-      .map((row) => ({ name: row.name, imageUrl: row.referenceUrls[0] })),
+      .filter((row) => row.sourceRefs[0])
+      .map((row) => ({ name: row.label ?? 'Location', imageUrl: row.sourceRefs[0] })),
     voices: voices.map((row) => ({
       name: row.name,
       voiceId: row.voiceId,

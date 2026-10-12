@@ -31,15 +31,6 @@ export interface VaultCharacterRow {
   appearance: unknown
 }
 
-export interface VaultLocationRow {
-  id: string
-  projectId: string
-  name: string
-  referenceUrls: string[]
-  lat: number | null
-  lng: number | null
-}
-
 export interface LocationPlateRow {
   id: string
   displayName: string | null
@@ -142,17 +133,6 @@ export function vaultCharacterToCharacter(row: VaultCharacterRow, voiceId?: stri
     voiceId: row.voiceId ?? voiceId ?? null,
     descriptor: row.behavioralPrompt ?? appearance,
     wardrobe: null,
-  }
-}
-
-export function vaultLocationToLocation(row: VaultLocationRow): Location {
-  const coords = row.lat != null && row.lng != null ? { lat: row.lat, lng: row.lng } : null
-  return {
-    id: row.id,
-    projectId: row.projectId,
-    label: row.name,
-    plateUrl: row.referenceUrls[0] ?? '',
-    coords,
   }
 }
 

@@ -154,17 +154,17 @@ async function linkLocation(input: {
   const name = input.understood.links.locationName
     || input.understood.role.replace(/^location reference of\s+/i, '').trim()
     || 'Location'
-  const existing = await db.vaultLocation.findMany({
-    where: { projectId: input.projectId },
-    select: { id: true, name: true, referenceUrls: true },
+  const existing = await db.asset.findMany({
+    where: { kind: 'location', boundary: { path: ['projectId'], equals: input.projectId } },
+    select: { id: true, label: true, sourceRefs: true },
   })
-  const matched = matchEntityName(name, existing.map((row) => row.name))
-  const row = matched ? existing.find((item) => item.name === matched) : null
+  const matched = matchEntityName(name, existing.map((row) => row.label ?? ''))
+  const row = matched ? existing.find((item) => item.label === matched) : null
   if (row) {
-    const urls = input.mediaUrl && !row.referenceUrls.includes(input.mediaUrl)
-      ? [...row.referenceUrls, input.mediaUrl]
-      : row.referenceUrls
-    await db.vaultLocation.update({ where: { id: row.id }, data: { referenceUrls: urls } })
+    const urls = input.mediaUrl && !row.sourceRefs.includes(input.mediaUrl)
+      ? [...row.sourceRefs, input.mediaUrl]
+      : row.sourceRefs
+    await db.asset.update({ where: { id: row.id }, data: { sourceRefs: urls } })
     return row.id
   }
   const created = await createLocation({
@@ -242,8 +242,12 @@ async function linkScript(input: {
   }
   const locNames = input.parsed.script?.locations ?? []
   for (const name of locNames) {
-    const existing = await db.vaultLocation.findFirst({
-      where: { projectId: input.projectId, name: { equals: name, mode: 'insensitive' } },
+    const existing = await db.asset.findFirst({
+      where: {
+        kind: 'location',
+        label: { equals: name, mode: 'insensitive' },
+        boundary: { path: ['projectId'], equals: input.projectId },
+      },
       select: { id: true },
     })
     if (existing) continue
