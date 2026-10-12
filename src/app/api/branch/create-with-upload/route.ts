@@ -7,11 +7,12 @@ import {
 } from '@/lib/export/BranchingExport'
 import { checkAndDeductCredits, refundCredits } from '@/lib/credits'
 import { uploadToR2 } from '@/lib/storage/r2'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const CREDIT_COST = 5
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Missing x-user-id header' }, { status: 401 })
 
   let form: FormData

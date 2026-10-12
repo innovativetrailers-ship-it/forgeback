@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { MODEL_COSTS } from '@/lib/routing/engineRegistry'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   projectId: z.string(),
@@ -11,7 +12,7 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = schema.parse(await req.json())

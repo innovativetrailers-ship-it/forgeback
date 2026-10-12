@@ -4,6 +4,7 @@ import { advanceApproval, parseApprovalChain } from '@cinema/core'
 import { db } from '@/lib/db'
 import { openReviewLink, reviewPinFrom } from '@/lib/review/gate'
 import { notifyProjectOwner } from '@/lib/review'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const approveSchema = z.object({
   decision: z.enum(['approved', 'changes_requested']),
@@ -28,7 +29,7 @@ export async function POST(
   if (index < 0) return NextResponse.json({ status: 'approved', approvalChain: chain, shotApproved: true })
 
   const step = chain[index]
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   const guestStep = step.role.toLowerCase() === 'client'
   if (guestStep) {
     if (userId && userId !== link.userId && step.userId && step.userId !== userId) {

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { resolveEntitlement } from '@/lib/entitlement/resolve'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const user = await db.user.findUnique({ where: { id: userId }, select: { hasUsedDesktopTrial: true } })
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

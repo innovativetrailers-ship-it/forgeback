@@ -5,6 +5,7 @@ import { checkAndDeductCredits,
          refundCredits }              from '@/lib/credits'
 import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
 import { fal, falSubscribeBound } from '@/lib/fal/client'
+import { requireUser } from '@/lib/auth/requireUser'
 const falSubscribe = falSubscribeBound('app.api.storyboard.route')
 
 interface StoryboardScene {
@@ -40,7 +41,7 @@ function parseFountain(screenplay: string): Array<{ heading: string; body: strin
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId  = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId  = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {

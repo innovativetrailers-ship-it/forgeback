@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/requireUser'
 /**
  * Cross-model comparison API.
  * GET /api/intelligence/compare?category=physics_fluid
@@ -11,7 +12,7 @@ import { ALL_CATEGORIES } from '@/lib/intelligence/probe-battery'
 import { intelligenceProbesEnabled } from '@/lib/intelligence/guards'
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
@@ -79,7 +80,7 @@ export async function GET(req: NextRequest) {
 
 // POST — generate a cross-model summary narrative using cheap crew
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: { category?: string }

@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { db } from '@/lib/db'
+import { desktopAccessFromRows } from './desktopAccess'
 
 export type EntitlementPlan = 'free' | 'pro' | 'ultimate' | 'desktop'
 export type EntitlementStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'expired'
@@ -15,9 +16,9 @@ export interface Entitlement {
   currentPeriodEnd: string | null
   hasUsedDesktopTrial: boolean
   trialDaysLeft: number | null
+  /** Database ADMIN or isInternal. No plan and no expiry. */
+  internal: boolean
 }
-
-const LIVE = new Set(['active', 'trialing'])
 
 function asPlan(value: string): EntitlementPlan {
   if (value === 'pro' || value === 'ultimate' || value === 'desktop') return value
@@ -32,37 +33,33 @@ function asStatus(value: string): EntitlementStatus {
 export async function resolveEntitlement(userId: string): Promise<Entitlement> {
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { hasUsedDesktopTrial: true },
+    select: { hasUsedDesktopTrial: true, role: true, isInternal: true },
   })
   const rows = await db.subscription.findMany({
     where: { userId },
     orderBy: { updatedAt: 'desc' },
   })
-  const now = Date.now()
-  const live = rows.find((row) => {
-    const status = asStatus(row.status)
-    if (!LIVE.has(status)) return false
-    if (row.currentPeriodEnd && row.currentPeriodEnd.getTime() < now) return false
-    return true
-  })
-  const plan = live ? asPlan(live.plan) : 'free'
-  const status = live ? asStatus(live.status) : 'expired'
-  const isLive = Boolean(live)
-  const canUseDesktop = isLive && (plan === 'ultimate' || plan === 'desktop')
-  const trialDaysLeft = live?.status === 'trialing' && live.currentPeriodEnd
-    ? Math.max(0, Math.ceil((live.currentPeriodEnd.getTime() - now) / 86_400_000))
-    : null
+  const access = desktopAccessFromRows(
+    user ? { role: user.role, isInternal: user.isInternal, hasUsedDesktopTrial: user.hasUsedDesktopTrial } : null,
+    rows.map((row) => ({
+      plan: row.plan,
+      status: row.status,
+      currentPeriodEnd: row.currentPeriodEnd,
+      seats: row.seats,
+    })),
+  )
   return {
-    plan,
-    status: isLive ? status : 'expired',
-    isLive,
-    canUseDesktop,
+    plan: access.plan,
+    status: access.status,
+    isLive: access.isLive,
+    canUseDesktop: access.canUseDesktop,
     canUseWeb: true,
     includedCredits: 0,
-    seats: live?.seats ?? 1,
-    currentPeriodEnd: live?.currentPeriodEnd?.toISOString() ?? null,
-    hasUsedDesktopTrial: user?.hasUsedDesktopTrial ?? false,
-    trialDaysLeft,
+    seats: access.seats,
+    currentPeriodEnd: access.currentPeriodEnd,
+    hasUsedDesktopTrial: access.hasUsedDesktopTrial,
+    trialDaysLeft: access.trialDaysLeft,
+    internal: access.internal,
   }
 }
 

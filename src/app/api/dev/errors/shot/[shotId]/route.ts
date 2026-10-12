@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { shotLifecycle } from '@/lib/diagnostics/query'
+import { requireUser } from '@/lib/auth/requireUser'
 
 async function requireDiagnostics(req: NextRequest): Promise<string | NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (process.env.DIAGNOSTICS_DEV === 'true') return userId
   const user = await db.user.findUnique({ where: { id: userId }, select: { role: true } })

@@ -5,9 +5,10 @@ import { runFal } from '@/lib/fal/client'
 import { isGenerationPausedError } from '@/lib/generation/pause'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { omniCredits, omniMaxSeconds, splitPerformance, type OmniResolution } from '@/lib/orchestration/omniHuman'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[avatar]', err instanceof Error ? err.message : err)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { rateFilm } from '@/lib/cognition/shotRatings'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   score: z.number().int().min(1).max(5),
@@ -11,7 +12,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { projectId } = await params

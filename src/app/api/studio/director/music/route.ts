@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { musicBreakdown, treatmentFromPlan } from '@/lib/orchestration/musicVideo'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[music-video]', err instanceof Error ? err.message : err)

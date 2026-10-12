@@ -4,11 +4,12 @@ import { nanoid } from 'nanoid'
 import { db } from '@/lib/db'
 import { ensureMainFolder, ensureSceneFolder } from '@/lib/library/folders'
 import { isLibraryKind } from '@/lib/library/model'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const MAX_SIZE = 100 * 1024 * 1024 // 100MB
 
 export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const formData = await request.formData()

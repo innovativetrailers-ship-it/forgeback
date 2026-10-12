@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { entitlementCaller } from '@/lib/entitlement/desktopAccess'
 import { resolveEntitlement, signEntitlementToken, verifyEntitlementToken } from '@/lib/entitlement/resolve'
+import { requireUser } from '@/lib/auth/requireUser'
 
 /** Heartbeat carries the activation id, account id, and app version only. */
 export async function POST(req: NextRequest) {
@@ -9,7 +11,11 @@ export async function POST(req: NextRequest) {
     return null
   }) as { token?: string; activationId?: string; appVersion?: string } | null
   const claims = body?.token ? verifyEntitlementToken(body.token) : null
-  const userId = typeof claims?.userId === 'string' ? claims.userId : req.headers.get('x-user-id')
+  const userId = entitlementCaller({
+    tokenUserId: typeof claims?.userId === 'string' ? claims.userId : null,
+    sessionUserId: null,
+    headerUserId: (await requireUser(req))?.id ?? null,
+  })
   if (!userId) return NextResponse.json({ entitled: false, reason: 'Sign in again.' }, { status: 401 })
   const entitlement = await resolveEntitlement(userId)
   if (body?.activationId) {
@@ -26,9 +32,10 @@ export async function POST(req: NextRequest) {
     plan: entitlement.plan,
     status: entitlement.status,
     canUseDesktop: true,
+    internal: entitlement.internal,
     seat: body?.activationId ?? '',
     iat: Math.floor(Date.now() / 1000),
     appVersion: body?.appVersion ?? null,
   })
-  return NextResponse.json({ entitled: true, token, entitlement })
+  return NextResponse.json({ entitled: true, token, entitlement, internal: entitlement.internal })
 }

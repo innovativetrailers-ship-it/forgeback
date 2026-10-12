@@ -2,6 +2,7 @@ import { buildWhisperSttInput, falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAndDeductCredits, refundCredits, OPERATION_COSTS } from '../../../../lib/credits'
 import { fal , falSubscribeBound} from '../../../../lib/fal/client'
+import { requireUser } from '@/lib/auth/requireUser'
 const falSubscribe = falSubscribeBound('app.api.highlights.extract.route')
 import { uploadToR2 } from '../../../../lib/storage/r2'
 import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
@@ -23,7 +24,7 @@ interface HighlightClip {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: { videoUrl: string; targetCount?: number; maxDuration?: number; platform?: string }

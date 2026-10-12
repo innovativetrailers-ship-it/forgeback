@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireUser } from '@/lib/auth/requireUser'
 
-export function requireUserId(request: NextRequest): string | NextResponse {
-  const userId = request.headers.get('x-user-id')
+export async function requireUserId(request: NextRequest): Promise<string | NextResponse> {
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   return userId
 }

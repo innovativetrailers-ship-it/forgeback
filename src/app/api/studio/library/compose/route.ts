@@ -5,6 +5,7 @@ import { readDialogue } from '@/lib/audio/dialogueIntent'
 import { isGenerationPausedError } from '@/lib/generation/pause'
 import { rememberDialogueTake, synthesiseVoiceTake } from '@/lib/audio/voiceTake'
 import { applyLipSyncToShot } from '@/lib/orchestration/lipSyncPass'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const query = z.object({ itemId: z.string().min(1) })
 const confirmBody = z.object({ itemId: z.string().min(1), confirm: z.literal(true) })
@@ -46,7 +47,7 @@ async function lookup(userId: string, itemId: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = query.safeParse({ itemId: req.nextUrl.searchParams.get('itemId') ?? '' })
   if (!parsed.success) return NextResponse.json({ error: 'itemId is required' }, { status: 400 })
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = confirmBody.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'Confirm the voice price before generating' }, { status: 400 })

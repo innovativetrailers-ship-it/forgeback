@@ -3,6 +3,8 @@ import {
   getReleaseFeedBase,
   parseFeedVersion,
   artifactFilename,
+  macDownloadOffered,
+  windowsDownloadOffered,
 } from '../../src/lib/desktop/releases'
 
 describe('desktop releases', () => {
@@ -23,5 +25,13 @@ describe('desktop releases', () => {
     expect(urls.mac_arm).toBe(`${base}/mac-arm/CinematicForge-3.0.1-arm64.dmg`)
     expect(urls.mac_intel).toBe(`${base}/mac-intel/CinematicForge-3.0.1-x64.dmg`)
     expect(urls.windows).toBe(`${base}/windows/CinematicForge-Setup-3.0.1.exe`)
+  })
+
+  it('does not offer a Mac or Windows download until CI records a signed release', () => {
+    expect(macDownloadOffered({ entitled: true, notarized: false })).toBe(false)
+    expect(macDownloadOffered({ entitled: false, notarized: true })).toBe(false)
+    expect(macDownloadOffered({ entitled: true, notarized: true })).toBe(true)
+    expect(windowsDownloadOffered({ entitled: true, signed: false })).toBe(false)
+    expect(windowsDownloadOffered({ entitled: true, signed: true })).toBe(true)
   })
 })

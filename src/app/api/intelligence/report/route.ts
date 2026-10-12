@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/requireUser'
 /**
  * Intelligence report retrieval API.
  * GET /api/intelligence/report?modelId=veo_3_1&limit=5
@@ -9,7 +10,7 @@ import { ModelUpdateWatcher, MODEL_VERSIONS } from '@/lib/intelligence/update-wa
 import { intelligenceProbesEnabled } from '@/lib/intelligence/guards'
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
 
 // POST — trigger update detection for a specific model
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   const cronSecret = req.headers.get('authorization')
   const isWorker = cronSecret === `Bearer ${process.env.CRON_SECRET}`
   if (!isWorker && !userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

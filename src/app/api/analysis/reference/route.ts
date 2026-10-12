@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { checkAndDeductCredits, refundOperationCredits } from '@/lib/credits'
 import { ReferenceVideoAnalyser } from '@/lib/analysis/ReferenceVideoAnalyser'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const analyser = new ReferenceVideoAnalyser()
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {

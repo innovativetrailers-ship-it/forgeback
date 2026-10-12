@@ -4,6 +4,7 @@ import { auth }                       from '@/lib/auth'
 import { checkAndDeductCredits,
          refundCredits }              from '@/lib/credits'
 import { fal, falSubscribeBound } from '@/lib/fal/client'
+import { requireUser } from '@/lib/auth/requireUser'
 const falSubscribe = falSubscribeBound('app.api.vfx.motion-brush.route')
 
 interface StrokeRegion {
@@ -17,7 +18,7 @@ interface StrokeRegion {
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId  = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId  = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {

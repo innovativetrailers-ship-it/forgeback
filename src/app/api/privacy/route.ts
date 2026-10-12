@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clearEpisodic, readPrivacy, writePrivacy } from '@/lib/privacy/gate'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const privacy = await readPrivacy(userId)
   return NextResponse.json({
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[privacy] body', err instanceof Error ? err.message : err)

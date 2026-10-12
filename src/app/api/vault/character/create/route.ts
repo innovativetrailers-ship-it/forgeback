@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createCharacter, queueCharacterLoraTraining } from '@/lib/vault/character'
 import { CharacterIngestionError } from '@/lib/character/ingestion'
 import { ensureOwnedProject } from '@/lib/projects/ensureOwnedProject'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {

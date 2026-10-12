@@ -8,6 +8,7 @@ import { loadDecompositionCheckpoint, loadKeyframeCheckpoint, loadWizardRefs, sa
 import { promptHasSequence, readTransition } from '@/lib/orchestration/scriptBreakdown'
 import { parseWizard } from '@/lib/orchestration/wizardState'
 import type { StructuredShot } from '@/lib/orchestration/types'
+import { requireUser } from '@/lib/auth/requireUser'
 
 async function ownedJob(jobId: string, userId: string) {
   return db.renderJob.findFirst({
@@ -17,7 +18,7 @@ async function ownedJob(jobId: string, userId: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const jobId = req.nextUrl.searchParams.get('jobId')?.trim()
   if (!jobId) return NextResponse.json({ error: 'jobId required' }, { status: 400 })
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[wizard] run body', err instanceof Error ? err.message : err)

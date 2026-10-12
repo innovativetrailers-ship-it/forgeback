@@ -8,11 +8,12 @@ import ffmpeg from 'fluent-ffmpeg'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { uploadToR2 } from '@/lib/storage/r2'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({ sourceUrl: z.string().url() })
 
 export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = schema.safeParse(await request.json())
   if (!parsed.success) return NextResponse.json({ error: 'A proxy needs a media address' }, { status: 400 })

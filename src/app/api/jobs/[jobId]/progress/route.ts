@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { auth } from '@/lib/auth'
 import { createJobEventStream, jobStreamResponseHeaders } from '@/lib/jobs/jobEventStream'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -11,7 +12,7 @@ export async function GET(
   { params }: { params: Promise<{ jobId: string }> },
 ) {
   const session = await auth()
-  const userId = request.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(request))?.id ??  session?.user?.id
   if (!userId) {
     return new Response('Unauthorized', { status: 401 })
   }

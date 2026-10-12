@@ -15,6 +15,7 @@ import http from 'http'
 import { pipeline } from 'stream/promises'
 import { createWriteStream, readFileSync } from 'fs'
 import { nanoid } from 'nanoid'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   videoUrl: z.string().url(),
@@ -37,7 +38,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
 }
 
 export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()

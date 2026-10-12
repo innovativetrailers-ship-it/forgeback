@@ -1,4 +1,5 @@
 import { logCaught } from '@/lib/diagnostics/caught'
+import { requireUser } from '@/lib/auth/requireUser'
 // src/app/api/generate/route.ts
 // Fast path — never waits for rendering. Returns jobId in <2s.
 
@@ -15,7 +16,7 @@ import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 import { db }                                      from '@/lib/db'
 
 export async function POST(req: Request) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {

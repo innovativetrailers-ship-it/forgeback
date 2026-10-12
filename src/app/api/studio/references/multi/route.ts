@@ -13,6 +13,7 @@ import {
   videoUrlOf,
   type ReferenceTier,
 } from '@/lib/studio/multiReference'
+import { requireUser } from '@/lib/auth/requireUser'
 
 function modeOf(value: unknown): 'elements' | 'reference' | null {
   if (value === 'elements' || value === 'reference') return value
@@ -20,7 +21,7 @@ function modeOf(value: unknown): 'elements' | 'reference' | null {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[multi-ref]', err instanceof Error ? err.message : err)

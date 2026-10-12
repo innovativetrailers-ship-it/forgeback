@@ -1,7 +1,8 @@
 import { checkServiceHealth, SERVICE_REGISTRY } from '@/lib/services/registry'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(req: Request) {
-  const role = req.headers.get('x-user-role')
+  const role = (await requireUser(req))?.role ?? null
   if (role !== 'ADMIN') return Response.json({ error: 'Forbidden' }, { status: 403 })
 
   const health = checkServiceHealth()

@@ -7,6 +7,7 @@ import { checkAndDeductCredits, OPERATION_COSTS } from '@/lib/credits'
 import { trainingQueue, getPriorityForRole } from '@/lib/queue'
 import { buildTrainingSet } from '@/lib/training/assemble'
 import { startTraining } from '@/lib/training/start'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const fileSchema = z.object({
   name: z.string().min(1),
@@ -36,7 +37,7 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (isGenerationPaused()) {
     return NextResponse.json(
@@ -208,7 +209,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const runs = await db.trainingRun.findMany({
     where: { userId },

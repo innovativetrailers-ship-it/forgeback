@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { suggestColourGrade, isColourGradeSuggestion, type ColourGradeRequest, type ColourMood } from '@/lib/color/AIColorGrading'
 import { checkAndDeductCredits, refundCredits } from '@/lib/credits'
 import type { ClipColourGrade } from '@/lib/timeline/schema'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const VALID_MOODS = new Set<ColourMood>(['warm', 'cool', 'cinematic', 'vintage', 'moody'])
 const CREDIT_OP = 'llm_claude_sonnet'
@@ -24,7 +25,7 @@ function parseBody(raw: unknown): ColourGradeRequest | string {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let raw: unknown
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 // PATCH — batch-apply a colour grade from one clip to multiple target clips
 // Returns the validated grade so the client can update its recipe
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let raw: unknown

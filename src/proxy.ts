@@ -1,16 +1,14 @@
 import NextAuth from 'next-auth'
 import { authConfig } from '@/lib/auth.config'
 import { NextResponse } from 'next/server'
+import { anonymousApiBlocked, stripSpoofedIdentity } from '@/lib/auth/identity'
 
 const { auth } = NextAuth(authConfig)
 
-const PUBLIC_PATHS = [
+const PUBLIC_PAGES = [
   '/login',
   '/register',
   '/signup',
-  '/api/auth',
-  '/api/webhooks',
-  '/api/health',
   '/review',
   '/site.webmanifest',
   '/manifest.json',
@@ -19,8 +17,8 @@ const PUBLIC_PATHS = [
   '/opengraph-image',
 ]
 
-function isPublic(pathname: string): boolean {
-  return PUBLIC_PATHS.some((p) => pathname.startsWith(p))
+function isPublicPage(pathname: string): boolean {
+  return PUBLIC_PAGES.some((p) => pathname.startsWith(p))
 }
 
 export const proxy = auth((req) => {
@@ -28,23 +26,24 @@ export const proxy = auth((req) => {
   const session = req.auth
   const userId = session?.user?.id
   const userRole = (session?.user as { role?: string } | undefined)?.role ?? 'FREE'
+  const hasBearer = (req.headers.get('authorization') ?? '').toLowerCase().startsWith('bearer ')
 
-  // Redirect unauthenticated users on protected pages (not API routes)
-  if (!userId && !isPublic(pathname) && !pathname.startsWith('/api/')) {
+  if (!userId && !isPublicPage(pathname) && !pathname.startsWith('/api/')) {
     const loginUrl = new URL('/login', req.url)
     loginUrl.searchParams.set('callbackUrl', pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  // Inject x-user-id / x-user-role so API route handlers can read them
-  if (userId) {
-    const headers = new Headers(req.headers)
-    headers.set('x-user-id', userId)
-    headers.set('x-user-role', userRole)
-    return NextResponse.next({ request: { headers } })
+  if (anonymousApiBlocked(pathname, Boolean(userId), hasBearer)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  return NextResponse.next()
+  const headers = stripSpoofedIdentity(req.headers)
+  if (userId) {
+    headers.set('x-user-id', userId)
+    headers.set('x-user-role', userRole)
+  }
+  return NextResponse.next({ request: { headers } })
 })
 
 export const config = {

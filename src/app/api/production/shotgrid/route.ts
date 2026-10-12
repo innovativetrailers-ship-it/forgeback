@@ -9,6 +9,7 @@ import {
   type ShotGridConfig,
   type ShotGridShot,
 } from '@/lib/production/ShotGridClient'
+import { requireUser } from '@/lib/auth/requireUser'
 
 interface ShotGridBody {
   action: 'test' | 'list_projects' | 'sync_shots' | 'update_status' | 'create_version' | 'import_shots'
@@ -27,7 +28,7 @@ interface ShotGridBody {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: ShotGridBody

@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+src/lib/__chokepoint_bypass_probe.ts
+src/lib/__endpoint_probe.ts
+src/lib/__auth_probe.ts
+src/workers/__worker_probe.ts
 
 # next.js
 /.next/
@@ -26,6 +30,8 @@
 # misc
 .DS_Store
 *.pem
+*.p12
+*.p8
 
 # debug
 npm-debug.log*

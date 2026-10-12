@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '../../../lib/db'
 import { renderQueue } from '../../../lib/queue'
+import { requireUser } from '@/lib/auth/requireUser'
 
 // Plugin API — Studio tier only, authenticated via API key
-function authenticatePlugin(req: NextRequest): { userId: string | null } {
+async function authenticatePlugin(req: NextRequest): Promise<{ userId: string | null }> {
   const apiKey = req.headers.get('x-api-key')
   if (!apiKey || apiKey !== process.env.PLUGIN_API_SECRET) {
     // Also allow x-user-id from normal auth middleware for Studio users
-    const userId = req.headers.get('x-user-id')
+    const userId = (await requireUser(req))?.id ?? null
     return { userId }
   }
   // For now, plugin key maps to a system user — in production, use a key→userId lookup
-  return { userId: req.headers.get('x-user-id') }
+  return { userId: (await requireUser(req))?.id ?? null }
 }
 
 export async function GET(req: NextRequest) {
-  const { userId } = authenticatePlugin(req)
+  const { userId } = await authenticatePlugin(req)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { userId } = authenticatePlugin(req)
+  const { userId } = await authenticatePlugin(req)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)

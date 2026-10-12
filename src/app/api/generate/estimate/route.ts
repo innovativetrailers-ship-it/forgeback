@@ -3,9 +3,10 @@ import { priceOrchestratePlan } from '@/lib/routing/estimatePlan'
 import { calculateSimpleCost }             from '@/lib/credits'
 import { TIER_ENGINE_MAP }                 from '@/lib/routing/engineRegistry'
 import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: Request) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { prompt, duration, selectedModels, mode, tier } = await req.json() as {

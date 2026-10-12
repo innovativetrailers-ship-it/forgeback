@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { queueObjectRemoval, type BlendMode, type MaskArea } from '@/lib/vfx/ObjectRemoval'
 import { checkAndDeductCredits, refundCredits } from '@/lib/credits'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const CREDIT_COST = 20
 const VALID_BLEND_MODES = new Set<BlendMode>(['seamless', 'conservative', 'aggressive'])
@@ -13,7 +14,7 @@ function isMaskArea(v: unknown): v is MaskArea {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let raw: unknown

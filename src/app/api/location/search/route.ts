@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { geocodeLocation, suggestPlaces } from '@/lib/engines/geocode'
 import { searchStreetView } from '@/lib/engines/mapillary'
 import { getSatelliteImageUrls } from '@/lib/engines/satellite'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   if (!process.env.MAPILLARY_ACCESS_TOKEN) {

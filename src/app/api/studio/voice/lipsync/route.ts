@@ -6,6 +6,7 @@ import { readAlignmentWords, applyLipSyncToShot } from '@/lib/orchestration/lipS
 import { db } from '@/lib/db'
 import { signedUrlForStoredKey } from '@/lib/media/resolveStoredMedia'
 import { objectKeyFromStored } from '@/lib/storage/r2'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   projectId: z.string().min(1),
@@ -14,7 +15,7 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = schema.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'Invalid lip-sync request' }, { status: 400 })

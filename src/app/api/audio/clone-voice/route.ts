@@ -3,9 +3,10 @@ import { deductCredits, OPERATION_COSTS }            from '@/lib/credits'
 import { db }                                        from '@/lib/db'
 import { checkAccess, checkTierAccess }              from '@/lib/access/guard'
 import { isGenerationPaused }                        from '@/lib/generation/pause'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: Request) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 })
   if (isGenerationPaused()) {
     return Response.json(

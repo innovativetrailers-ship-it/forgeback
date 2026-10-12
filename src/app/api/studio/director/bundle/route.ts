@@ -16,6 +16,7 @@ import {
 import { isGenerationPaused, isGenerationPausedError } from '@/lib/generation/pause'
 import { ingestBreakdown } from '@/lib/orchestration/ingestPlan'
 import { uploadToR2 } from '@/lib/storage/r2'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const TEXT_EXT = new Set(['md', 'markdown', 'txt', 'csv', 'tsv', 'rtf', 'json'])
 
@@ -49,7 +50,7 @@ function entriesOf(name: string, buffer: Buffer): Array<{ path: string; buffer: 
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const form = await req.formData().catch((err) => {
     console.warn('[bundle]', err instanceof Error ? err.message : err)

@@ -9,6 +9,11 @@ export async function GET() {
   return NextResponse.json({
     version: status.version,
     available: status.available,
+    macNotarized: status.macNotarized,
+    signed: status.signed,
+    notarized: status.notarized,
+    windowsSigned: status.windowsSigned,
+    verifiedAt: status.verifiedAt,
     feedBase: status.feedBase,
     message: status.message,
     downloads: {

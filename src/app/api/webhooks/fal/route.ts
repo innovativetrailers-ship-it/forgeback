@@ -17,63 +17,71 @@ interface FalWebhookPayload {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json() as FalWebhookPayload
-
-  const { request_id: requestId, status, payload, error } = body
-
-  if (!requestId) {
+  const url = new URL(request.url)
+  const token = url.searchParams.get('token') ?? ''
+  const body = await request.json().catch((err) => {
+    console.warn('[fal-webhook] body', err instanceof Error ? err.message : err)
+    return null
+  }) as FalWebhookPayload | null
+  if (!body?.request_id) {
     return NextResponse.json({ error: 'Missing request_id' }, { status: 400 })
   }
+  const { verifyFalWebhookToken, isFalMediaUrl } = await import('@/lib/webhooks/falSignature')
+  const subjectId = verifyFalWebhookToken(token)
+  if (!subjectId) {
+    return NextResponse.json({ error: 'Invalid webhook token' }, { status: 401 })
+  }
+  const requestId = body.request_id
+  const status = body.status
+  const payload = body.payload
+  const error = body.error
 
-  const { onTrainingComplete } = await import('@/lib/training/complete')
   const trainingRun = await db.trainingRun.findFirst({
-    where: { falRequestId: requestId },
-    select: { id: true },
-  })
-  const trainingPayload = (payload ?? body) as Record<string, unknown>
-  await onTrainingComplete({
-    falRequestId: requestId,
-    data: status === 'OK' ? trainingPayload : undefined,
-    error: status === 'ERROR' ? (error ?? payload?.error ?? 'Training failed') : undefined,
+    where: { id: subjectId },
+    select: { id: true, falRequestId: true },
   })
   if (trainingRun) {
+    if (trainingRun.falRequestId && trainingRun.falRequestId !== requestId) {
+      return NextResponse.json({ error: 'Webhook does not match this run' }, { status: 401 })
+    }
+    if (trainingRun.falRequestId) {
+      const { onTrainingComplete } = await import('@/lib/training/complete')
+      const trainingPayload = (payload ?? body) as Record<string, unknown>
+      await onTrainingComplete({
+        falRequestId: trainingRun.falRequestId,
+        data: status === 'OK' ? trainingPayload : undefined,
+        error: status === 'ERROR' ? (error ?? payload?.error ?? 'Training failed') : undefined,
+      })
+      if (payload?.diffusers_lora_file && isFalMediaUrl(payload.diffusers_lora_file.url)) {
+        const character = await db.vaultCharacter.findFirst({
+          where: { loraModelId: trainingRun.falRequestId },
+        })
+        if (character) {
+          await db.vaultCharacter.update({
+            where: { id: character.id },
+            data: {
+              loraStatus: status === 'OK' ? 'READY' : 'FAILED',
+              loraModelId: payload.diffusers_lora_file.url,
+            },
+          })
+        }
+      }
+    }
     return NextResponse.json({ received: true })
   }
 
   // Find the job linked to this fal request
   const renderJob = await db.renderJob.findFirst({
-    where: {
-      inputPayload: {
-        path: ['falRequestId'],
-        equals: requestId,
-      },
-    },
+    where: { id: subjectId },
   })
 
   if (!renderJob) {
-    // Could be a LoRA training webhook — update character status
-    const character = await db.vaultCharacter.findFirst({
-      where: {
-        loraModelId: requestId,
-      },
-    })
-
-    if (character && payload?.diffusers_lora_file) {
-      await db.vaultCharacter.update({
-        where: { id: character.id },
-        data: {
-          loraStatus: status === 'OK' ? 'READY' : 'FAILED',
-          loraModelId: payload.diffusers_lora_file.url,
-        },
-      })
-    }
-
     return NextResponse.json({ received: true })
   }
 
   if (status === 'OK') {
     const outputUrl =
-      payload?.video?.url ?? payload?.images?.[0]?.url ?? undefined
+      [payload?.video?.url, payload?.images?.[0]?.url].find((item) => isFalMediaUrl(item))
 
     await db.renderJob.update({
       where: { id: renderJob.id },

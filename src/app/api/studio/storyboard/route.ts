@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { generateStoryboard, renderStoryboardFrames, storyboardToPDF } from '@/lib/studio/storyboard'
 import { checkAndDeductCredits } from '@/lib/credits'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   scriptText: z.string().min(20).max(50000),
@@ -12,7 +13,7 @@ const schema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()

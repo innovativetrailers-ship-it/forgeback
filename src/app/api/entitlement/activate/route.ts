@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { resolveEntitlement, signEntitlementToken } from '@/lib/entitlement/resolve'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[entitlement] activate body', err instanceof Error ? err.message : err)
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
     plan: entitlement.plan,
     status: entitlement.status,
     canUseDesktop: true,
+    internal: entitlement.internal,
     seat: activation.id,
     iat: Math.floor(Date.now() / 1000),
   })

@@ -4,12 +4,13 @@ import { db } from '@/lib/db'
 import { checkAndDeductCredits, refundOperationCredits } from '@/lib/credits'
 import { Recaster } from '@/lib/casting/Recaster'
 import type { CastMember } from '@/lib/casting/types'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const recaster = new Recaster()
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {

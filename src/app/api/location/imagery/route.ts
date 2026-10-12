@@ -1,7 +1,8 @@
 import { searchStreetView } from '@/lib/engines/mapillary'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(req: Request) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)

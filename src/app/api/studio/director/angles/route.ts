@@ -5,6 +5,7 @@ import { checkAccess } from '@/lib/access/guard'
 import { IMAGE_FAL_TIMEOUT_MS, runFal } from '@/lib/fal/client'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { loadWizardRefs, saveWizardRefs } from '@/lib/orchestration/checkpoints'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const PRESETS: Record<string, { horizontal: number; label: string }> = {
   front: { horizontal: 0, label: 'front' },
@@ -14,7 +15,7 @@ const PRESETS: Record<string, { horizontal: number; label: string }> = {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[wizard] angles body', err instanceof Error ? err.message : err)

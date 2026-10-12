@@ -12,6 +12,7 @@ import {
   autoOrganiseBins,
   type BinClip,
 } from '@/lib/media/BinManager'
+import { requireUser } from '@/lib/auth/requireUser'
 
 type BinAction =
   | 'list'
@@ -41,7 +42,7 @@ interface BinsRequestBody {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: BinsRequestBody

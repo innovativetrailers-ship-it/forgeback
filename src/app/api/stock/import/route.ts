@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { uploadToR2 } from '@/lib/storage/r2'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const PEXELS_LICENCE = 'Pexels License — free to use, including commercially. Attribution is appreciated and is stored with the file. This copy is not used to train models.'
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[stock-import]', err instanceof Error ? err.message : err)

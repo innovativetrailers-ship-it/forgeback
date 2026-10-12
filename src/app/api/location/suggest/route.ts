@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { suggestPlaces } from '@/lib/engines/geocode'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const q = req.nextUrl.searchParams.get('q')?.trim() ?? ''
   if (q.length < 3) return NextResponse.json({ suggestions: [] })

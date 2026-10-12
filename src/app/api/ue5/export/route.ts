@@ -2,9 +2,10 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { buildUE5Manifest, generateSequencerXml, generateManifestJson } from '@/lib/ue5/UnrealExport'
 import type { TimelineRecipe } from '@/lib/timeline/schema'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let raw: unknown

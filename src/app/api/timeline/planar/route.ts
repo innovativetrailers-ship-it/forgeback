@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { trackPlanarRegion } from '@/lib/timeline/tracker'
 import type { PlanarFrame } from '@/lib/timeline/controlLayer'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   videoUrl: z.string().min(1),
@@ -14,7 +15,7 @@ const schema = z.object({
 
 /** Track a plane and return the insert that follows it. The clip itself is unchanged. */
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = schema.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'Invalid track' }, { status: 400 })

@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/requireUser'
 /**
  * POST /api/color/grade/lock — claim exclusive grade lock on a clip
  * Body: { projectId, clipId, action: 'claim' | 'release' }
@@ -9,7 +10,7 @@ import { claimGrade,
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId  = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId  = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { projectId, clipId, action } = await req.json() as {

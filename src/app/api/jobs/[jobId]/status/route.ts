@@ -3,13 +3,14 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { parseProgressEvents } from '@/lib/jobs/jobProgressEvents'
 import { humanStatusText } from '@/lib/jobs/humanStatus'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
 ) {
   const session = await auth()
-  const userId = request.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(request))?.id ??  session?.user?.id
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

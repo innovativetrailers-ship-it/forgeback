@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,9 @@ import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
 export function LoginForm() {
   const router = useRouter()
+  const search = useSearchParams()
+  const next = search.get('callbackUrl')
+  const afterLogin = next && next.startsWith('/desktop') ? next : '/simple'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
@@ -32,7 +35,7 @@ export function LoginForm() {
       if (result?.error) {
         toast.error('Invalid email or password')
       } else {
-        router.push('/simple')
+        router.push(afterLogin)
         router.refresh()
       }
     } finally {
@@ -43,7 +46,7 @@ export function LoginForm() {
   async function handleGoogle() {
     setGoogleLoading(true)
     try {
-      await signIn('google', { callbackUrl: '/simple' })
+      await signIn('google', { callbackUrl: afterLogin })
     } catch (err) {
       console.error('[Google sign-in]', err)
       toast.error('Google sign-in failed. Please try again.')

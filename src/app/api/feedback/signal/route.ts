@@ -1,9 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { BEHAVIOUR_SIGNAL } from '@cinema/core'
 import { recordShotOutcome } from '@/lib/cognition/learnOutcomes'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: { jobId?: string; shotId?: string; signal?: string; reason?: string; source?: string }

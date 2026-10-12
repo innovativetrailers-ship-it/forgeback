@@ -3,12 +3,13 @@ import { auth } from '@/lib/auth'
 import { checkAndDeductCredits, refundOperationCredits } from '@/lib/credits'
 import { SFXMakeupEngine } from '@/lib/makeup/SFXMakeupEngine'
 import type { MakeupEffect } from '@/lib/casting/types'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const engine = new SFXMakeupEngine()
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {

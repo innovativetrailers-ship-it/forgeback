@@ -5,6 +5,7 @@ import { runFal } from '@/lib/fal/client'
 import { isGenerationPausedError } from '@/lib/generation/pause'
 import { db } from '@/lib/db'
 import { MESH_CREDITS } from '@/lib/studio/generationUtilities'
+import { requireUser } from '@/lib/auth/requireUser'
 
 function fileUrl(value: unknown): string | null {
   if (!value || typeof value !== 'object') return null
@@ -13,7 +14,7 @@ function fileUrl(value: unknown): string | null {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[mesh]', err instanceof Error ? err.message : err)

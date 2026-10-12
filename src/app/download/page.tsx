@@ -13,6 +13,9 @@ import { TopBar } from '@/components/layout/TopBar'
 interface ReleaseApiResponse {
   version: string | null
   available: boolean
+  macNotarized?: boolean
+  windowsSigned?: boolean
+  verifiedAt?: string | null
   message?: string
   downloads: {
     mac_arm: string
@@ -118,7 +121,7 @@ export default function DownloadPage() {
               </div>
             ) : (
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                {(platform === 'mac' || platform === 'unknown') && releaseInfo && (
+                {(platform === 'mac' || platform === 'unknown') && releaseInfo?.macNotarized && (
                   <>
                     <a
                       href={releaseInfo.downloads.mac_arm}
@@ -136,7 +139,7 @@ export default function DownloadPage() {
                     </a>
                   </>
                 )}
-                {(platform === 'windows' || platform === 'unknown') && releaseInfo && (
+                {(platform === 'windows' || platform === 'unknown') && releaseInfo?.windowsSigned && (
                   <a
                     href={releaseInfo.downloads.windows}
                     className="flex items-center gap-2 px-6 py-3 rounded-xl border border-white/20 hover:bg-white/5 transition"
@@ -147,6 +150,12 @@ export default function DownloadPage() {
                 )}
                 {!releaseInfo && (
                   <p className="text-sm text-gray-500">Checking release availability…</p>
+                )}
+                {releaseInfo && !releaseInfo.macNotarized && (platform === 'mac' || platform === 'unknown') && (
+                  <p className="text-sm text-gray-400">The Mac app is being prepared — signed builds are coming. Use the web app meanwhile.</p>
+                )}
+                {releaseInfo && !releaseInfo.windowsSigned && (platform === 'windows' || platform === 'unknown') && (
+                  <p className="text-sm text-gray-400">The Windows app is being prepared — signed builds are coming. Use the web app meanwhile.</p>
                 )}
               </div>
             )

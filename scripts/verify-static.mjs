@@ -11,6 +11,7 @@ const steps = [
   'scripts/check-location-viewer.mjs',
   'scripts/check-no-stub-panels.mjs',
   'scripts/check-third-party-marks.mjs',
+  'scripts/check-no-header-auth.mjs',
 ]
 
 for (const step of steps) {

@@ -1,12 +1,13 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { getMusicStatus } from '@/lib/engines/suno'
+import { requireUser } from '@/lib/auth/requireUser'
 
 // GET — poll Suno job status
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ jobId: string }> },
 ): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { jobId } = await params

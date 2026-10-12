@@ -5,7 +5,7 @@ import { getFCCCharacter, toFCCView, vaultToFCC } from '@/lib/character/fccManag
 import { requireUserId } from '@/lib/character/auth'
 
 export async function POST(request: NextRequest) {
-  const userId = requireUserId(request)
+  const userId = await requireUserId(request)
   if (userId instanceof NextResponse) return userId
 
   const body = (await request.json()) as { json?: string; projectId?: string; name?: string }

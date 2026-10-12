@@ -7,6 +7,7 @@ import { checkAccess } from '@/lib/access/guard'
 import { isGenerationPaused } from '@/lib/generation/pause'
 import { resolveCollabAccess, assertCanGenerate } from '@/lib/collab/access'
 import { claimOrAttachShot } from '@/lib/collab/claimShot'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   shotPlanId: z.string(),
@@ -16,7 +17,7 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = schema.parse(await req.json())

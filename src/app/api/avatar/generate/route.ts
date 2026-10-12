@@ -3,10 +3,11 @@ import { auth } from '@/lib/auth'
 import { checkAndDeductCredits, refundCredits } from '@/lib/credits'
 import { db } from '@/lib/db'
 import { renderQueue } from '@/lib/queue'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { avatarId, script, voiceId, type } = await req.json() as {

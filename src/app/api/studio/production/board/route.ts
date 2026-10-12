@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { addEntityVariation, loadEntityResolutions, loadProductionBreakdown } from '@/lib/studio/productionBoard'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const projectId = req.nextUrl.searchParams.get('projectId') ?? ''
   if (!projectId) return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[board] body', err instanceof Error ? err.message : err)

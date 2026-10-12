@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { isGenrePresetId } from '@cinema/core'
 import { db } from '@/lib/db'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const patchSchema = z.object({
   gateMode: z.enum(['auto', 'manual', 'both']).optional(),
@@ -14,7 +15,7 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<unknown> },
 ) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { projectId: id } = (await context.params) as { projectId: string }
@@ -57,7 +58,7 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<unknown> },
 ) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { projectId: id } = (await context.params) as { projectId: string }

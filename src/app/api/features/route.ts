@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { cleanContext, cleanText, parseKind } from '@/lib/features/request'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const HOUR = 60 * 60 * 1000
 const LIMIT = 5
@@ -11,7 +12,7 @@ async function reviewer(userId: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const mine = await db.featureRequest.findMany({
     where: { userId },
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[feature-request]', err instanceof Error ? err.message : err)

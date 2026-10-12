@@ -41,20 +41,23 @@ export async function openHold(
     throw new EscrowError(`Insufficient credits: need ${held} held, have ${available}`)
   }
 
-  await db.$transaction([
-    db.user.update({
-      where: { id: userId },
+  await db.$transaction(async (tx) => {
+    const updated = await tx.user.updateMany({
+      where: { id: userId, creditBalance: { gte: held } },
       data: {
         creditBalance: { decrement: held },
         heldCredits: { increment: held },
       },
-    }),
-    db.creditHold.upsert({
+    })
+    if (updated.count !== 1) {
+      throw new EscrowError(`Insufficient credits: need ${held} held`)
+    }
+    await tx.creditHold.upsert({
       where: { jobId },
       create: { userId, jobId, amountHeld: held, amountUsed: 0, status: 'ACTIVE', budgetCap },
       update: { amountHeld: held, amountUsed: 0, status: 'ACTIVE', budgetCap },
-    }),
-    db.creditTransaction.create({
+    })
+    await tx.creditTransaction.create({
       data: {
         userId,
         amount: -held,
@@ -62,8 +65,8 @@ export async function openHold(
         description: `Escrow hold for job ${jobId}`,
         balanceAfter: available - held,
       },
-    }),
-  ])
+    })
+  })
 
   return held
 }

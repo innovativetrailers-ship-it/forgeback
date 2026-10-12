@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { objectKeyFromStored } from '@/lib/storage/r2'
 import { createLibraryAsset, listLibrary } from '@/lib/library/folders'
 import { isLibraryKind } from '@/lib/library/model'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const fromJob = z.object({
   intent: z.literal('placement'),
@@ -14,7 +15,7 @@ const fromJob = z.object({
 })
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const projectId = req.nextUrl.searchParams.get('projectId') ?? ''
   if (!projectId) return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = fromJob.safeParse(await req.json())
   if (!parsed.success) {

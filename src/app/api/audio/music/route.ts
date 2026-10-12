@@ -2,9 +2,10 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { deductCredits, OPERATION_COSTS } from '@/lib/credits'
 import { db }                             from '@/lib/db'
 import { checkAccess }                    from '@/lib/access/guard'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: { prompt?: string; style?: string; duration?: number; instrumental?: boolean; title?: string }

@@ -3,10 +3,11 @@ import { db } from '@/lib/db'
 import { checkAndDeductCredits } from '@/lib/credits'
 import { exportEDL, exportFCPXML, exportDaVinciXML } from '@/lib/interchange/NativeFormats'
 import { exportTimeline, type InterchangeFormat } from '@/lib/interchange/OTIOClient'
+import { requireUser } from '@/lib/auth/requireUser'
 
 // POST { projectId, format: 'edl'|'fcpxml'|'aaf'|'resolve_xml'|'otioz' }
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: { projectId?: string; format?: string }

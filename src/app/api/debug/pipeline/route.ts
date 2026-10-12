@@ -3,13 +3,14 @@ import { db } from '@/lib/db'
 import { resolveModel } from '@/lib/models/resolveModel'
 import { renderQueue } from '@/lib/queue'
 import { queueConnection } from '@/lib/redis'
+import { requireUser } from '@/lib/auth/requireUser'
 
 async function pingRedis(): Promise<void> {
   await queueConnection.ping()
 }
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const user = await db.user.findUnique({

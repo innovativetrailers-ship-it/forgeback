@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { analyzeEmotionalArc, type EmotionLatticeRequest } from '@/lib/emotion/EmotionLattice'
 import { checkAndDeductCredits, refundCredits } from '@/lib/credits'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const CREDIT_COST = 5
 
@@ -14,7 +15,7 @@ function isClipPayload(v: unknown): v is ClipPayload {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let raw: unknown

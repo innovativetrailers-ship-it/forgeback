@@ -9,6 +9,7 @@ import type { AnchorSource } from '@/generated/prisma/client'
 import { parseQualityTier } from '@/lib/orchestration/tierPolicy'
 import { resolveCollabAccess, assertCanGenerate } from '@/lib/collab/access'
 import { claimOrAttachShot } from '@/lib/collab/claimShot'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   shotPlanId: z.string(),
@@ -41,7 +42,7 @@ function fromDbAnchorSource(source: AnchorSource): 'auto' | 'manual' | 'keyframe
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const parsed = schema.safeParse(await req.json())

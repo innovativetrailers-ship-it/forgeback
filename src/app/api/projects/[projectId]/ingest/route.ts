@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { IngestConsentError } from '@cinema/core'
 import { ingest } from '@/lib/ingest'
 import { isGenerationPausedError } from '@/lib/generation/pause'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export const runtime = 'nodejs'
 
@@ -9,7 +10,7 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ projectId: string }> },
 ) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { projectId } = await context.params

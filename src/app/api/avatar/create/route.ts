@@ -3,12 +3,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { checkAndDeductCredits } from '@/lib/credits'
 import { fal, falSubscribeBound} from '@/lib/fal/client'
+import { requireUser } from '@/lib/auth/requireUser'
 const falSubscribe = falSubscribeBound('app.api.avatar.create.route')
 import { db } from '@/lib/db'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { imageUrl, name, style } = await req.json() as {

@@ -4,6 +4,7 @@ import { resolveCollabAccess } from '@/lib/collab/access'
 import { subscribeCollab, collabStreamHeaders } from '@/lib/collab/hub'
 import { getProjectPresence } from '@/lib/collab/presence'
 import { loadCollabDocument } from '@/lib/collab/doc'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -14,7 +15,7 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string }> },
 ) {
   const session = await auth()
-  const userId = request.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(request))?.id ??  session?.user?.id
   if (!userId) return new Response('Unauthorized', { status: 401 })
 
   const { projectId } = await params

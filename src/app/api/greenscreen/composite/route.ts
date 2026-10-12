@@ -3,12 +3,13 @@ import { auth } from '@/lib/auth'
 import { checkAndDeductCredits, refundOperationCredits } from '@/lib/credits'
 import { GreenScreenEngine } from '@/lib/greenscreen/GreenScreenEngine'
 import type { GreenScreenJob } from '@/lib/greenscreen/GreenScreenEngine'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const gsEngine = new GreenScreenEngine()
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as GreenScreenJob

@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { resolveReviewVideoUrl } from '@/lib/review'
 import { expiryDate, hashReviewPin, REVIEW_EXPIRY } from '@/lib/review/pin'
 import { defaultApprovalChain, type ApprovalStep } from '@cinema/core'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const CreateReviewSchema = z.object({
   projectId: z.string(),
@@ -23,7 +24,7 @@ const CreateReviewSchema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: z.infer<typeof CreateReviewSchema>
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const projectId = new URL(req.url).searchParams.get('projectId')

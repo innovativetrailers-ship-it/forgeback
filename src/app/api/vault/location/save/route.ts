@@ -2,6 +2,7 @@ import { GOOGLE_IMAGERY_NOTE, MAPILLARY_LICENCE } from '@cinema/core'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { uploadToR2 } from '@/lib/storage/r2'
+import { requireUser } from '@/lib/auth/requireUser'
 
 interface LocationMeta {
   lat?: number
@@ -25,7 +26,7 @@ function blockedHost(imageUrl: string): boolean {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let imageUrl = ''

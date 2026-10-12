@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { cameraPatchFromPreset, genrePreset, isGenrePresetId } from '@cinema/core'
 import { db } from '@/lib/db'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   lipSyncEnabled: z.boolean().optional(),
@@ -25,7 +26,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params

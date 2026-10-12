@@ -3,6 +3,7 @@ import { auth }                       from '@/lib/auth'
 import { checkAndDeductCredits,
          refundCredits }              from '@/lib/credits'
 import { reframeClip }               from '@/lib/timeline/AutoReframe'
+import { requireUser } from '@/lib/auth/requireUser'
 
 type AspectRatio = '9:16' | '1:1' | '4:5' | '16:9' | '4:3' | '21:9'
 
@@ -20,7 +21,7 @@ const PLATFORM_PRESETS: Record<string, AspectRatio> = {
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId  = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId  = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {

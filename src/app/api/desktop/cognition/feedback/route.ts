@@ -13,7 +13,7 @@ const REWARD_MAP: Record<string, number> = {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const userId = validateDesktopCloudRequest(request)
+  const userId = await validateDesktopCloudRequest(request)
   if (userId instanceof NextResponse) return userId
 
   const body = (await request.json()) as {

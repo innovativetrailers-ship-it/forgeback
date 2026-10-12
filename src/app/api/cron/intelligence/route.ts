@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/requireUser'
 /**
  * Intelligence pipeline cron trigger.
  * Called by Vercel cron or an external scheduler.
@@ -89,7 +90,7 @@ export async function GET(req: NextRequest) {
 
 // Also accept POST for manual admin triggers
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   const auth = req.headers.get('authorization')
   const isWorker = auth === `Bearer ${process.env.CRON_SECRET}`
   if (!isWorker && !userId) {

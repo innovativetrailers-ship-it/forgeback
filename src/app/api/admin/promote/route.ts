@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireUser } from '@/lib/auth/requireUser'
 
 // Only callable by existing admins — promotes another user to admin
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const callerId = req.headers.get('x-user-id')
-  const role     = req.headers.get('x-user-role')
+  const callerId = (await requireUser(req))?.id ?? null
+  const role     = (await requireUser(req))?.role ?? null
 
   if (role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

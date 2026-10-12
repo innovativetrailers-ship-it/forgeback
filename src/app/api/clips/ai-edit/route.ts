@@ -4,6 +4,7 @@ import { uploadToR2 } from '@/lib/storage/r2'
 import { relightImage } from '@/lib/fal/lighting'
 import { runFal, extractImageUrl } from '@/lib/fal/client'
 import type { MaskOperation } from '@/lib/playback/interactiveTypes'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -36,7 +37,7 @@ function decodeB64(b64: string): Buffer {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: AiEditBody

@@ -1,5 +1,6 @@
 import { logCaught } from '@/lib/diagnostics/caught'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export const maxDuration = 300
 import { z } from 'zod'
@@ -41,8 +42,8 @@ const createJobSchema = z.object({
 
 export async function POST(request: NextRequest) {
   const session = await auth()
-  const userId = request.headers.get('x-user-id') ?? session?.user?.id
-  const userRole = request.headers.get('x-user-role') ?? (session?.user as { role?: string } | undefined)?.role ?? 'FREE'
+  const userId = (await requireUser(request))?.id ??  session?.user?.id
+  const userRole = (await requireUser(request))?.role ??  (session?.user as { role?: string } | undefined)?.role ?? 'FREE'
 
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

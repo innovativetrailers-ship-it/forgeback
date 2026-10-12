@@ -3,11 +3,12 @@ import { uploadToR2 } from '@/lib/storage/r2'
 import { nanoid } from 'nanoid'
 import { db } from '@/lib/db'
 import { ensureMainFolder } from '@/lib/library/folders'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const MAX_SIZE = 500 * 1024 * 1024 // 500MB
 
 export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const formData = await request.formData()

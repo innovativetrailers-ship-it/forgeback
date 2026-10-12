@@ -2,9 +2,10 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { getProjectPresence, updatePresence } from '@/lib/collab/presence'
 import { resolveCollabAccess } from '@/lib/collab/access'
 import { broadcastCollab } from '@/lib/collab/hub'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

@@ -8,6 +8,7 @@ import { mkdirSync, rmSync,
          readFileSync }              from 'fs'
 import { join }                      from 'path'
 import { randomUUID }                from 'crypto'
+import { requireUser } from '@/lib/auth/requireUser'
 
 interface StemBus {
   name:   'dialogue' | 'music' | 'sfx'
@@ -16,7 +17,7 @@ interface StemBus {
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId  = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId  = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { buses } = await req.json() as { buses: StemBus[] }

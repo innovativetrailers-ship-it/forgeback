@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { checkAndDeductCredits, OPERATION_COSTS } from '@/lib/credits'
 import { renderStemPackage, exportProToolsSessionXML, exportOMF } from '@/lib/audio/ProToolsExport'
 import type { StemRenderParams } from '@/lib/audio/ProToolsExport'
+import { requireUser } from '@/lib/auth/requireUser'
 
 type StemAction = 'render_stems' | 'export_pt_xml' | 'export_omf'
 
@@ -18,7 +19,7 @@ interface StemsRequestBody {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: StemsRequestBody

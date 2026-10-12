@@ -1,0 +1,39 @@
+import { anonymousApiBlocked, stripSpoofedIdentity } from '../../src/lib/auth/identity'
+import { isFalMediaUrl, signFalWebhookToken, verifyFalWebhookToken } from '../../src/lib/webhooks/falSignature'
+
+describe('spoofed identity headers', () => {
+  it('drops client identity headers and blocks anonymous API calls', () => {
+    const headers = new Headers({
+      'x-user-id': 'spoof',
+      'x-user-role': 'ADMIN',
+      'x-forge-desktop': '1',
+      accept: 'application/json',
+    })
+    const clean = stripSpoofedIdentity(headers)
+    expect(clean.get('x-user-id')).toBeNull()
+    expect(clean.get('x-user-role')).toBeNull()
+    expect(clean.get('x-forge-desktop')).toBeNull()
+    expect(clean.get('accept')).toBe('application/json')
+    expect(anonymousApiBlocked('/api/admin/promote', false, false)).toBe(true)
+    expect(anonymousApiBlocked('/api/admin/promote', true, false)).toBe(false)
+    expect(anonymousApiBlocked('/api/webhooks/fal', false, false)).toBe(false)
+    expect(anonymousApiBlocked('/login', false, false)).toBe(false)
+  })
+})
+
+describe('forged FAL webhook', () => {
+  const prev = process.env.NEXTAUTH_SECRET
+  beforeAll(() => { process.env.NEXTAUTH_SECRET = 'test-secret' })
+  afterAll(() => { process.env.NEXTAUTH_SECRET = prev })
+
+  it('rejects a missing or stale token and a foreign media URL', () => {
+    expect(verifyFalWebhookToken('')).toBeNull()
+    expect(verifyFalWebhookToken('not-a-token')).toBeNull()
+    const token = signFalWebhookToken('run_1', 60, 1_000)
+    expect(verifyFalWebhookToken(token, 1_000)).toBe('run_1')
+    expect(verifyFalWebhookToken(token, 2_000)).toBeNull()
+    expect(isFalMediaUrl('https://v3.fal.media/files/out.mp4')).toBe(true)
+    expect(isFalMediaUrl('https://evil.example/out.mp4')).toBe(false)
+    expect(isFalMediaUrl('http://v3.fal.media/files/out.mp4')).toBe(false)
+  })
+})

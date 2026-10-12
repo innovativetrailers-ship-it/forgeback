@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { runAIDirector } from '@/lib/studio/director'
 import { checkAndDeductCredits } from '@/lib/credits'
 import { db } from '@/lib/db'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   brief: z.string().min(10).max(2000),
@@ -13,7 +14,7 @@ const schema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()

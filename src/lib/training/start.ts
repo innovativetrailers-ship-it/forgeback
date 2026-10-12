@@ -43,7 +43,7 @@ export async function startTraining(input: {
     steps: input.steps,
   })
   const webhookUrl = process.env.NEXT_PUBLIC_APP_URL
-    ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}/api/webhooks/fal`
+    ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}/api/webhooks/fal?token=${encodeURIComponent((await import('@/lib/webhooks/falSignature')).signFalWebhookToken(input.runId))}`
     : undefined
 
   return withGenContext({

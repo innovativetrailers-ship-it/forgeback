@@ -1,12 +1,13 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { lockClip, unlockClip, getOrCreateSession } from '@/lib/collab'
+import { requireUser } from '@/lib/auth/requireUser'
 
 // POST — acquire lock on a clip
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ clipId: string }> },
 ): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { clipId } = await params
@@ -39,7 +40,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ clipId: string }> },
 ): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { clipId } = await params

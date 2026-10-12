@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import type { UserRole } from '@/generated/prisma/client'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const ROLE_MAP: Record<string, UserRole> = {
   free: 'FREE',
@@ -17,7 +18,7 @@ const CREDITS_MAP: Record<string, number> = {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   const body = await req.json()
   const { userId: bodyUserId, planId, paymentProvider, externalPaymentId } = body
 

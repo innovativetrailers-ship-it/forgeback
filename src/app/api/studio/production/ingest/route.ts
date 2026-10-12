@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { orchestrate } from '@/lib/orchestration'
 import { saveProductionBreakdown } from '@/lib/studio/productionBoard'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   projectId: z.string().min(1),
@@ -11,7 +12,7 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = schema.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })

@@ -4,6 +4,7 @@ import { isGenerationPausedError } from '@/lib/generation/pause'
 import { readDialogue } from '@/lib/audio/dialogueIntent'
 import { rememberDialogueTake, synthesiseVoiceTake } from '@/lib/audio/voiceTake'
 import { db } from '@/lib/db'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const params = z.object({
   model: z.enum(['eleven_v3', 'flash']).default('eleven_v3'),
@@ -26,7 +27,7 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = schema.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'Invalid voice take' }, { status: 400 })

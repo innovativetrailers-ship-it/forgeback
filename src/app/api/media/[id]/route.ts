@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { contentTypeForKey } from '@/lib/library/model'
 import { mediaMissMessage, resolveOwnedMedia, signedUrlForStoredKey } from '@/lib/media/resolveStoredMedia'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -12,7 +13,7 @@ export async function GET(
   context: { params: Promise<unknown> },
 ) {
   const session = await auth()
-  const userId = request.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(request))?.id ??  session?.user?.id
   if (!userId) {
     return new Response('Unauthorized', { status: 401 })
   }

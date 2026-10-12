@@ -6,6 +6,9 @@ import {
   type DesktopPlatform,
   resolveReleaseAsset,
   keyFromReleaseUrl,
+  fetchReleaseManifest,
+  fetchShaSidecar,
+  macReleaseReady,
 } from '@/lib/desktop/releases'
 import { releaseObjectExists, getSignedReleaseUrl, releaseObjectKey } from '@/lib/storage/releasesR2'
 
@@ -16,20 +19,20 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   const session = await auth()
-  const userId = request.headers.get('x-user-id') ?? session?.user?.id
+  const userId = session?.user?.id
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { role: true, subscriptionTier: true, subscriptionStatus: true },
+    select: { role: true, subscriptionTier: true, subscriptionStatus: true, isInternal: true },
   })
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const tier = user.role === 'ADMIN'
+  const tier = user.role === 'ADMIN' || user.isInternal
     ? 'admin'
     : resolveSubscriptionTier(user.subscriptionTier, user.subscriptionStatus, 'USER')
 
@@ -50,8 +53,37 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Installer not available',
-        hint: 'Publish v3 installers to R2 and connect releases.forgecinema.app, or set NEXT_PUBLIC_DESKTOP_RELEASES_URL.',
+        hint: 'Publish a notarised Mac build before offering the download.',
       },
+      { status: 404 },
+    )
+  }
+
+  const manifest = await fetchReleaseManifest()
+  const [armSidecar, intelSidecar] = await Promise.all([
+    fetchShaSidecar(manifest.version, 'arm64'),
+    fetchShaSidecar(manifest.version, 'x64'),
+  ])
+  const macReady = macReleaseReady({
+    version: manifest.version,
+    notarized: manifest.mac.notarized,
+    sha256: manifest.sha256.arm64,
+    sidecar: armSidecar,
+  }) && macReleaseReady({
+    version: manifest.version,
+    notarized: manifest.mac.notarized,
+    sha256: manifest.sha256.x64,
+    sidecar: intelSidecar,
+  })
+  if (platform !== 'windows' && !macReady) {
+    return NextResponse.json(
+      { error: 'The Mac app is being prepared — signed builds are coming. Use the web app meanwhile.' },
+      { status: 404 },
+    )
+  }
+  if (platform === 'windows' && !manifest.windows.signed) {
+    return NextResponse.json(
+      { error: 'The Windows app is being prepared — signed builds are coming. Use the web app meanwhile.' },
       { status: 404 },
     )
   }

@@ -6,6 +6,7 @@ import {
   getFrameIOTeams,
   getFrameIOProjects,
 } from '@/lib/production/FrameIOClient'
+import { requireUser } from '@/lib/auth/requireUser'
 
 interface FrameIOBody {
   action: 'create_project' | 'upload' | 'sync_comments' | 'list_teams' | 'list_projects'
@@ -19,7 +20,7 @@ interface FrameIOBody {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   if (!process.env.FRAMEIO_TOKEN) {

@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createLibraryAsset } from '@/lib/library/folders'
 import { db } from '@/lib/db'
 import { objectKeyFromStored } from '@/lib/storage/r2'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await context.params
   const clip = await db.studioClip.findUnique({

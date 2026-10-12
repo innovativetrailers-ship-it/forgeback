@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { importTimeline } from '@/lib/interchange/OTIOClient'
+import { requireUser } from '@/lib/auth/requireUser'
 
 // POST multipart: file (.edl, .xml, .fcpxml, .aaf, .otioz)
 // Returns TimelineRecipe JSON for loading into the editor
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let formData: FormData

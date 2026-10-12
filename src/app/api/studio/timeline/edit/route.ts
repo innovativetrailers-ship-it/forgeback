@@ -7,6 +7,7 @@ import { extractVideoFrame } from '@/lib/fal/frameExtract'
 import { GENERATIVE_EDIT_CREDITS } from '@/lib/timeline/timeRemap'
 import { buildConditionInput, quoteMultiRef, type VaceResolution } from '@/lib/studio/multiReference'
 import { isGenerationPausedError } from '@/lib/generation/pause'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const ENGINES = {
   inpaint: 'wan-vace-14b/inpainting',
@@ -42,7 +43,7 @@ const TOOLS = {
 type Tool = keyof typeof TOOLS
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const q = req.nextUrl.searchParams.get('q')?.trim()
   if (!q) return NextResponse.json({ items: [] })
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[timeline-edit] body', err instanceof Error ? err.message : err)

@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/requireUser'
 /**
  * Intelligence probe trigger API.
  * Runs the probe battery against one or more models.
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
   // Full battery = 118 FAL video generations per model — CRON_SECRET or ADMIN only.
   const cronSecret = req.headers.get('authorization')
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
 
   const isWorker = cronSecret === `Bearer ${process.env.CRON_SECRET}`
   if (!isWorker) {
@@ -121,7 +122,7 @@ export async function POST(req: NextRequest) {
 
 // GET — list valid models and probe categories
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   return NextResponse.json({

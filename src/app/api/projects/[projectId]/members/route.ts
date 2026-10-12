@@ -7,12 +7,13 @@ import {
   projectRoleToDb,
   dbRoleToProjectRole,
 } from '@/lib/collab/access'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { projectId } = await params
   const access = await resolveCollabAccess(projectId, userId)
@@ -39,7 +40,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { projectId } = await params
   const access = await resolveCollabAccess(projectId, userId)
@@ -75,7 +76,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { projectId } = await params
   const access = await resolveCollabAccess(projectId, userId)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { cleanText, parseStatus } from '@/lib/features/request'
+import { requireUser } from '@/lib/auth/requireUser'
 
 async function allowed(userId: string | null) {
   if (!userId) return false
@@ -9,7 +10,7 @@ async function allowed(userId: string | null) {
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!(await allowed(userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id } = await params
   const body = await req.json().catch((err) => {

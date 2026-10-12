@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listPlaybooks, savePlaybook } from '@/lib/playbook'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const projectId = request.nextUrl.searchParams.get('projectId') ?? undefined
   const playbooks = await listPlaybooks(userId, projectId)
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await request.json().catch((err) => {
     console.warn("[caught] src/app/api/playbooks/route.ts:15", err instanceof Error ? { name: err.name, message: err.message } : err)

@@ -3,9 +3,10 @@ import { checkAndDeductCredits, refundCredits, OPERATION_COSTS } from '../../../
 import { upscaleImage } from '../../../../lib/upscale/image'
 import { engineCreditKey } from '../../../../lib/upscale/router'
 import type { UpscaleFactor } from '../../../../lib/upscale/router'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: {

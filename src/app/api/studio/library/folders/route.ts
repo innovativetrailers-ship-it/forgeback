@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { ensureMainFolder } from '@/lib/library/folders'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const createSchema = z.object({
   projectId: z.string().min(1),
@@ -25,7 +26,7 @@ async function ownedProject(userId: string, projectId: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = createSchema.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'Invalid folder' }, { status: 400 })
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = renameSchema.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'Invalid rename' }, { status: 400 })
@@ -66,7 +67,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = deleteSchema.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'Invalid delete' }, { status: 400 })

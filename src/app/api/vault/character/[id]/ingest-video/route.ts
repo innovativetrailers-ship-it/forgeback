@@ -8,7 +8,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = requireUserId(request)
+  const userId = await requireUserId(request)
   if (userId instanceof NextResponse) return userId
 
   const { id } = await params

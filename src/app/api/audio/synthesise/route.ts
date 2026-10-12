@@ -3,9 +3,10 @@ import { uploadToR2 }                     from '@/lib/storage/r2'
 import { deductCredits, OPERATION_COSTS } from '@/lib/credits'
 import { db }                             from '@/lib/db'
 import { checkAccess }                    from '@/lib/access/guard'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: Request) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { text, voiceId, stability, similarity } = await req.json() as {

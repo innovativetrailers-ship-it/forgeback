@@ -1630,6 +1630,22 @@ model DesktopActivation {
   @@index([userId])
 }
 
+model DesktopLinkCode {
+  id         String    @id @default(cuid())
+  code       String    @unique
+  deviceId   String
+  deviceName String?
+  ipHash     String?
+  expiresAt  DateTime
+  consumedAt DateTime?
+  approvedAt DateTime?
+  userId     String?
+  createdAt  DateTime  @default(now())
+
+  @@index([deviceId, createdAt])
+  @@index([ipHash, createdAt])
+}
+
 enum FeatureRequestKind {
   feature
   tool

@@ -6,9 +6,10 @@ import { isGenerationPausedError } from '@/lib/generation/pause'
 import { db } from '@/lib/db'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { AERIAL_CREDITS, aerialPrompt } from '@/lib/studio/generationUtilities'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[aerial]', err instanceof Error ? err.message : err)

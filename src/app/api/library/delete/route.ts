@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { logR2DeleteFailed } from '@/lib/diagnostics/caught'
 import { deleteFromR2, keyFromUrl, objectKeyFromStored, renderVideoKey } from '@/lib/storage/r2'
+import { requireUser } from '@/lib/auth/requireUser'
 
 async function deleteLibraryObject(key: string): Promise<void> {
   await deleteFromR2(key).catch((err) => {
@@ -16,7 +17,7 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = schema.parse(await req.json())
 

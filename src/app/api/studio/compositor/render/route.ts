@@ -8,6 +8,7 @@ import { runFal } from '@/lib/fal/client'
 import { isGenerationPausedError } from '@/lib/generation/pause'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { nanoid } from 'nanoid'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   graph: z.object({
@@ -22,7 +23,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 120
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

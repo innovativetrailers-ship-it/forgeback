@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { deleteFromR2, objectKeyFromStored } from '@/lib/storage/r2'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const moveSchema = z.object({
   projectId: z.string().min(1),
@@ -16,7 +17,7 @@ const deleteSchema = z.object({
 })
 
 export async function PATCH(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = moveSchema.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'Invalid move' }, { status: 400 })
@@ -31,7 +32,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = deleteSchema.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'Invalid delete' }, { status: 400 })

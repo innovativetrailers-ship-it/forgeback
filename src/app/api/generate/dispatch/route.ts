@@ -5,6 +5,7 @@ import { dispatchClip } from '@/lib/routing/MediaDispatcher'
 import { blendMultiEngineClip } from '@/lib/routing/SeamlessBlender'
 import { checkAndDeductCredits } from '@/lib/credits'
 import type { SceneSegment } from '@/lib/routing/types'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const segmentSchema = z.object({
   segmentId:          z.string(),
@@ -27,7 +28,7 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()

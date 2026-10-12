@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { getEffectiveTier, resolveSubscriptionTier } from '@/lib/access/tiers'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const user = await db.user.findUnique({
@@ -15,12 +16,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       creditBalance: true,
       subscriptionTier: true,
       subscriptionStatus: true,
+      isInternal: true,
     },
   })
 
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  if (user.role === 'ADMIN') {
+  if (user.role === 'ADMIN' || user.isInternal) {
     return NextResponse.json({
       isAdmin:            true,
       credits:            9_999_999,
@@ -29,7 +31,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       subscriptionStatus: 'active',
       tier:               'admin',
       effectiveTier:      'admin',
-      message:            'Dev account — unlimited credits',
+      message:            user.isInternal ? 'Internal account' : 'Dev account — unlimited credits',
     })
   }
 

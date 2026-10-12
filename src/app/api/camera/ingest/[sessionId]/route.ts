@@ -3,12 +3,13 @@ import { randomUUID } from 'crypto'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { recordChunkMetadata, getCameraSession } from '@/lib/camera/WirelessIngest'
 import { renderQueue } from '@/lib/queue'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> },
 ): Promise<NextResponse> {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { sessionId } = await params

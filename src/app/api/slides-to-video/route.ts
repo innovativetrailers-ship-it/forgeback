@@ -2,9 +2,10 @@ import { renderQueue }  from '@/lib/queue'
 import { db }           from '@/lib/db'
 import { deductCredits } from '@/lib/credits'
 import { checkAccess }   from '@/lib/access/guard'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: Request) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {

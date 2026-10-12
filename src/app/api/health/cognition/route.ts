@@ -1,9 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { getAgentHealth } from '@/lib/cognition'
 import { db } from '@/lib/db'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  if (req.headers.get('x-user-role') !== 'ADMIN')
+  if ((await requireUser(req))?.role ?? null !== 'ADMIN')
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const [episodic, semantic, policies, downModels] = await Promise.all([

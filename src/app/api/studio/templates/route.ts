@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { Prisma } from '@/generated/prisma/client'
 import { db } from '@/lib/db'
 import { BUILT_IN_TEMPLATES, TEMPLATE_CATEGORIES, stripMediaText, type FilmTemplateRecord, type TemplateCategory } from '@/lib/templates/catalog'
+import { requireUser } from '@/lib/auth/requireUser'
 
 function fromRow(row: {
   id: string
@@ -32,7 +33,7 @@ function fromRow(row: {
 }
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   const category = req.nextUrl.searchParams.get('category') ?? ''
   const q = (req.nextUrl.searchParams.get('q') ?? '').trim().toLowerCase()
   let saved: FilmTemplateRecord[] = []
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[templates] body', err instanceof Error ? err.message : err)

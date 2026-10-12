@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { failReasonsFor, isShotPurpose, ratingPromptFor } from '@cinema/core'
 import { rateShot } from '@/lib/cognition/shotRatings'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   thumbs: z.enum(['up', 'down']).optional(),
@@ -17,7 +18,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params

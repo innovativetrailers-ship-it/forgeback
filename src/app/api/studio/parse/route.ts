@@ -5,6 +5,7 @@ import { assertModelsResolvable } from '@/lib/models/resolveModel'
 import { MODEL_COSTS } from '@/lib/routing/engineRegistry'
 import { initializeFirstShotDirection } from '@/lib/studio/initializeFirstShot'
 import { listShotPlan, parseScriptToShotPlan } from '@/lib/studio/shotPlan'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   projectId: z.string(),
@@ -15,7 +16,7 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = schema.parse(await req.json())

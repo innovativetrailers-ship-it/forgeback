@@ -8,9 +8,10 @@ import { isGenerationPausedError } from '@/lib/generation/pause'
 import { db } from '@/lib/db'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { referenceImagePlan } from '@/lib/studio/referenceImage'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const rows = await db.asset.findMany({
     where: { ownerId: userId, kind: 'character' },
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch((err) => {
     console.warn('[looks]', err instanceof Error ? err.message : err)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { cleanText } from '@/lib/features/request'
+import { requireUser } from '@/lib/auth/requireUser'
 
 async function allowed(userId: string | null) {
   if (!userId) return false
@@ -9,7 +10,7 @@ async function allowed(userId: string | null) {
 }
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!(await allowed(userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const rows = await db.featureRequest.findMany({
     orderBy: [{ upvotes: 'desc' }, { createdAt: 'desc' }],

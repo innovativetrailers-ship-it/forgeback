@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/requireUser'
 /**
  * POST /api/export/imf — IMF (Interoperable Master Format) package export.
  * Calls the Python IMF microservice on port 7433.
@@ -11,7 +12,7 @@ import { checkTierAccess }            from '@/lib/access/guard'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId  = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId  = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   // IMF export requires Ultimate tier

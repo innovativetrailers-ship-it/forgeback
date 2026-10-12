@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { orchestrate } from '@/lib/orchestration'
 import { nanoid } from 'nanoid'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   prompt:          z.string().min(1),
@@ -17,7 +18,7 @@ const TIER_LABEL: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
