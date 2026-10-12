@@ -25,7 +25,7 @@ export async function opticalFlowRetime(params: {
     if (section) {
       const duration = section.end - section.start
       const trimPath = join(tmpDir, 'trimmed.mp4')
-      runArgv("ffmpeg", ["-i", videoUrl, "-ss", section.start, "-t", duration, "-c", "copy", trimPath, "-y"])
+      runArgv('ffmpeg', ['-i', videoUrl, '-ss', String(section.start), '-t', String(duration), '-c', 'copy', trimPath, '-y'])
       inputUrl = trimPath
     }
 
@@ -68,8 +68,8 @@ export async function morphCut(params: {
     const fps = 24
     const tailDuration = overlapFrames / fps
 
-    runArgv("ffmpeg", ["-sseof", "-${tailDuration}", "-i", clipAUrl, "-c", "copy", tailPath, "-y"])
-    runArgv("ffmpeg", ["-i", clipBUrl, "-t", tailDuration, "-c", "copy", headPath, "-y"])
+    runArgv('ffmpeg', ['-sseof', `-${tailDuration}`, '-i', clipAUrl, '-c', 'copy', tailPath, '-y'])
+    runArgv('ffmpeg', ['-i', clipBUrl, '-t', String(tailDuration), '-c', 'copy', headPath, '-y'])
 
     // Use FILM interpolation across the overlap
     const morphResult = await falSubscribe(falEndpoint('film-video-frame-interpolation'), {
@@ -93,8 +93,8 @@ export async function morphCut(params: {
       runArgv("ffprobe", ["-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", clipBUrl]).toString().trim()
     )
 
-    runArgv("ffmpeg", ["-i", clipAUrl, "-t", clipADur - tailDuration, "-c", "copy", trimAPath, "-y"])
-    runArgv("ffmpeg", ["-i", clipBUrl, "-ss", tailDuration, "-t", clipBDur - tailDuration, "-c", "copy", trimBPath, "-y"])
+    runArgv('ffmpeg', ['-i', clipAUrl, '-t', String(clipADur - tailDuration), '-c', 'copy', trimAPath, '-y'])
+    runArgv('ffmpeg', ['-i', clipBUrl, '-ss', String(tailDuration), '-t', String(clipBDur - tailDuration), '-c', 'copy', trimBPath, '-y'])
 
     // Download morphed clip
     const morphBuffer = Buffer.from(await (await fetch(morphResult.video.url)).arrayBuffer())
