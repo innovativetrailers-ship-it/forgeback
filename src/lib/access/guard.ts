@@ -62,26 +62,33 @@ async function loadUserAccess(userId: string) {
     select: {
       role: true,
       creditBalance: true,
-      subscriptionTier: true,
-      subscriptionStatus: true,
       isInternal: true,
       email: true,
+      subscriptions: {
+        orderBy: { updatedAt: 'desc' },
+        take: 1,
+        select: { plan: true, status: true },
+      },
     },
   })
 }
 
+/** Tier comes from the Subscription row. User.subscriptionTier is not read. */
+export function tierFieldsFromSubscription(
+  subscription: { plan: string; status: string } | null,
+  role: string,
+): { tier: SubscriptionTier; effectiveTier: SubscriptionTier } {
+  const tier = resolveSubscriptionTier(subscription?.plan, subscription?.status, role)
+  return { tier, effectiveTier: getEffectiveTier(tier, subscription?.status, role === 'ADMIN') }
+}
+
 function tierFromUser(
-  user: { role: string; subscriptionTier: string; subscriptionStatus: string; isInternal?: boolean } | null,
+  user: { role: string; isInternal?: boolean; subscriptions: Array<{ plan: string; status: string }> } | null,
 ): { tier: SubscriptionTier; effectiveTier: SubscriptionTier; isAdmin: boolean; isInternal: boolean } {
   const isAdmin = user?.role === 'ADMIN'
   const isInternal = user?.isInternal === true
-  const tier = resolveSubscriptionTier(
-    user?.subscriptionTier,
-    user?.subscriptionStatus,
-    user?.role ?? 'USER',
-  )
-  const effectiveTier = getEffectiveTier(tier, user?.subscriptionStatus, isAdmin)
-  return { tier, effectiveTier, isAdmin, isInternal }
+  const fields = tierFieldsFromSubscription(user?.subscriptions[0] ?? null, user?.role ?? 'USER')
+  return { ...fields, isAdmin, isInternal }
 }
 
 export async function checkAccess(

@@ -271,7 +271,11 @@ export async function orchestrateGeneration(
   // ── Layer 0: Preflight gate (before paid video generation) ───────────────
   const user = await db.user.findUnique({
     where: { id: input.userId },
-    select: { creditBalance: true, role: true, subscriptionTier: true },
+    select: {
+      creditBalance: true,
+      role: true,
+      subscriptions: { orderBy: { updatedAt: 'desc' }, take: 1, select: { plan: true, status: true } },
+    },
   })
   const userCredits = user?.role === 'ADMIN' ? 9_999_999 : (user?.creditBalance ?? 0)
   const pf = await preflight({
@@ -303,7 +307,7 @@ export async function orchestrateGeneration(
   if (input.jobId) {
     const tier = user?.role === 'ADMIN'
       ? 'admin'
-      : (user?.subscriptionTier?.toLowerCase() ?? 'free')
+      : (user?.subscriptions[0]?.plan?.toLowerCase() ?? 'free')
     const budgetCap = TIER_BUDGET_CAPS[tier] ?? TIER_BUDGET_CAPS.free
     const held = await openHold(input.userId, input.jobId, pf.estimate.credits, budgetCap)
     await db.renderJob.update({
