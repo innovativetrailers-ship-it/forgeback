@@ -1,4 +1,6 @@
 import { auth } from '@/lib/auth'
+import { authSecret } from '@/lib/auth/requiredEnv'
+import { mobileUserId } from '@/lib/auth/mobileJwt'
 import { db } from '@/lib/db'
 import { verifyEntitlementToken } from '@/lib/entitlement/resolve'
 
@@ -17,6 +19,7 @@ export async function requireUser(req: Request): Promise<RequestUser | null> {
     const token = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : ''
     const claims = token ? verifyEntitlementToken(token) : null
     if (claims && typeof claims.userId === 'string') userId = claims.userId
+    if (!userId && token) userId = await mobileUserId(token, authSecret())
   }
   if (!userId) return null
   const user = await db.user.findUnique({
