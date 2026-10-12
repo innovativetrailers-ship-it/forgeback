@@ -92,6 +92,10 @@ model User {
   role               UserRole  @default(FREE)
   creditBalance      Int       @default(50)
   heldCredits        Int       @default(0)
+  /** Monthly subscription allocation. Drawn before purchased credits. */
+  allocationCredits  Int       @default(0)
+  /** Purchased packs. Drawn after the monthly allocation. */
+  purchasedCredits   Int       @default(0)
   totalGenerated     Int       @default(0)
   subscriptionTier     String    @default("free")
   subscriptionStatus String    @default("trial")

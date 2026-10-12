@@ -95,7 +95,10 @@ describe('billing and camera ownership', () => {
 
   it('subscription invoice.paid increments credits and does not replace them', async () => {
     const { subscriptionCreditData } = await import('../../src/lib/billing/relayMeter')
-    expect(subscriptionCreditData(400)).toEqual({ creditBalance: { increment: 400 } })
+    expect(subscriptionCreditData(400)).toEqual({
+      creditBalance: { increment: 400 },
+      allocationCredits: { increment: 400 },
+    })
     expect(subscriptionCreditData(400)).not.toEqual({ creditBalance: 400 })
   })
 

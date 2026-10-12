@@ -24,7 +24,7 @@ export async function openHold(
 
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { creditBalance: true, role: true, heldCredits: true, isInternal: true },
+    select: { creditBalance: true, role: true, heldCredits: true, isInternal: true, allocationCredits: true, purchasedCredits: true },
   })
   if (!user) throw new EscrowError('User not found')
   if (user.isInternal) {
@@ -42,11 +42,16 @@ export async function openHold(
   }
 
   await db.$transaction(async (tx) => {
+    const { allocationDraw } = await import('@/lib/billing/relayPolicy')
+    const drawn = allocationDraw(user.allocationCredits, user.purchasedCredits, held)
+    if (!drawn) throw new EscrowError(`Insufficient credits: need ${held} held`)
     const updated = await tx.user.updateMany({
       where: { id: userId, creditBalance: { gte: held } },
       data: {
         creditBalance: { decrement: held },
         heldCredits: { increment: held },
+        allocationCredits: { decrement: user.allocationCredits - drawn.allocation },
+        purchasedCredits: { decrement: user.purchasedCredits - drawn.purchased },
       },
     })
     if (updated.count !== 1) {

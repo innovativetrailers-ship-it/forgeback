@@ -38,8 +38,14 @@ export function debitIfCovered(balance: number, amount: number): { ok: boolean; 
   return { ok: true, balance: balance - amount }
 }
 
-export function subscriptionCreditData(credits: number): { creditBalance: { increment: number } } {
-  return { creditBalance: { increment: credits } }
+export function subscriptionCreditData(credits: number): {
+  creditBalance: { increment: number }
+  allocationCredits: { increment: number }
+} {
+  return {
+    creditBalance: { increment: credits },
+    allocationCredits: { increment: credits },
+  }
 }
 
 export function jobIdsToRelease(ids: Array<string | null | undefined>): string[] {
