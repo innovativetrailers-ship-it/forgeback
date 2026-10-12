@@ -297,7 +297,7 @@ export function BrandKitPanel() {
         <div key={kit.id} className="rounded border border-[var(--border)] p-2">
           <p>{kit.name} · {kit.primaryColor} · {kit.fontFamily}</p>
           <button type="button" className="mr-2 text-[var(--teal-bright)]" onClick={() => linkSelected(kit.id, primary, font)}>Link selected clip</button>
-          <button type="button" onClick={() => void saveColour(kit)}>Update linked titles</button>
+          <button type="button" onClick={() => void saveColour(kit)}>Save kit colour. Titles are not redrawn.</button>
         </div>
       ))}
       <p>{note}</p>
@@ -316,6 +316,7 @@ export function AvatarPanel() {
   const [notMinor, setNotMinor] = useState(false)
   const [quote, setQuote] = useState<number | null>(null)
   const [note, setNote] = useState('OmniHuman v1.5. 1080p stops at 30s. 720p stops at 60s. A longer script is split, not cut off.')
+  const [takeUrl, setTakeUrl] = useState('')
 
   const spoken = Math.max(seconds, Math.ceil(script.trim().split(/\s+/).filter(Boolean).length / 2.2))
 
@@ -350,7 +351,7 @@ export function AvatarPanel() {
     }
     setNote(body.note || 'New take stored. It was not placed on the timeline.')
     setQuote(null)
-    ;(window as unknown as { __avatarUrl?: string }).__avatarUrl = body.videoUrl
+    setTakeUrl(body.videoUrl)
   }
 
   return (
@@ -376,8 +377,8 @@ export function AvatarPanel() {
       <button type="button" className="ml-2 rounded bg-[var(--teal-bright)] px-2 py-1 text-black" disabled={!likeness || !rights || !notMinor} onClick={() => void run(true)}>Confirm</button>
       {quote != null && <p>{quote} credits</p>}
       <button type="button" className="block text-[var(--teal-bright)]" onClick={() => {
-        const url = (window as unknown as { __avatarUrl?: string }).__avatarUrl
-        if (!url) { setNote('Generate a take first. Nothing was placed.'); return }
+        if (!takeUrl) { setNote('Generate a take first. Nothing was placed.'); return }
+        const url = takeUrl
         appendTimelineClipToPlayback({ id: crypto.randomUUID(), sourceUrl: url, durationSec: spoken, label: 'Avatar' })
         setNote('Added at the playhead. The original files stay.')
       }}>Add take to timeline</button>
