@@ -45,7 +45,8 @@ export async function synthesiseVoiceTake(input: {
   const audioUrl = extractAudioUrl(data)
   if (!audioUrl) throw new Error('Speech model returned no audio')
   const bytes = Buffer.from(await (await fetch(audioUrl)).arrayBuffer())
-  const key = `uploads/${input.userId}/voice/${nanoid()}.mp3`
+  const { opaqueObjectKey } = await import('@/lib/upload/sniff')
+  const key = opaqueObjectKey('mp3')
   const storedUrl = await uploadToR2(bytes, key, 'audio/mpeg')
   const folder = input.sceneId
     ? await ensureSceneFolder(input.projectId, input.sceneId, 'Scene')
