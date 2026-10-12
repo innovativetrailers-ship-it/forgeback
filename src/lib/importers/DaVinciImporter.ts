@@ -23,7 +23,7 @@ export async function importDaVinciProject(fileBuffer: Buffer): Promise<Imported
     db.close()
 
     return {
-      projectName: 'DaVinci Resolve Project',
+      projectName: 'Colour project',
       sequences: timelines.map((t) => ({
         name: t.name,
         id: String(t.id),

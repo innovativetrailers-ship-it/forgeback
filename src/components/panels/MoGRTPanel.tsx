@@ -26,7 +26,7 @@ const BUILT_IN_TEMPLATES: MoGRTTemplate[] = [
   { id: 'tr-002', name: 'Glitch Cut',             category: 'transitions',     previewUrl: null, tags: ['transition', 'glitch'],     duration: 0.3, editableFields: ['intensity'] },
   { id: 'tr-003', name: 'Film Burn',              category: 'transitions',     previewUrl: null, tags: ['transition', 'film'],       duration: 1.5, editableFields: ['color'] },
   { id: 'so-001', name: 'Instagram Story Frame',  category: 'social overlays', previewUrl: null, tags: ['social', 'instagram'],     duration: 0,  editableFields: ['username', 'color'] },
-  { id: 'so-002', name: 'TikTok Like Animation',  category: 'social overlays', previewUrl: null, tags: ['social', 'tiktok'],        duration: 2,  editableFields: [] },
+  { id: 'so-002', name: 'Social like animation',  category: 'social overlays', previewUrl: null, tags: ['social'],        duration: 2,  editableFields: [] },
   { id: 'es-001', name: 'Subscribe Endscreen',    category: 'end screens',     previewUrl: null, tags: ['endscreen', 'subscribe'],  duration: 20, editableFields: ['channel', 'color'] },
 ]
 

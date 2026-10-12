@@ -2,7 +2,7 @@ import { assertGenerationNotPaused } from '@/lib/generation/pause'
 import type { ModelDef } from '@/lib/models/resolve'
 import type { SubProgressFn } from '@/lib/orchestration/types'
 
-const RETIRED = 'Sora 2 was deprecated in April 2026 and is not in the pool. Physics routes to veo-3.1.'
+const RETIRED = 'That video route was removed in April 2026 and is not in the pool. Physics routes to veo-3.1.'
 
 export interface ReplicateVideoParams {
   prompt: string

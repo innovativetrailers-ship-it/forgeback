@@ -23,10 +23,8 @@ export const metadata: Metadata = {
     'text to video',
     'video editing',
     'AI director',
-    'Kling',
-    'Runway',
-    'Veo 3',
-    'Luma Dream Machine',
+    'cinematic video',
+    'film editing',
   ],
   authors: [{ name: 'Growth Engine', url: APP_URL }],
   creator: 'Growth Engine',
@@ -37,7 +35,7 @@ export const metadata: Metadata = {
     siteName: 'CINÉMA',
     title: 'CINÉMA — AI Film Production Platform',
     description:
-      "The world's most advanced AI film and video production platform. Create professional-grade video with Kling, Runway, Veo 3, and more.",
+      "The world's most advanced AI film and video production platform. Create professional-grade video from a script.",
     images: [
       {
         url: '/opengraph-image',
