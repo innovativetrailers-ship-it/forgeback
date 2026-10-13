@@ -34,6 +34,37 @@ enum JobStatus {
   COMPLETE
   FAILED
   CANCELLED
+  NEEDS_ATTENTION
+}
+
+enum HoldStatus {
+  ACTIVE
+  SETTLED
+  REFUNDED
+}
+
+enum StudioSceneStatus {
+  PENDING
+  GENERATING
+  GENERATED
+  FAILED
+  PARTIAL
+}
+
+enum StudioClipStatus {
+  PENDING
+  AWAITING_DIRECTION
+  GENERATING
+  COMPLETED
+  FAILED
+  MANUAL
+}
+
+enum AnchorSource {
+  AUTO
+  MANUAL
+  KEYFRAME
+  NONE
 }
 
 enum LocationSource {
@@ -60,13 +91,23 @@ model User {
   passwordHash       String?
   role               UserRole  @default(FREE)
   creditBalance      Int       @default(50)
+  heldCredits        Int       @default(0)
+  /** Monthly subscription allocation. Drawn before purchased credits. */
+  allocationCredits  Int       @default(0)
+  /** Purchased packs. Drawn after the monthly allocation. */
+  purchasedCredits   Int       @default(0)
   totalGenerated     Int       @default(0)
+  subscriptionTier     String    @default("free")
   subscriptionStatus String    @default("trial")
+  privacy            Json?
+  dateOfBirth        DateTime?
+  deletionRequestedAt DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   projects        Project[]
   creditTxns      CreditTransaction[]
+  creditHolds     CreditHold[]
   renderJobs      RenderJob[]
   trainingData    TrainingData[]
   rlhfLogs        RLHFLog[]
@@ -75,6 +116,7 @@ model User {
   avatars         Avatar[]
   reviewLinks     ReviewLink[]
   brandKits         BrandKit[]
+  editorWorkspaces  EditorWorkspace[]
   filmProjects      FilmProject[]
   seriesProjects    SeriesProject[]
   clonedVoices      ClonedVoice[]
@@ -82,6 +124,25 @@ model User {
   stripeDeposits    StripeDeposit[]
   socialConnections SocialConnection[]
   vendorUsage     VendorUsageLog[]
+  locationPlates  LocationPlate[]
+  episodicMemories EpisodicMemory[]
+  trainingRuns    TrainingRun[]
+  trainedAssets   TrainedAsset[]
+  assets          Asset[]
+  consentRecords  ConsentRecord[]
+  storedObjects   StoredObject[]
+  playbooks       Playbook[]
+  projectMemberships ProjectMember[]
+  filmTemplates   FilmTemplate[]
+  subscriptions   Subscription[]
+  activations     DesktopActivation[]
+  featureRequests FeatureRequest[]
+  featureVotes    FeatureRequestVote[]
+  hasUsedDesktopTrial Boolean @default(false)
+  /** Designated Forge accounts. Unmetered. Pause and the submit chokepoint still apply. */
+  isInternal          Boolean   @default(false)
+  /** Dev account may call a provider with a key that stays on this computer. */
+  canUseOwnKeys       Boolean   @default(false)
 
   @@index([email])
 }
@@ -124,6 +185,15 @@ model Project {
   resolution      String    @default("1920x1080")
   status          String    @default("draft")
   isPublic        Boolean   @default(false)
+  gateMode        String    @default("auto")
+  premiseLock     Json?
+  musicUrl        String?
+  ambienceUrl     String?
+  styleLoraId     String?
+  genrePresetId   String?
+  scriptContent   String?   @db.Text
+  productionBreakdown Json?
+  collabMeta      Json?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -132,8 +202,178 @@ model Project {
   vaultChars      VaultCharacter[]
   vaultLocations  VaultLocation[]
   mediaBins       MediaBin[]
+  studioScenes    StudioScene[]
+  audioTracks     AudioTrack[]
+  playbooks       Playbook[]
+  members         ProjectMember[]
+  mediaFolders    MediaFolder[]
 
   @@index([userId])
+}
+
+enum ProjectRole {
+  OWNER
+  DIRECTOR
+  EDITOR
+  WRITER
+  REVIEWER
+  VIEWER
+}
+
+model ProjectMember {
+  id        String      @id @default(cuid())
+  projectId String
+  userId    String
+  role      ProjectRole
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@index([projectId])
+}
+
+enum AudioType {
+  DIALOGUE
+  MUSIC
+  AMBIENCE
+  SFX
+  CUSTOM
+}
+
+enum AudioProvider {
+  ELEVENLABS
+  SUNO
+  UPLOAD
+}
+
+enum AudioStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
+model AudioTrack {
+  id                  String        @id @default(cuid())
+  projectId           String
+  type                AudioType
+  provider            AudioProvider @default(ELEVENLABS)
+  status              AudioStatus   @default(PENDING)
+  prompt              String?       @db.Text
+  voiceId             String?
+  sunoStyle           String?
+  sunoLyrics          String?       @db.Text
+  instrumental        Boolean       @default(true)
+  shotPlanId          String?
+  sceneNumber         Int?
+  startSec            Float?
+  volumeDb            Float         @default(0)
+  muted               Boolean       @default(false)
+  locked              Boolean       @default(false)
+  fadeInMs            Int           @default(0)
+  fadeOutMs           Int           @default(0)
+  duckUnderDialogue   Boolean       @default(false)
+  durationWarning     Boolean       @default(false)
+  url                 String?
+  durationMs          Int?
+  alignmentWords  Json?
+  version             Int           @default(1)
+  prevUrl             String?
+  audioLoraId         String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  retiredAt           DateTime?
+  project             Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, type])
+  @@index([shotPlanId])
+}
+
+model StudioScene {
+  id              String            @id @default(cuid())
+  projectId       String
+  sceneNumber     Int
+  title           String?
+  transitionFrame String?
+  status          StudioSceneStatus @default(PENDING)
+  orphanedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  project         Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clips           StudioClip[]
+
+  @@unique([projectId, sceneNumber])
+  @@index([projectId])
+}
+
+model StudioClip {
+  id              String           @id @default(cuid())
+  sceneId         String
+  clipNumber      Int
+  prompt          String           @db.Text
+  originalPrompt  String?          @db.Text
+  duration        Int
+  aspectRatio     String           @default("16:9")
+  assignedModel   String?
+  status          StudioClipStatus @default(PENDING)
+  /** Why a clip was retagged. The clip row stays. */
+  statusReason    String?
+  orphanedAt      DateTime?
+  /** Sweeper may resubmit this clip once generation is not paused. */
+  retryEligible   Boolean          @default(false)
+  videoUrl        String?
+  storageKey      String?
+  lastFrame       String?
+  keyframeUrl     String?
+  scriptBeatId    String?
+  anchorPolicy    String           @default("none")
+  anchorFrameUrl  String?
+  anchorSource    AnchorSource     @default(NONE)
+  directionNotes  String?          @db.Text
+  modelOverride   String?
+  generatingAt    DateTime?
+  generateClaimJobId String?
+  generateClaimedBy  String?
+  generateClaimedAt  DateTime?
+  lipSyncEnabled  Boolean          @default(true)
+  lipSyncModel    String?
+  rawVideoUrl     String?
+  falRequestId    String?
+  falSubmission   String?          @db.Text
+  manualVideo     Boolean          @default(false)
+  estimatedCost   Int              @default(0)
+  characterIds     String[]         @default([])
+  locationId       String?
+  cameraAngle      String?
+  cameraMove       String?
+  shotSize         String?
+  lensFeel         String?
+  cameraSpeed      String?
+  cameraPrecision  Boolean          @default(false)
+  cameraSource     String?
+  endFrameUrl      String?
+  chainFrom        String?
+  chainBlock       String?
+  purpose          String?
+  delegationReason String?          @db.Text
+  delegatedMode    String?
+  boundary         Json?
+  moneyShot        Boolean          @default(false)
+  dialogue         Json?
+  characterLoraId  String?
+  styleLoraId      String?
+  genrePresetId    String?
+  scene           StudioScene      @relation(fields: [sceneId], references: [id], onDelete: Restrict)
+  location        LocationPlate?   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  @@unique([sceneId, clipNumber])
+  @@index([sceneId])
+  @@index([locationId])
+  @@index([status, generatingAt])
 }
 
 model VaultCharacter {
@@ -141,23 +381,49 @@ model VaultCharacter {
   projectId       String
   name            String
   referenceUrls   String[]
+  refProfile      String?
+  ref3Quarter     String?
+  refBack         String?
   faceEmbedding   Json?
+  bodyEmbedding   Json?
+  appearance      Json?
+  behavioralPrompt String?
   loraModelId     String?
   loraStatus      LoraStatus  @default(PENDING)
+  loraError       String?
   modelFamily     String?
   voiceId         String?
   voiceProvider   String?
+  voiceSource     String?
+  seed            Int?
   motionRefUrl    String?
   renderCount     Int         @default(0)
   styleJson       Json?
+  trainedAssetId  String?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
+  retiredAt       DateTime?
 
   project         Project     @relation(fields: [projectId], references: [id])
+  wardrobe        WardrobeItem[]
 
   @@index([projectId])
 }
 
+model WardrobeItem {
+  id           String         @id @default(cuid())
+  characterId  String
+  region       String
+  prompt       String
+  refImageUrl  String
+  lockedHash   String
+  appliedAt    DateTime       @default(now())
+  character    VaultCharacter @relation(fields: [characterId], references: [id], onDelete: Restrict)
+
+  @@index([characterId])
+}
+
+/// Retired. New locations are Asset rows with kind "location". This table stays so old rows are not dropped.
 model VaultLocation {
   id               String          @id @default(cuid())
   projectId        String
@@ -179,13 +445,14 @@ model RenderJob {
   id              String      @id @default(cuid())
   userId          String
   projectId       String?
-  type            JobType
+  type            JobType     @default(GENERATE)
   status          JobStatus   @default(QUEUED)
   priority        Int         @default(1)
   modelUsed       String?
   creditsCharged  Int         @default(0)
-  inputPayload    Json
+  inputPayload    Json        @default("{}")
   outputUrl       String?
+  storageKey      String?
   outputUrls      String[]
   proxyUrl        String?
   errorMessage    String?
@@ -194,12 +461,95 @@ model RenderJob {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   completedAt     DateTime?
+  // Orchestration V2 fields
+  prompt          String?
+  duration        Int         @default(10)
+  mode            String      @default("simple")
+  statusMessage   String?
+  phase           String?     // patient_zero | breakdown | routing | generating | stitching
+  etaSeconds      Int?        // estimated seconds remaining (updated live by worker)
+  metadata        Json?
 
-  user            User        @relation(fields: [userId], references: [id])
-  project         Project?    @relation(fields: [projectId], references: [id])
+  user                User                @relation(fields: [userId], references: [id])
+  project             Project?            @relation(fields: [projectId], references: [id])
+  creditHold          CreditHold?
+  segmentCheckpoints  SegmentCheckpoint[]
+  segmentLedgers      SegmentLedger[]
 
   @@index([userId, status])
   @@index([projectId])
+}
+
+model CreditHold {
+  id          String     @id @default(cuid())
+  userId      String
+  jobId       String     @unique
+  amountHeld  Int
+  amountUsed  Int        @default(0)
+  status      HoldStatus @default(ACTIVE)
+  budgetCap   Int?
+  createdAt   DateTime   @default(now())
+  settledAt   DateTime?
+
+  user        User       @relation(fields: [userId], references: [id])
+  job         RenderJob  @relation(fields: [jobId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+}
+
+model StoredObject {
+  id         String   @id @default(cuid())
+  ownerId    String?
+  storageKey String   @unique
+  createdAt  DateTime @default(now())
+
+  owner      User?    @relation(fields: [ownerId], references: [id])
+
+  @@index([ownerId])
+}
+
+model ConsentRecord {
+  id          String   @id @default(cuid())
+  userId      String
+  subject     String
+  scope       String
+  textVersion String
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, subject, scope])
+}
+
+model SegmentCheckpoint {
+  id          String   @id @default(cuid())
+  jobId       String
+  segmentId   String
+  shotId      Int
+  videoUrl    String
+  modelUsed   String
+  cost        Int
+  qaPassed    Boolean  @default(true)
+  anchorFrame String?
+  createdAt   DateTime @default(now())
+
+  job         RenderJob @relation(fields: [jobId], references: [id])
+
+  @@unique([jobId, segmentId])
+  @@index([jobId])
+}
+
+model SegmentLedger {
+  id        String   @id @default(cuid())
+  jobId     String
+  segmentId String
+  cost      Int
+  createdAt DateTime @default(now())
+
+  job       RenderJob @relation(fields: [jobId], references: [id])
+
+  @@index([jobId])
 }
 
 model CreditTransaction {
@@ -217,6 +567,13 @@ model CreditTransaction {
 
   @@index([userId])
   @@index([createdAt])
+  @@index([stripeId])
+}
+
+model ProcessedStripeEvent {
+  eventId     String   @id
+  type        String
+  processedAt DateTime @default(now())
 }
 
 model TrainingData {
@@ -290,6 +647,13 @@ model ReviewLink {
   status        String          @default("pending")
   expiresAt     DateTime?
   allowDownload Boolean         @default(false)
+  pinHash       String?
+  watermarkName String?
+  showWatermarkDate Boolean     @default(true)
+  proxyUrl      String?
+  versions      Json?
+  approvalChain Json?
+  shotId        String?
   comments      ReviewComment[]
   createdAt     DateTime        @default(now())
 
@@ -336,6 +700,21 @@ model BrandKit {
 
   user               User     @relation(fields: [userId], references: [id])
 
+  @@index([userId])
+}
+
+model EditorWorkspace {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  timelineMode String   @default("full")
+  layout       Json?
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
   @@index([userId])
 }
 
@@ -476,6 +855,7 @@ model FilmCastMember {
   @@index([filmProjectId])
 }
 
+/// Retired. Film locations are not written. The table stays so old rows are not dropped.
 model FilmLocation {
   id              String      @id @default(cuid())
   filmProjectId   String
@@ -555,12 +935,31 @@ model Episode {
 }
 
 // ── MEDIA BIN (project asset management) ──────────────────
+model MediaFolder {
+  id        String        @id @default(cuid())
+  projectId String
+  name      String
+  parentId  String?
+  kind      String
+  sceneId   String?
+  order     Int           @default(0)
+  createdAt DateTime      @default(now())
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent    MediaFolder?  @relation("MediaFolderTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  MediaFolder[] @relation("MediaFolderTree")
+  assets    Asset[]
+
+  @@index([projectId])
+  @@index([parentId])
+}
+
 model MediaBin {
   id        String         @id @default(cuid())
   projectId String
   name      String
   colour    String         @default("#00e5c8")
   sortOrder Int            @default(0)
+  retiredAt DateTime?
   entries   BinClipEntry[]
   project   Project        @relation(fields: [projectId], references: [id])
 
@@ -577,6 +976,7 @@ model BinClipEntry {
   thumbnailUrl    String?
   metadata        Json?
   createdAt       DateTime  @default(now())
+  retiredAt       DateTime?
   bin             MediaBin  @relation(fields: [binId], references: [id])
 
   @@index([binId])
@@ -673,6 +1073,14 @@ model ModelUpdate {
   @@index([engineId])
 }
 
+/// FAL OpenAPI input constraints — cached per endpoint (schema-sync engine).
+model ModelConstraint {
+  endpoint   String   @id
+  json       Json
+  schemaHash String
+  fetchedAt  DateTime
+}
+
 model TrainingSignal {
   id                 String   @id @default(cuid())
   sourceEngine       String
@@ -690,16 +1098,19 @@ model TrainingSignal {
 }
 
 model ClonedVoice {
-  id          String   @id @default(cuid())
-  userId      String
-  voiceId     String
-  name        String
-  description String?
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String   @id @default(cuid())
+  userId             String
+  voiceId            String
+  name               String
+  description        String?
+  source             String   @default("cloned")
+  linkedCharacterId  String?
+  createdAt          DateTime @default(now())
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, voiceId])
   @@index([userId])
+  @@index([linkedCharacterId])
 }
 
 model StripeCustomer {
@@ -756,5 +1167,583 @@ model SocialConnection {
   user         User     @relation(fields: [userId], references: [id])
 
   @@unique([userId, platform])
+  @@index([userId])
+}
+
+
+model ConflictLog {
+  id          String    @id @default(cuid())
+  projectId   String
+  type        String
+  userId1     String
+  userId2     String
+  clipId      String
+  resolvedAt  DateTime?
+  resolution  String?
+  createdAt   DateTime  @default(now())
+
+  @@index([projectId, resolvedAt])
+  @@index([projectId, createdAt])
+}
+
+model ShoppableEmbed {
+  id        String   @id @default(cuid())
+  projectId String
+  videoUrl  String
+  config    Json
+  embedId   String   @unique @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([embedId])
+}
+
+model BranchingEmbed {
+  id        String   @id @default(cuid())
+  projectId String
+  title     String   @default("")
+  config    Json
+  embedId   String   @unique @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([embedId])
+}
+
+model LocationPlate {
+  id          String   @id @default(cuid())
+  userId      String
+  imageUrl    String
+  sourceUrl   String
+  type        String   // 'street' | 'satellite'
+  lat         Float?
+  lng         Float?
+  displayName String?
+  city        String?
+  country     String?
+  /** Library asset this plate was copied into. The plate row stays so shots keep their link. */
+  assetId     String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset       Asset?   @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  shots       StudioClip[]
+
+  @@index([userId])
+  @@index([type])
+}
+
+model ClipComment {
+  id         String       @id @default(cuid())
+  projectId  String
+  clipId     String
+  authorId   String
+  timecode   Float
+  text       String
+  parentId   String?      // null = top-level; set = reply
+  resolved   Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  parent     ClipComment? @relation("CommentThread", fields: [parentId], references: [id])
+  replies    ClipComment[] @relation("CommentThread")
+
+  @@index([projectId, clipId])
+  @@index([projectId, createdAt])
+  @@index([parentId])
+}
+
+// ── Cognitive Director: CoALA memory stores ─────────────────────────────────
+// Episodic memory: every creative decision + its outcome (vector RAG).
+model EpisodicMemory {
+  id           String   @id @default(cuid())
+  userId       String
+  projectId    String?
+  kind         String // 'project' | 'scene' | 'routing_decision' | 'feedback'
+  summary      String
+  intent       Json?
+  brief        Json?
+  outcome      Json?
+  embedding    Unsupported("vector(1024)")?
+  importance   Float    @default(0.5) // 0-1, drives selective forgetting
+  accessCount  Int      @default(0) // recency/frequency for decay
+  lastAccessed DateTime @default(now())
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([kind])
+}
+
+// Semantic memory: consolidated, generalised knowledge.
+model SemanticMemory {
+  id             String   @id @default(cuid())
+  userId         String? // null = global knowledge; set = user-specific taste
+  category       String // 'user_taste' | 'craft_rule' | 'model_insight' | 'genre_pattern'
+  insight        String
+  evidence       Json?
+  confidence     Float    @default(0.5)
+  embedding      Unsupported("vector(1024)")?
+  reinforceCount Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+  @@index([category])
+}
+
+// Procedural memory: learned model-routing policies.
+model RoutingPolicy {
+  id            String   @id @default(cuid())
+  contentType   String
+  model         String
+  successRate   Float    @default(0.5) // rolling avg quality score 0-1
+  sampleCount   Int      @default(0)
+  avgGenSeconds Float    @default(60)
+  lastUpdated   DateTime @default(now())
+
+  @@unique([contentType, model])
+  @@index([contentType])
+}
+
+// ── Cognitive enhancements ──────────────────────────────────────────────────
+// Live performance matrix: real-time latency/cost/success with a circuit breaker.
+model ModelPerformance {
+  id               String   @id @default(cuid())
+  model            String   @unique
+  avgLatencyMs     Float    @default(60000)
+  p95LatencyMs     Float    @default(120000)
+  successRate      Float    @default(1.0) // last-N success ratio
+  recentFailures   Int      @default(0) // consecutive failures (circuit breaker)
+  costPer5sCredits Int      @default(10)
+  status           String   @default("healthy") // healthy | degraded | down
+  lastCheckedAt    DateTime @default(now())
+  sampleCount      Int      @default(0)
+
+  @@index([status])
+}
+
+// Implicit reward signals: learn from export vs regenerate, watch-complete, etc.
+model RewardSignal {
+  id          String   @id @default(cuid())
+  userId      String
+  jobId       String?
+  shotId      String?
+  model       String?
+  contentType String?
+  purpose     String?
+  mode        String?
+  reason      String?
+  source      String   @default("behaviour")
+  signal      String // 'export' | 'regenerate' | 'watch_complete' | 'discard' | 'thumbs_up' | 'thumbs_down' | 'failed' | 'approved_at_gate'
+  reward      Float
+  appliedAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([model])
+  @@index([shotId])
+}
+
+// Per-(model, purpose) EWMA scores. Layer 3 of model knowledge.
+model ModelPurposeScore {
+  id        String   @id @default(cuid())
+  userId    String
+  model     String
+  purpose   String
+  mode      String?
+  worked    Int      @default(0)
+  total     Int      @default(0)
+  score     Float    @default(0.5)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, model, purpose])
+  @@index([userId])
+  @@index([model, purpose])
+}
+
+model ShotRating {
+  id         String   @id @default(cuid())
+  userId     String
+  shotId     String
+  filmId     String?
+  sceneId    String?
+  model      String
+  mode       String?
+  purpose    String
+  score      Int
+  dimension  String?
+  worked     Boolean
+  reason     String?
+  note       String?  @db.Text
+  ratedAt    DateTime @default(now())
+
+  @@unique([userId, shotId])
+  @@index([userId])
+  @@index([shotId])
+}
+
+model FilmRating {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  score     Int
+  note      String?  @db.Text
+  ratedAt   DateTime @default(now())
+
+  @@unique([userId, projectId])
+  @@index([userId])
+}
+
+model UserTasteProfile {
+  userId                 String   @id
+  modelPreference        Json
+  dimensionSensitivity   Json
+  qualityVsSpeedLean     Float    @default(0)
+  updatedAt              DateTime @updatedAt
+}
+
+model ShotError {
+  id               String   @id @default(cuid())
+  shotId           String?
+  userId           String?
+  jobId            String?
+  model            String
+  mode             String?
+  purpose          String?
+  endpoint         String
+  stage            String
+  httpStatus       Int?
+  falRequestId     String?
+  rawError         String   @db.Text
+  providerLogs     Json?
+  payloadSnapshot  Json?
+  signature        String
+  userMessage      String   @db.Text
+  suggestedAction  String
+  category         String
+  correctable      Boolean
+  correction       String?
+  interpretedBy    String
+  createdAt        DateTime @default(now())
+
+  @@index([shotId])
+  @@index([userId])
+  @@index([model, category])
+  @@index([category, createdAt])
+  @@index([signature])
+  @@index([endpoint])
+  @@index([falRequestId])
+}
+
+model ErrorInterpretationCache {
+  signature        String   @id
+  userMessage      String   @db.Text
+  suggestedAction  String
+  category         String
+  correctable      Boolean
+  correction       String?
+  updatedAt        DateTime @updatedAt
+}
+
+model ModelErrorTally {
+  id        String   @id @default(cuid())
+  userId    String
+  model     String
+  category  String
+  total     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, model, category])
+  @@index([model, category])
+}
+
+model QualityLog {
+  id              String   @id @default(cuid())
+  shotId          String?
+  userId          String?
+  jobId           String?
+  model           String
+  purpose         String?
+  mode            String?
+  source          String
+  verdict         String
+  dimension       String?
+  reason          String?  @db.Text
+  onIntent        Boolean?
+  characterMatch  Float?
+  cameraMatch     Boolean?
+  locationMatch   Float?
+  artifacts       Boolean?
+  checks          Json?
+  intent          Json?
+  createdAt       DateTime @default(now())
+
+  @@index([shotId])
+  @@index([userId])
+  @@index([model, purpose])
+  @@index([dimension, createdAt])
+  @@index([verdict, createdAt])
+  @@index([source, createdAt])
+}
+
+model TrainingRun {
+  id             String    @id @default(cuid())
+  userId         String
+  jobId          String?
+  trainerKey     String
+  trainerId      String
+  trains         String
+  assetType      String
+  name           String
+  description    String?
+  triggerPhrase  String?
+  steps          Int
+  costUsd        Float
+  status         String    @default("queued")
+  dataUrl        String?
+  isolateSubject Boolean   @default(false)
+  falRequestId   String?
+  falSubmission  String?
+  loraUrl        String?
+  configUrl      String?
+  loraInference  String?
+  linkedCharacterId String?
+  trainedAssetId String?
+  subcategory    String    @default("")
+  importDomain   String?
+  ownedOrLicensed Boolean  @default(false)
+  subjectConsent Boolean   @default(false)
+  captionGuidance String?  @db.Text
+  errorMessage   String?   @db.Text
+  progressPct    Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  completedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([falRequestId])
+  @@index([jobId])
+  @@index([trainedAssetId])
+}
+
+model Asset {
+  id                  String   @id @default(cuid())
+  ownerId             String
+  kind                String
+  sourcePrompt        String?  @db.Text
+  negativePrompt      String?  @db.Text
+  rules               String?  @db.Text
+  sourceRefs          String[] @default([])
+  generatedImage      String?
+  weightsKey          String?
+  baseModel           String?
+  baseVersion         String?
+  baseBackupKey       String?
+  usableAsReference   Boolean  @default(false)
+  isPrimary           Boolean  @default(true)
+  variations          Json     @default("[]")
+  boundary            Json?
+  lookStack           Json?
+  pendingCopy         Boolean  @default(false)
+  resolutionState     String   @default("unresolved")
+  appearsInShots      String[] @default([])
+  folderId            String?
+  variationOf         String?
+  mediaKind           String?
+  label               String?
+  contentType         String?
+  vaultCharacterId    String?  @unique
+  trainedAssetId      String?  @unique
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  owner  User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  folder MediaFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  plates LocationPlate[]
+
+  @@index([ownerId, kind])
+  @@index([folderId])
+  @@index([vaultCharacterId])
+}
+
+model TrainedAsset {
+  id                String    @id @default(cuid())
+  userId            String
+  name              String
+  description       String?
+  type              String
+  loraUrl           String
+  configUrl         String?
+  triggerPhrase     String?
+  trainerId         String
+  loraInference     String?
+  subcategory       String    @default("")
+  linkedCharacterId String?
+  trainingRunId     String?   @unique
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, deletedAt])
+  @@index([linkedCharacterId])
+}
+
+// Lightweight knowledge graph: relational craft rules for multi-hop reasoning.
+model CraftRule {
+  id             String   @id @default(cuid())
+  subject        String
+  relation       String // 'pairs_with' | 'requires' | 'avoids'
+  object         String
+  confidence     Float    @default(0.6)
+  source         String // 'learned' | 'seeded'
+  reinforceCount Int      @default(1)
+  createdAt      DateTime @default(now())
+
+  @@unique([subject, relation, object])
+  @@index([subject])
+}
+
+model Playbook {
+  id          String   @id @default(cuid())
+  userId      String
+  projectId   String?
+  name        String
+  style       Json?
+  generation  Json?
+  language    Json?
+  rules       String[] @default([])
+  ruleActions Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  retiredAt DateTime?
+  user    User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  @@index([userId, projectId])
+  @@index([userId])
+}
+
+model FilmTemplate {
+  id           String   @id @default(cuid())
+  ownerId      String?
+  name         String
+  category     String
+  format       Json
+  breakdown    Json
+  style        Json
+  music        Json?
+  captionStyle String?
+  isPublic     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  owner User? @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([isPublic, category])
+}
+
+model Subscription {
+  id                 String    @id @default(cuid())
+  userId             String
+  provider           String    @default("stripe")
+  providerCustomerId String?
+  providerSubId      String?   @unique
+  plan               String    @default("free")
+  status             String    @default("expired")
+  currentPeriodEnd   DateTime?
+  seats              Int       @default(1)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubId])
+  @@index([userId])
+}
+
+model DesktopActivation {
+  id         String    @id @default(cuid())
+  userId     String
+  deviceId   String
+  deviceName String?
+  lastSeenAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+}
+
+model DesktopLinkCode {
+  id         String    @id @default(cuid())
+  code       String    @unique
+  deviceId   String
+  deviceName String?
+  ipHash     String?
+  expiresAt  DateTime
+  consumedAt DateTime?
+  approvedAt DateTime?
+  userId     String?
+  createdAt  DateTime  @default(now())
+
+  @@index([deviceId, createdAt])
+  @@index([ipHash, createdAt])
+}
+
+enum FeatureRequestKind {
+  feature
+  tool
+  bug
+  other
+}
+
+enum FeatureRequestStatus {
+  new
+  reviewing
+  planned
+  in_progress
+  implemented
+  declined
+}
+
+model FeatureRequest {
+  id        String               @id @default(cuid())
+  userId    String
+  kind      FeatureRequestKind
+  title     String
+  body      String               @db.Text
+  context   Json?
+  status    FeatureRequestStatus @default(new)
+  devNote   String?              @db.Text
+  upvotes   Int                  @default(0)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  user  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  votes FeatureRequestVote[]
+
+  @@index([userId, createdAt])
+  @@index([status, upvotes])
+}
+
+model FeatureRequestVote {
+  id        String   @id @default(cuid())
+  requestId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  request FeatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, userId])
   @@index([userId])
 }

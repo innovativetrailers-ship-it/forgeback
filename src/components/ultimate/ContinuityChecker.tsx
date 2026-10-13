@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { ShieldCheck, AlertTriangle, CheckCircle, Loader2, ChevronDown, Eye, Camera } from 'lucide-react'
-import type { Clip } from '@/lib/timeline/schema'
+import type { Clip, TimelineRecipe } from '@/lib/timeline/schema'
 
 interface ContinuityIssue {
   type: 'prop' | 'costume' | 'lighting' | 'time_of_day' | 'character' | 'camera_angle'
@@ -25,6 +25,7 @@ interface CheckResult {
 }
 
 interface Props {
+  recipe: TimelineRecipe
   clips: Clip[]
   onRepaintSuggested: (clipId: string) => void
 }
@@ -116,7 +117,7 @@ function IssueCard({ issue, onRepaint, clipA, clipB }: {
   )
 }
 
-export function ContinuityChecker({ clips, onRepaintSuggested }: Props) {
+export function ContinuityChecker({ recipe, clips, onRepaintSuggested }: Props) {
   const [results, setResults] = useState<CheckResult[]>([])
   const [isChecking, setIsChecking] = useState(false)
   const [selectedPair, setSelectedPair] = useState<[string, string] | null>(null)
@@ -133,67 +134,52 @@ export function ContinuityChecker({ clips, onRepaintSuggested }: Props) {
     setResults([])
 
     try {
-      const pairs: Array<[string, string]> = []
-
-      if (checkMode === 'adjacent') {
-        for (let i = 0; i < videoClips.length - 1; i++) {
-          pairs.push([videoClips[i].id, videoClips[i + 1].id])
-        }
-      } else if (checkMode === 'character') {
-        const byChar = new Map<string, Clip[]>()
-        for (const clip of videoClips) {
-          if (clip.characterId) {
-            const list = byChar.get(clip.characterId) ?? []
-            list.push(clip)
-            byChar.set(clip.characterId, list)
-          }
-        }
-        for (const charClips of byChar.values()) {
-          for (let i = 0; i < charClips.length - 1; i++) {
-            pairs.push([charClips[i].id, charClips[i + 1].id])
-          }
-        }
-      } else {
-        for (let i = 0; i < Math.min(videoClips.length - 1, 10); i++) {
-          for (let j = i + 1; j < Math.min(videoClips.length, i + 4); j++) {
-            pairs.push([videoClips[i].id, videoClips[j].id])
-          }
-        }
+      setProgress(30)
+      const res = await fetch('/api/studio/continuity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipe }),
+      })
+      if (!res.ok) throw new Error('Continuity check failed')
+      const data = await res.json() as {
+        issues?: Array<{
+          type: string
+          severity: string
+          clips: [string, string]
+          description: string
+          suggestion: string
+        }>
       }
+      setProgress(100)
 
-      const newResults: CheckResult[] = []
-
-      for (let i = 0; i < pairs.length; i++) {
-        setProgress(Math.round(((i + 1) / pairs.length) * 100))
-        const [aId, bId] = pairs[i]
-        const clipA = clipMap.get(aId)
-        const clipB = clipMap.get(bId)
-        if (!clipA || !clipB) continue
-
-        try {
-          const res = await fetch('/api/studio/continuity', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              clipAUrl: clipA.sourceUrl,
-              clipBUrl: clipB.sourceUrl,
-              clipACharacterId: clipA.characterId,
-              clipBCharacterId: clipB.characterId,
-            }),
+      const apiIssues = data.issues ?? []
+      const newResults: CheckResult[] = apiIssues.length > 0
+        ? apiIssues.map((issue, i) => {
+            const [clipAId, clipBId] = issue.clips
+            return {
+              id: `issue-${i}`,
+              checkedAt: Date.now(),
+              clipAId,
+              clipBId,
+              issues: [{
+                type: issue.type as ContinuityIssue['type'],
+                severity: issue.severity === 'error' ? 'high' : issue.severity === 'warning' ? 'medium' : 'low',
+                clipAId,
+                clipBId,
+                description: issue.description,
+                suggestion: issue.suggestion,
+              }],
+              passed: false,
+            }
           })
-          const data = await res.json() as { issues?: ContinuityIssue[]; passed?: boolean }
-          newResults.push({
-            id: `${aId}-${bId}`,
+        : [{
+            id: 'all-pass',
             checkedAt: Date.now(),
-            clipAId: aId,
-            clipBId: bId,
-            issues: data.issues ?? [],
-            passed: data.passed ?? true,
-          })
-        } catch {
-          // Skip failed checks
-        }
-      }
+            clipAId: videoClips[0]?.id ?? '',
+            clipBId: videoClips[1]?.id ?? '',
+            issues: [],
+            passed: true,
+          }]
 
       setResults(newResults)
     } finally {

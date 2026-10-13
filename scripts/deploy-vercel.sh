@@ -8,8 +8,10 @@ cd "$ROOT"
 
 PRODUCTION_URL="${1:-${PRODUCTION_URL:-}}"
 
-if ! command -v vercel &>/dev/null; then
-  npm install -g vercel
+if command -v vercel &>/dev/null; then
+  VERCEL=(vercel)
+else
+  VERCEL=(npx vercel)
 fi
 
 if [[ -f .env.local ]]; then
@@ -23,10 +25,9 @@ if [[ -n "${DATABASE_URL:-}" ]]; then
   echo "→ Running Prisma migrate deploy…"
   npx prisma migrate deploy
 elif [[ -f .env.local ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source .env.local
-  set +a
+  # Avoid sourcing .env.local — pipe chars and other shell metacharacters break `source`.
+  DATABASE_URL="$(grep -m1 '^DATABASE_URL=' .env.local | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
+  export DATABASE_URL
   if [[ -n "${DATABASE_URL:-}" ]]; then
     echo "→ Running Prisma migrate deploy…"
     npx prisma migrate deploy
@@ -34,7 +35,7 @@ elif [[ -f .env.local ]]; then
 fi
 
 echo "→ Deploying to Vercel production…"
-vercel deploy --prod
+"${VERCEL[@]}" deploy --prod
 
 echo ""
 echo "✓ Deploy triggered. Dashboard: https://vercel.com/dashboard"

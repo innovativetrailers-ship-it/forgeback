@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { synthesiseSpeech } from '@/lib/audio/elevenlabs'
 import { checkAndDeductCredits } from '@/lib/credits'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   text: z.string().min(1).max(5000),
@@ -12,7 +13,7 @@ const schema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
@@ -22,6 +23,8 @@ export async function POST(request: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'speech_generate')
   } catch (err) {
+    console.warn("[caught] src/app/api/audio/speech/route.ts:24", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 

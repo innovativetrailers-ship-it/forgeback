@@ -169,7 +169,9 @@ export function initOSCControlSurface(
       if (param && msg.args?.[0] !== undefined && gradeCallback) {
         gradeCallback(param, Math.max(0, Math.min(1, msg.args[0])))
       }
-    } catch { /* ignore malformed messages */ }
+    } catch (err) {
+      console.warn("[caught] src/lib/hardware/ControlSurface.ts:172", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore malformed messages */ }
   }
 
   oscSocket.onerror = () => console.warn('OSC WebSocket error')

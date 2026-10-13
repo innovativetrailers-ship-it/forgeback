@@ -1,0 +1,11 @@
+---
+description: SPEC-training-studio-sidebar. Read before changing Training Studio UI, style/cast/voice assets, FAL train flow, or training-content privacy.
+globs: ["src/lib/vault/**", "src/lib/fal/training.ts", "src/components/simple/CharacterPanel.tsx"]
+alwaysApply: false
+---
+
+# Training Studio sidebar
+
+Contract: `docs/spec-references/SPEC-training-studio-sidebar.md`. Inherits TR-00. Do not build the sidebar until the user feeds TR-04. Pipeline wiring is TR-02/TR-03.
+
+Tabs train user assets on FAL serverless (no GPU infra). Genre presets are instant and free (prompt + grade + camera). Trained LoRAs lock style/identity (~$5, cost shown + confirmed). Character LoRA > reference images > seed. Voices attach to VaultCharacter. Training content is held only to serve that user — no platform harvest. Outcome ratings may feed OR-04/05.

@@ -1,0 +1,11 @@
+-- StudioClip shot-plan fields for interactive AI Director
+
+CREATE TYPE "StudioClipStatus" AS ENUM ('PENDING', 'GENERATING', 'COMPLETED', 'FAILED', 'MANUAL');
+
+ALTER TABLE "StudioClip" ADD COLUMN IF NOT EXISTS "originalPrompt" TEXT;
+ALTER TABLE "StudioClip" ADD COLUMN IF NOT EXISTS "assignedModel" TEXT;
+ALTER TABLE "StudioClip" ADD COLUMN IF NOT EXISTS "status" "StudioClipStatus" NOT NULL DEFAULT 'PENDING';
+ALTER TABLE "StudioClip" ADD COLUMN IF NOT EXISTS "lastFrame" TEXT;
+ALTER TABLE "StudioClip" ADD COLUMN IF NOT EXISTS "anchorPolicy" TEXT NOT NULL DEFAULT 'none';
+ALTER TABLE "StudioClip" ADD COLUMN IF NOT EXISTS "manualVideo" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "StudioClip" ADD COLUMN IF NOT EXISTS "estimatedCost" INTEGER NOT NULL DEFAULT 0;

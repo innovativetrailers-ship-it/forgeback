@@ -1,10 +1,10 @@
-import type OpenAI from 'openai'
-import { execSync } from 'child_process'
-import { mkdirSync, rmSync, existsSync } from 'fs'
+import { runArgv } from '@/lib/shell/argv'
+import { mkdirSync, rmSync, existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 import type { TimelineRecipe } from '../timeline/schema'
-import { getOpenRouterClient } from '../brain/openai-client'
+import { llmCall, type LlmContentPart } from '@/lib/llm/anthropicClient'
+import { isGenerationPausedError } from '@/lib/generation/pause'
 
 interface ContinuityError {
   type: 'prop' | 'costume' | 'lighting' | 'time_jump' | 'character_mismatch'
@@ -33,12 +33,12 @@ export async function checkContinuity(recipe: TimelineRecipe): Promise<Continuit
     for (const clip of videoClips) {
       const framePath = join(tmpDir, `${clip.id}.jpg`)
       try {
-        execSync(
-          `ffmpeg -i "${clip.sourceUrl}" -vframes 1 -ss 00:00:01 "${framePath}" -y 2>/dev/null`
-        )
-        const b64 = execSync(`base64 "${framePath}"`).toString().trim()
+        runArgv("ffmpeg", ["-i", clip.sourceUrl, "-vframes", "1", "-ss", "00:00:01", framePath, "-y"])
+        const b64 = readFileSync(framePath).toString('base64')
         frames.push({ clipId: clip.id, base64: b64 })
-      } catch {
+      } catch (err) {
+        console.warn("[caught] src/lib/studio/continuity.ts:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         // Skip clips that can't be read
       }
     }
@@ -46,7 +46,7 @@ export async function checkContinuity(recipe: TimelineRecipe): Promise<Continuit
     if (frames.length < 2) return []
 
     // Send all frames to Gemini with continuity checking prompt
-    const imageContent: OpenAI.Chat.ChatCompletionContentPart[] = frames.slice(0, 10).map((f) => ({
+    const imageContent: LlmContentPart[] = frames.slice(0, 10).map((f) => ({
       type: 'image_url' as const,
       image_url: {
         url: `data:image/jpeg;base64,${f.base64}`,
@@ -55,9 +55,10 @@ export async function checkContinuity(recipe: TimelineRecipe): Promise<Continuit
 
     const clipIds = frames.slice(0, 10).map((f) => f.clipId)
 
-    const response = await getOpenRouterClient().chat.completions.create({
+    const response = await llmCall({
       model: 'google/gemini-1.5-pro',
-      max_tokens: 2048,
+      maxTokens: 2048,
+      source: 'continuity',
       messages: [
         {
           role: 'user',
@@ -90,12 +91,13 @@ If no errors found, return [].`,
       ],
     })
 
-    const text = response.choices[0]?.message?.content ?? '[]'
+    const text = response.content || '[]'
     const jsonMatch = text.match(/\[[\s\S]*\]/)
     if (!jsonMatch) return []
 
     return JSON.parse(jsonMatch[0]) as ContinuityError[]
-  } catch {
+  } catch (err) {
+    if (isGenerationPausedError(err)) throw err
     return []
   } finally {
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true })

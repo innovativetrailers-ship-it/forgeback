@@ -1,49 +1,53 @@
-// Minimax now routes through FAL — no direct Minimax API key needed
+import { runFal, extractVideoUrl, fal, falQueueBound} from '@/lib/fal/client'
+const falQueueOps = falQueueBound('lib.models.minimax')
+import { buildPayload } from '@/lib/fal/videoPayloads'
+import { resolveHailuoEndpoint } from '@/lib/fal/hailuoEndpoints'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
-const FAL_MODEL = 'fal-ai/minimax-video'
+const REGISTRY_KEY = 'minimax-2.3'
 
 export async function generateVideo(
   input: GenerateVideoInput
 ): Promise<GenerateVideoOutput> {
-  const falInput: Record<string, unknown> = {
+  const isI2V = Boolean(input.startFrameUrl)
+  const model = resolveHailuoEndpoint(REGISTRY_KEY, isI2V)
+
+  const falInput = await buildPayload(model, REGISTRY_KEY, {
     prompt: input.prompt,
-  }
-  if (input.negativePrompt) falInput.negative_prompt = input.negativePrompt
-  if (input.startFrameUrl)  falInput.first_frame_image = input.startFrameUrl
-
-  const res = await fetch(`https://fal.run/${FAL_MODEL}`, {
-    method:  'POST',
-    headers: { Authorization: `Key ${process.env.FAL_API_KEY}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ input: falInput }),
+    duration: input.duration ?? 6,
+    aspectRatio: input.aspectRatio ?? '16:9',
+    imageUrl: input.startFrameUrl,
+    negativePrompt: input.negativePrompt,
   })
-  if (!res.ok) throw new Error(`Minimax FAL error ${res.status}: ${await res.text()}`)
 
-  const data = await res.json() as { request_id?: string; video?: { url?: string }; video_url?: string }
-  const jobId    = data.request_id ?? `minimax_${Date.now()}`
-  const videoUrl = data.video?.url ?? data.video_url
+  const data = await runFal(model, falInput)
+  const videoUrl = extractVideoUrl(data)
+  const jobId    = `minimax_${Date.now()}`
 
   return {
     jobId,
-    status:  videoUrl ? 'complete' : 'pending',
+    status:  videoUrl ? 'complete' : 'failed',
     videoUrl,
-    pollUrl: videoUrl ? undefined : `https://queue.fal.run/${FAL_MODEL}/requests/${jobId}`,
+    error:   videoUrl ? undefined : 'Minimax returned no video',
   }
 }
 
 export async function pollStatus(requestId: string): Promise<GenerateVideoOutput> {
-  const res = await fetch(
-    `https://queue.fal.run/${FAL_MODEL}/requests/${requestId}`,
-    { headers: { Authorization: `Key ${process.env.FAL_API_KEY}` } }
-  )
-  if (!res.ok) throw new Error(`Minimax poll error ${res.status}`)
+  const model = resolveHailuoEndpoint(REGISTRY_KEY, false)
+  try {
+    const status = await falQueueOps.status(model, { requestId, logs: false }) as { status: string }
+    if (status.status !== 'COMPLETED') {
+      if (status.status === 'FAILED') {
+        return { jobId: requestId, status: 'failed', error: 'Minimax generation failed' }
+      }
+      return { jobId: requestId, status: 'processing' }
+    }
+    const result = await falQueueOps.result(model, { requestId }) as { data: unknown }
+    const videoUrl = extractVideoUrl(result.data)
+    return { jobId: requestId, status: 'complete', videoUrl }
+  } catch (err) {
+    console.warn("[caught] src/lib/models/minimax.ts:48", err instanceof Error ? { name: err.name, message: err.message } : err)
 
-  const data = await res.json() as { status?: string; video?: { url?: string }; video_url?: string; error?: string }
-  if (data.status === 'COMPLETED' || data.video?.url || data.video_url) {
-    return { jobId: requestId, status: 'complete', videoUrl: data.video?.url ?? data.video_url }
+    return { jobId: requestId, status: 'processing' }
   }
-  if (data.status === 'FAILED') {
-    return { jobId: requestId, status: 'failed', error: data.error ?? 'Minimax generation failed' }
-  }
-  return { jobId: requestId, status: 'processing' }
 }

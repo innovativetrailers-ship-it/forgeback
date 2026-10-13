@@ -148,9 +148,40 @@
   .animate-pulse-subtle {
     animation: pulse-subtle 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
+
+  /* Hide scrollbar visually but keep scrollability (horizontal tab rows) */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Vertical range input — replaces deprecated appearance: slider-vertical */
+  .slider-vertical {
+    writing-mode: vertical-lr;
+    direction: rtl;
+  }
 }
 
 @keyframes pulse-subtle {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
+}
+
+.preview-container:fullscreen,
+.preview-container:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+}
+
+.preview-container:fullscreen .preview-video,
+.preview-container:-webkit-full-screen .preview-video {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
 }

@@ -9,6 +9,7 @@
 import { intelligenceDb, callDomainLLM, pushIntelligenceSignal } from '../firewall/domain-guard'
 import { ModelIntelligenceAnalyser } from './analyser'
 import { PROBE_BATTERY, getProbeSets } from './probe-battery'
+import { assertIntelligenceProbesAllowed, intelligenceProbesEnabled } from './guards'
 import { buildDeltaReportPrompt } from './crew'
 import type { ModelUpdate, UpdateDelta, RawProbeResult } from './report-schema'
 
@@ -24,7 +25,6 @@ const MODEL_VERSIONS: Record<string, string> = {
   pika_2_5:        '2.5.0',
   luma_ray3:       '3.0.0',
   skyreels_v1:     '1.0.0',
-  cogvideox_5b:    '5.0.0',
   mochi_1:         '1.0.0',
 }
 
@@ -38,7 +38,6 @@ const CATEGORY_MAP: Record<string, string[]> = {
   ltx_2_3:        ['text_accuracy', 'efficiency', 'consistency'],
   luma_ray3:      ['architecture', 'atmosphere', 'wildlife'],
   skyreels_v1:    ['human_motion', 'consistency', 'efficiency'],
-  cogvideox_5b:   ['text_accuracy', 'consistency', 'prompt_fidelity'],
   mochi_1:        ['efficiency', 'consistency', 'material_physics'],
   pika_2_5:       ['human_motion', 'prompt_fidelity', 'efficiency'],
   minimax_hailuo: ['human_motion', 'wildlife', 'native_audio'],
@@ -117,6 +116,16 @@ export class ModelUpdateWatcher {
 
   // Full update handling: targeted probes + delta report + routing review
   async handleUpdate(update: ModelUpdate): Promise<void> {
+    if (!intelligenceProbesEnabled()) {
+      console.warn('[UpdateWatcher] Skipping probe battery — intelligence probes disabled', {
+        model_id: update.model_id,
+        GENERATION_PAUSED: process.env.GENERATION_PAUSED,
+        ENABLE_INTELLIGENCE_PROBES: process.env.ENABLE_INTELLIGENCE_PROBES,
+      })
+      return
+    }
+    assertIntelligenceProbesAllowed(`handleUpdate:${update.model_id}`)
+
     console.log(`[UpdateWatcher] Handling update: ${update.model_id} ${update.previous_version} → ${update.new_version}`)
 
     const targetCategories = CATEGORY_MAP[update.model_id] ?? ['efficiency', 'consistency']
@@ -196,6 +205,8 @@ export class ModelUpdateWatcher {
     }, {})
 
     const rawReport = await callDomainLLM('intelligence', {
+      source: 'intelligence:update:deltaReport',
+      billableClass: 'eval',
       systemPrompt: `You are a machine learning research analyst. Write precise delta reports comparing model versions.`,
       userMessage: buildDeltaReportPrompt(
         update.model_id,
@@ -266,6 +277,11 @@ export class ModelUpdateWatcher {
 
 // Weekly full probe battery across all models
 export async function runWeeklyProbeBattery(): Promise<void> {
+  if (!intelligenceProbesEnabled()) {
+    console.log('[Intelligence] Weekly probe battery skipped (probes disabled — set ENABLE_INTELLIGENCE_PROBES=true)')
+    return
+  }
+  assertIntelligenceProbesAllowed('runWeeklyProbeBattery')
   const analyser = new ModelIntelligenceAnalyser()
   const models = Object.keys(MODEL_VERSIONS)
 
@@ -288,6 +304,11 @@ export async function runWeeklyProbeBattery(): Promise<void> {
 
 // Monthly cross-model comparison report
 export async function generateCrossModelComparisonReport(): Promise<void> {
+  if (!intelligenceProbesEnabled()) {
+    console.log('[Intelligence] Cross-model comparison skipped (eval harness disabled)')
+    return
+  }
+
   const allReports = await intelligenceDb.getProbeResultsForModel(
     '',
     new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
@@ -299,6 +320,8 @@ export async function generateCrossModelComparisonReport(): Promise<void> {
   }
 
   const summary = await callDomainLLM('intelligence', {
+    source: 'intelligence:monthly:comparison',
+    billableClass: 'eval',
     systemPrompt: `You are a machine learning research analyst. Write cross-model comparison summaries for routing optimisation.`,
     userMessage: `Write a cross-model comparison report from ${allReports.length} probe results from the last 30 days.
 Group by capability category. Identify which models lead in each category.

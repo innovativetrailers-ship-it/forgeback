@@ -9,6 +9,7 @@ import {
   type ShotGridConfig,
   type ShotGridShot,
 } from '@/lib/production/ShotGridClient'
+import { requireUser } from '@/lib/auth/requireUser'
 
 interface ShotGridBody {
   action: 'test' | 'list_projects' | 'sync_shots' | 'update_status' | 'create_version' | 'import_shots'
@@ -27,13 +28,15 @@ interface ShotGridBody {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: ShotGridBody
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/production/shotgrid/route.ts:36", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -97,6 +100,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 })
     }
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/production/shotgrid/route.ts:99", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'ShotGrid operation failed'
     if (msg.includes('ECONNREFUSED') || msg.includes('fetch')) {
       return NextResponse.json(

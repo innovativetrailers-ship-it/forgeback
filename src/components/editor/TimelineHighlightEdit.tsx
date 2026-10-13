@@ -69,6 +69,8 @@ export function TimelineHighlightEdit({
       if (!resp.ok) throw new Error(data.error ?? 'Analysis failed')
       setAnalysisResult(data)
     } catch (e) {
+      console.warn("[caught] src/components/editor/TimelineHighlightEdit.tsx:71", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       setError(e instanceof Error ? e.message : 'Analysis failed')
       setPhase('select')
     }
@@ -102,6 +104,8 @@ export function TimelineHighlightEdit({
       setPhase('done')
       onComplete(editResult)
     } catch (e) {
+      console.warn("[caught] src/components/editor/TimelineHighlightEdit.tsx:104", e instanceof Error ? { name: e.name, message: e.message } : e)
+
       setError(e instanceof Error ? e.message : 'Edit failed')
       setPhase('analyse')
     }

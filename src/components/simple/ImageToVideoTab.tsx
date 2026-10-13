@@ -88,23 +88,26 @@ export function ImageToVideoTab({ onGenerated, creditBalance }: Props) {
       }
 
       const { jobId } = await res.json() as { jobId: string }
-      onGenerated({ ...newClip, id: jobId, jobId, status: 'processing' })
+      const activeClip = { ...newClip, jobId, status: 'processing' as const }
+      onGenerated(activeClip)
 
       const sse = new EventSource(`/api/jobs/${jobId}/stream`)
       sse.onmessage = (e) => {
-        const data = JSON.parse(e.data) as { status: string; progress?: number; message?: string; outputUrl?: string; error?: string }
+        const data = JSON.parse(e.data) as { status: string; progress?: number; message?: string; outputUrl?: string; error?: string; userMessage?: string }
         if (data.status === 'complete' && data.outputUrl) {
-          onGenerated({ ...newClip, id: jobId, jobId, status: 'complete', videoUrl: data.outputUrl, progress: 100 })
+          onGenerated({ ...activeClip, status: 'complete', videoUrl: data.outputUrl, progress: 100 })
           sse.close()
         } else if (data.status === 'failed') {
-          onGenerated({ ...newClip, id: jobId, jobId, status: 'failed', error: data.error ?? 'Failed' })
+          onGenerated({ ...activeClip, status: 'failed', error: data.userMessage ?? data.error ?? 'Failed', userMessage: data.userMessage })
           sse.close()
         } else {
-          onGenerated({ ...newClip, id: jobId, jobId, status: 'processing', progress: data.progress, progressMessage: data.message })
+          onGenerated({ ...activeClip, status: 'processing', progress: data.progress, progressMessage: data.userMessage ?? data.message, userMessage: data.userMessage })
         }
       }
-      sse.onerror = () => { onGenerated({ ...newClip, id: jobId, jobId, status: 'failed', error: 'Connection lost' }); sse.close() }
+      sse.onerror = () => {} // transient — allow EventSource auto-reconnect
     } catch (err) {
+      console.warn("[caught] src/components/simple/ImageToVideoTab.tsx:108", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       onGenerated({ id: nanoid(), jobId: nanoid(), prompt, model: selectedPill.model, quality, creditsUsed: selectedPill.credits, duration: 5, aspectRatio: '16:9', status: 'failed', error: (err as Error).message, createdAt: new Date() })
     } finally {
       setIsLoading(false)

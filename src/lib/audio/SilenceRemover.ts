@@ -4,7 +4,9 @@
  * Actual FFmpeg splicing is handled by the export/render pipeline.
  */
 
-import { fal }        from '@fal-ai/client'
+import { buildWhisperSttInput, falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound } from '@/lib/fal/client'
+const falSubscribe = falSubscribeBound('lib.audio.SilenceRemover')
 import { uploadToR2 } from '@/lib/storage/r2'
 import { randomUUID } from 'crypto'
 
@@ -33,8 +35,8 @@ export async function detectSilence(params: {
   const { audioUrl, minDurationSec = 0.5 } = params
 
   // Use Whisper to get word-level timestamps — gaps = silence
-  const result = await fal.subscribe('fal-ai/whisper', {
-    input: { audio_url: audioUrl, task: 'transcribe', chunk_level: 'word' },
+  const result = await falSubscribe(falEndpoint('whisper'), {
+    input: buildWhisperSttInput({ audioUrl, chunkLevel: 'word' }),
   })
 
   const data = result.data as {
@@ -79,11 +81,11 @@ export async function removeSilence(params: {
   const segments = await detectSilence({ audioUrl, minDurationSec })
 
   // Get duration from last chunk end
-  const result = await fal.subscribe('fal-ai/whisper', {
-    input: { audio_url: audioUrl, task: 'transcribe' },
+  const result = await falSubscribe(falEndpoint('whisper'), {
+    input: buildWhisperSttInput({ audioUrl, chunkLevel: 'word' }),
   })
   const data = result.data as { chunks?: Array<{ timestamp: [number, number] }> }
-  const durationSec = data.chunks?.at(-1)?.[1][1] ?? 60
+  const durationSec = data.chunks?.at(-1)?.timestamp[1] ?? 60
 
   // Build keep ranges (complement of silence)
   const keepRanges: Array<{ start: number; end: number }> = []
@@ -107,7 +109,10 @@ export async function removeSilence(params: {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ audioUrl, keepRanges }),
-  }).catch(() => null)
+  }).catch((err) => {
+    console.warn("[caught] src/lib/audio/SilenceRemover.ts:111", err instanceof Error ? { name: err.name, message: err.message } : err)
+    return (null)
+  })
 
   if (res?.ok) {
     const { url } = await res.json() as { url: string }

@@ -1,22 +1,20 @@
-import { auth } from '@/lib/auth'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireUser } from '@/lib/auth/requireUser'
 
-export async function GET(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return Response.json({ error: 'Unauthorised' }, { status: 401 })
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const userId = (await requireUser(req))?.id ?? null
+  if (!userId) return NextResponse.json({ plates: [] })
+
+  try {
+    const plates = await db.locationPlate.findMany({
+      where:   { userId },
+      orderBy: { createdAt: 'desc' },
+      take:    100,
+    })
+    return NextResponse.json({ plates })
+  } catch (err) {
+    console.error('[vault/location/list]', (err as Error).message)
+    return NextResponse.json({ plates: [] })
   }
-
-  const { searchParams } = new URL(request.url)
-  const projectId = searchParams.get('projectId')
-
-  const locations = await db.vaultLocation.findMany({
-    where: {
-      projectId: projectId ?? undefined,
-      project: { userId: session.user.id },
-    },
-    orderBy: { createdAt: 'desc' },
-  })
-
-  return Response.json({ locations })
 }

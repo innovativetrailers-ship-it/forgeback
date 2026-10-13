@@ -6,14 +6,11 @@ import { test, expect } from '@playwright/test'
  */
 
 test.describe('Health endpoints', () => {
-  test('GET /api/health returns 200 with service statuses', async ({ request }) => {
+  test('GET /api/health without a session is refused', async ({ request }) => {
     const res = await request.get('/api/health')
-    expect(res.status()).toBeLessThan(600) // Not a crash
-    const body = await res.json() as { status: string; services: { database: unknown; redis: unknown } }
-    expect(body).toHaveProperty('status')
-    expect(body).toHaveProperty('services')
-    expect(body.services).toHaveProperty('database')
-    expect(body.services).toHaveProperty('redis')
+    expect(res.status()).toBe(401)
+    const body = await res.json() as { error?: string }
+    expect(body.error).toBe('Unauthorized')
   })
 
   test('GET /health rewrite → /api/health works', async ({ request }) => {
@@ -82,11 +79,9 @@ test.describe('Cron endpoints (require CRON_SECRET)', () => {
 })
 
 test.describe('CORS headers', () => {
-  test('API routes include CORS headers', async ({ request }) => {
+  test('API routes do not send an allow-origin header', async ({ request }) => {
     const res = await request.get('/api/health')
-    // CORS headers set via vercel.json for /api/* routes
-    const origin = res.headers()['access-control-allow-origin']
-    expect(origin).toBeTruthy()
+    expect(res.headers()['access-control-allow-origin']).toBeFalsy()
   })
 })
 

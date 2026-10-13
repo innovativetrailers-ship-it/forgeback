@@ -1,6 +1,9 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+
+import { logCaught } from '@/lib/diagnostics/caught'
+import { useState, useCallback, useEffect } from 'react'
+import { subscribeJobStream } from '@/lib/jobs/subscribeJobStream'
 import { Music, Mic, Volume2, VolumeX, Sliders, Zap, Loader2 } from 'lucide-react'
 
 interface Channel {
@@ -25,7 +28,21 @@ interface GeneratedTrack {
   duration: number
 }
 
+interface DbAudioTrack {
+  id: string
+  type: string
+  status: string
+  prompt?: string | null
+  url?: string | null
+  volumeDb: number
+  muted: boolean
+  locked: boolean
+  duckUnderDialogue: boolean
+  durationMs?: number | null
+}
+
 interface Props {
+  projectId?: string
   projectDuration: number
   onTracksApplied: (tracks: GeneratedTrack[]) => void
 }
@@ -58,8 +75,6 @@ function VerticalFader({ value, onChange, colour }: { value: number; onChange: (
             className="h-full accent-[#00e5c8]"
         style={{
           writingMode: 'vertical-lr' as const,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          WebkitAppearance: 'slider-vertical' as any,
           appearance: 'none' as const,
           direction: 'rtl',
           width: 24,
@@ -91,40 +106,93 @@ function PanKnob({ value, onChange }: { value: number; onChange: (v: number) => 
   )
 }
 
-export function AudioMixingBoard({ projectDuration, onTracksApplied }: Props) {
+export function AudioMixingBoard({ projectId, projectDuration, onTracksApplied }: Props) {
   const [channels, setChannels] = useState<Channel[]>(DEFAULT_CHANNELS)
   const [generatedTracks, setGeneratedTracks] = useState<GeneratedTrack[]>([])
+  const [dbTracks, setDbTracks] = useState<DbAudioTrack[]>([])
   const [musicMood, setMusicMood] = useState('dramatic')
   const [musicPrompt, setMusicPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState<string | null>(null)
   const [showEQ, setShowEQ] = useState(false)
   const [activePreset, setActivePreset] = useState<string | null>(null)
 
+  const reloadTracks = useCallback(() => {
+    if (!projectId) return
+    fetch(`/api/audio/track?projectId=${projectId}`, { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d: { tracks?: DbAudioTrack[] }) => setDbTracks(d.tracks ?? []))
+      .catch((err) => logCaught('components/ultimate/AudioMixingBoard', err))
+  }, [projectId])
+
+  useEffect(() => { reloadTracks() }, [reloadTracks])
+
   const updateChannel = useCallback((id: string, updates: Partial<Channel>) => {
     setChannels((prev) => prev.map((c) => c.id === id ? { ...c, ...updates } : c))
   }, [])
 
+  const patchTrack = useCallback(async (trackId: string, data: Record<string, unknown>) => {
+    await fetch(`/api/audio/track/${trackId}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    reloadTracks()
+  }, [reloadTracks])
+
   const handleGenerateMusic = async () => {
+    if (!projectId) return
     setIsGenerating('music')
     try {
-      const res = await fetch('/api/audio/music', {
+      const createRes = await fetch('/api/audio/track', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          projectId,
+          type: 'music',
+          provider: 'suno',
           prompt: musicPrompt || `${musicMood} orchestral film score`,
-          duration: Math.min(projectDuration, 240),
+          sunoStyle: musicMood,
+          instrumental: true,
+          duckUnderDialogue: true,
         }),
       })
-      const data = await res.json() as { url?: string }
-      if (data.url) {
-        setGeneratedTracks((prev) => [...prev, {
-          channelId: 'music',
-          prompt: musicPrompt || musicMood,
-          url: data.url!,
-          duration: projectDuration,
-        }])
-      }
-    } finally {
+      const created = await createRes.json() as { track?: { id: string } }
+      if (!created.track?.id) return
+
+      const res = await fetch(`/api/audio/track/${created.track.id}/generate`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (!res.ok) return
+      const trackId = created.track.id
+      const poll = setInterval(() => {
+        void fetch(`/api/audio/track?projectId=${projectId}`, { credentials: 'include' })
+          .then((r) => r.json())
+          .then((d: { tracks?: DbAudioTrack[] }) => {
+            const t = d.tracks?.find((x) => x.id === trackId)
+            if (t?.status === 'READY' && t.url) {
+              clearInterval(poll)
+              setIsGenerating(null)
+              setDbTracks(d.tracks ?? [])
+              onTracksApplied([{
+                channelId: 'music',
+                prompt: musicPrompt || musicMood,
+                url: t.url,
+                duration: (t.durationMs ?? projectDuration * 1000) / 1000,
+              }])
+            }
+            if (t?.status === 'FAILED') {
+              clearInterval(poll)
+              setIsGenerating(null)
+            }
+          })
+      }, 3000)
+      setTimeout(() => { clearInterval(poll); setIsGenerating(null) }, 300_000)
+    } catch (err) {
+      console.warn("[caught] src/components/ultimate/AudioMixingBoard.tsx:193", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setIsGenerating(null)
     }
   }
@@ -135,14 +203,18 @@ export function AudioMixingBoard({ projectDuration, onTracksApplied }: Props) {
       const res = await fetch('/api/audio/foley', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'ambience', prompt: `${musicMood} ambient atmosphere, cinematic` }),
+        body: JSON.stringify({
+          description: `${musicMood} ambient atmosphere, cinematic`,
+          durationSeconds: Math.min(projectDuration, 120),
+        }),
       })
-      const data = await res.json() as { url?: string }
-      if (data.url) {
+      const data = await res.json() as { url?: string; audioUrl?: string }
+      const audioUrl = data.url ?? data.audioUrl
+      if (audioUrl) {
         setGeneratedTracks((prev) => [...prev, {
           channelId: 'ambience',
           prompt: 'ambience',
-          url: data.url!,
+          url: audioUrl,
           duration: projectDuration,
         }])
       }
@@ -270,9 +342,50 @@ export function AudioMixingBoard({ projectDuration, onTracksApplied }: Props) {
           </div>
         </div>
 
+        {dbTracks.length > 0 && (
+          <div className="p-3 border-t border-white/8 space-y-2 max-h-40 overflow-y-auto">
+            <p className="text-[10px] text-white/35 font-semibold uppercase tracking-wider">Project Audio Tracks</p>
+            {dbTracks.map((t) => (
+              <div key={t.id} className="flex items-center gap-2 text-[10px] py-1 border-b border-white/5">
+                <span className="text-white/50 w-16 uppercase">{t.type.toLowerCase()}</span>
+                <span className="flex-1 truncate text-white/35">{t.prompt ?? '—'}</span>
+                <span className={`px-1 rounded ${t.status === 'READY' ? 'text-teal-400' : t.status === 'FAILED' ? 'text-red-400' : 'text-white/30'}`}>
+                  {t.status.toLowerCase()}
+                </span>
+                <input
+                  type="range"
+                  min={-12}
+                  max={12}
+                  step={0.5}
+                  value={t.volumeDb}
+                  onChange={(e) => void patchTrack(t.id, { volumeDb: Number(e.target.value) })}
+                  className="w-16 accent-teal-500"
+                  title="Gain (dB)"
+                />
+                <button
+                  type="button"
+                  onClick={() => void patchTrack(t.id, { muted: !t.muted })}
+                  className="text-white/40 hover:text-white/70"
+                >
+                  {t.muted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                </button>
+                {!t.locked && t.status !== 'GENERATING' && (
+                  <button
+                    type="button"
+                    onClick={() => void fetch(`/api/audio/track/${t.id}/generate`, { method: 'POST', credentials: 'include' }).then(() => reloadTracks())}
+                    className="text-teal-400/70 hover:text-teal-300"
+                  >
+                    ↺
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* AI Music Generation */}
         <div className="p-4 border-t border-white/8 space-y-3">
-          <p className="text-[10px] text-white/35 font-semibold uppercase tracking-wider">AI Audio Generation</p>
+          <p className="text-[10px] text-white/35 font-semibold uppercase tracking-wider">Forge Intelligence Audio</p>
 
           {/* Mood selector */}
           <div className="flex flex-wrap gap-1.5">

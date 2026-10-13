@@ -68,9 +68,9 @@ export function CreditPurchaseModal({ open, onOpenChange }: CreditPurchaseModalP
 
               <div>
                 <div className="text-sm font-semibold text-foreground">
-                  ${pack.priceUsd}
+                  ${pack.priceAud}
                   <span className="text-xs text-muted-foreground font-normal ml-1">
-                    USD
+                    AUD
                   </span>
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
@@ -79,7 +79,7 @@ export function CreditPurchaseModal({ open, onOpenChange }: CreditPurchaseModalP
               </div>
 
               <div className="text-[10px] text-muted-foreground/60">
-                ${((pack.priceUsd / pack.credits) * 100).toFixed(1)}¢ per credit
+                ${((pack.priceAud / pack.credits) * 100).toFixed(1)}¢ per credit
               </div>
             </button>
           ))}

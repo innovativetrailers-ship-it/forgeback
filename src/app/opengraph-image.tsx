@@ -85,7 +85,7 @@ export default function OGImage() {
 
         {/* Model badges */}
         <div style={{ display: 'flex', gap: 12 }}>
-          {['Kling', 'Veo 3', 'Runway', 'Luma', 'Pika'].map((model) => (
+          {['Script', 'Timeline', 'Cast', 'Sound', 'Export'].map((model) => (
             <div
               key={model}
               style={{

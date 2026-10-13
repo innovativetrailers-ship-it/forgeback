@@ -1,20 +1,19 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
 import {
   NODE_COLORS,
   NODE_TYPES_LIST,
   COMPOSITOR_NODE_COUNT,
   makeNode,
-  type NodeType,
-  type CompositorNode,
-  type NodeConnection,
-} from '@/lib/compositor'
+} from '@/lib/compositor/palette'
+import type { NodeType, NodePort, CompositorNode, NodeConnection } from '@/lib/compositor/schema'
+import { DESKTOP_VFX_NODES, DESKTOP_VFX_NOTE } from '@/lib/compositor/vfx'
 
-export type { NodeType, NodePort, CompositorNode, NodeConnection } from '@/lib/compositor'
+export type { NodeType, NodePort, CompositorNode, NodeConnection }
 
-export default function NodeCompositor() {
+export default function NodeCompositor({ sourceUrl }: { sourceUrl?: string }) {
   const [nodes, setNodes] = useState<CompositorNode[]>([])
   const [connections, setConnections] = useState<NodeConnection[]>([])
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
@@ -24,6 +23,15 @@ export default function NodeCompositor() {
   const [renderUrl, setRenderUrl] = useState<string | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const seeded = useRef(false)
+
+  useEffect(() => {
+    if (!sourceUrl || seeded.current) return
+    seeded.current = true
+    const node = makeNode('MediaIn', { x: 24, y: 24 })
+    node.params = { ...node.params, sourceUrl }
+    setNodes([node])
+  }, [sourceUrl])
 
   function addNode(type: NodeType) {
     const node = makeNode(type, { x: 200 + Math.random() * 300, y: 100 + Math.random() * 200 })
@@ -55,6 +63,8 @@ export default function NodeCompositor() {
       if (!res.ok) throw new Error(data.error ?? 'Render failed')
       setRenderUrl(data.url ?? null)
     } catch (err) {
+      console.warn("[caught] src/components/studio/NodeCompositor.tsx:57", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       alert((err as Error).message)
     } finally {
       setRendering(false)
@@ -130,17 +140,24 @@ export default function NodeCompositor() {
       <div className="flex flex-1 min-h-0">
         <div className="w-48 flex-shrink-0 border-r border-white/10 overflow-y-auto p-3">
           <div className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-2">Nodes</div>
-          {NODE_TYPES_LIST.map((type) => (
+          <p className="mb-2 text-[10px] text-white/40">{DESKTOP_VFX_NOTE}</p>
+          {NODE_TYPES_LIST.map((type) => {
+            const desktop = DESKTOP_VFX_NODES.includes(type as (typeof DESKTOP_VFX_NODES)[number])
+            return (
             <button
               key={type}
               type="button"
+              disabled={desktop}
+              title={desktop ? DESKTOP_VFX_NOTE : undefined}
               onClick={() => addNode(type)}
-              className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-white/10 transition-colors mb-1 flex items-center gap-2"
+              className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-white/10 transition-colors mb-1 flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: NODE_COLORS[type] }} />
               {type}
+              {desktop ? ' · desktop' : ''}
             </button>
-          ))}
+            )
+          })}
         </div>
 
         <div

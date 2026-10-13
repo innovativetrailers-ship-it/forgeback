@@ -1,4 +1,6 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '../fal/client'
+const falSubscribe = falSubscribeBound('lib.performance.ActTwo')
 import { uploadToR2 } from '../storage/r2'
 import { db } from '../db'
 
@@ -12,7 +14,7 @@ export async function capturePerformance(params: {
   const { webcamVideoUrl, targetCharacterId, captureMode } = params
 
   // 1. DWPose full skeleton extraction (133 keypoints)
-  const dwposeResult = await fal.subscribe('fal-ai/dwpose', {
+  const dwposeResult = await falSubscribe(falEndpoint('dwpose'), {
     input: {
       video_url: webcamVideoUrl,
       include_hands: captureMode === 'full_body_hands',
@@ -31,7 +33,7 @@ export async function capturePerformance(params: {
   const referenceImageUrl = character.referenceUrls[0]
 
   // 3. Apply pose to character via ControlNet
-  const animResult = await fal.subscribe('fal-ai/controlnet', {
+  const animResult = await falSubscribe(falEndpoint('controlnet'), {
     input: {
       prompt: `Full body animated character, matching pose from reference`,
       image_url: referenceImageUrl,
@@ -44,7 +46,7 @@ export async function capturePerformance(params: {
   // 4. LivePortrait facial expression overlay
   let finalVideoUrl = animResult.video.url
   if (captureMode === 'body_face' || captureMode === 'full_body_hands') {
-    const livePortraitResult = await fal.subscribe('fal-ai/live-portrait', {
+    const livePortraitResult = await falSubscribe(falEndpoint('live-portrait'), {
       input: {
         source_image_url: referenceImageUrl,
         driving_video_url: webcamVideoUrl,

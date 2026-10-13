@@ -3,29 +3,23 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
+import { CREDIT_PACKS as PACK_CATALOG } from '@cinema/core'
 
 export interface CreditBalance {
-  balance: number
-  role: string
+  credits:            number
+  balance:            number   // alias for credits — kept for backwards compatibility
+  role:               string
+  isAdmin:            boolean
+  unlimited:          boolean
+  subscriptionStatus: string
+  tier:               string
 }
 
-export const CREDIT_PACKS = [
-  { credits: 100, priceUsd: 5, label: '100 Credits', description: 'Great for trying out' },
-  {
-    credits: 500,
-    priceUsd: 20,
-    label: '500 Credits',
-    description: 'For regular creators',
-    popular: true,
-  },
-  { credits: 2000, priceUsd: 65, label: '2,000 Credits', description: 'Power users' },
-  {
-    credits: 10000,
-    priceUsd: 250,
-    label: '10,000 Credits',
-    description: 'Studios & teams',
-  },
-] as const
+export const CREDIT_PACKS = PACK_CATALOG.map((pack) => ({
+  ...pack,
+  priceAud: pack.priceAudCents / 100,
+  description: pack.popular ? 'Most chosen' : 'Credit pack',
+}))
 
 export function useCredits() {
   const { data: session } = useSession()
@@ -67,12 +61,19 @@ export function useCredits() {
     queryClient.invalidateQueries({ queryKey: ['credits', 'balance'] })
   }
 
+  const credits = data?.credits ?? data?.balance ?? 0
+
   return {
-    balance: data?.balance ?? 0,
-    role: data?.role ?? 'FREE',
+    balance:            credits,
+    credits,
+    isAdmin:            data?.isAdmin    ?? false,
+    unlimited:          data?.unlimited  ?? false,
+    subscriptionStatus: data?.subscriptionStatus ?? 'free',
+    tier:               data?.tier       ?? 'free',
+    role:               data?.role       ?? 'FREE',
     isLoading,
-    purchase: purchaseMutation.mutate,
-    isPurchasing: purchaseMutation.isPending,
+    purchase:           purchaseMutation.mutate,
+    isPurchasing:       purchaseMutation.isPending,
     refetchBalance,
   }
 }

@@ -9,7 +9,6 @@ import { createWriteStream } from 'fs'
 import { pipeline } from 'stream/promises'
 import path from 'path'
 import os from 'os'
-import { execSync } from 'child_process'
 
 export interface ParsedScript {
   title: string
@@ -151,7 +150,8 @@ Return JSON array of shots.`,
 
     const concatContent = localPaths.map(p => `file '${p}'`).join('\n')
     await fs.writeFile(listPath, concatContent)
-    execSync(`ffmpeg -y -f concat -safe 0 -i "${listPath}" -c copy "${outPath}"`)
+    const { runArgv } = await import('@/lib/shell/argv')
+    runArgv('ffmpeg', ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', outPath])
 
     const buffer = await fs.readFile(outPath)
     const key = `films/${title.replace(/\s+/g, '_')}_${Date.now()}.mp4`

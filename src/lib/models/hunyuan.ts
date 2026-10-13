@@ -1,60 +1,35 @@
-import { fal } from '../fal/client'
+import { buildPayload } from '@/lib/fal/videoPayloads'
+import { resolveHunyuanEndpoint } from '@/lib/fal/hunyuanEndpoints'
+import { falGenerateJob, falPollJob } from '@/lib/fal/modelQueue'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
 export async function generateVideo(
-  input: GenerateVideoInput
+  input: GenerateVideoInput,
 ): Promise<GenerateVideoOutput> {
-  const model = input.startFrameUrl ? 'fal-ai/wan-i2v' : 'fal-ai/hunyuan-video'
+  const isI2V = Boolean(input.startFrameUrl)
+  const model = resolveHunyuanEndpoint(isI2V)
 
-  interface FalResult {
-    request_id: string
-    status?: string
-  }
+  const falInput = await buildPayload(model, 'hunyuan-video-1.5', {
+    prompt: input.prompt,
+    duration: input.duration ?? 5,
+    aspectRatio: input.aspectRatio ?? '16:9',
+    imageUrl: input.startFrameUrl,
+    negativePrompt: input.negativePrompt,
+  })
+  if (input.seed !== undefined) falInput.seed = input.seed
 
-  const result = await fal.queue.submit(model, {
-    input: {
-      prompt: input.prompt,
-      ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
-      ...(input.startFrameUrl && { image_url: input.startFrameUrl }),
-      num_frames: Math.round(input.duration * 16),
-      ...(input.seed !== undefined && { seed: input.seed }),
-    },
-  }) as FalResult
-
-  return { jobId: result.request_id, status: 'pending' }
+  return falGenerateJob(model, falInput)
 }
 
 export async function pollStatus(
   externalJobId: string,
-  model: 'fal-ai/hunyuan-video' | 'fal-ai/wan-i2v' = 'fal-ai/hunyuan-video'
+  _isImageToVideo = false,
+  pollUrl?: string,
 ): Promise<GenerateVideoOutput> {
-  interface FalQueueStatus {
-    status: string
+  if (pollUrl) return falPollJob(pollUrl)
+  return {
+    jobId: externalJobId,
+    status: 'failed',
+    error: 'Missing FAL pollUrl — cannot poll Hunyuan without status_url from submit',
   }
-
-  const status = await fal.queue.status(model, {
-    requestId: externalJobId,
-    logs: false,
-  }) as FalQueueStatus
-
-  if (status.status === 'COMPLETED') {
-    interface FalQueueResult {
-      video?: { url: string }
-    }
-    const result = await fal.queue.result(model, {
-      requestId: externalJobId,
-    }) as FalQueueResult
-
-    return {
-      jobId: externalJobId,
-      status: 'complete',
-      videoUrl: result.video?.url,
-    }
-  }
-
-  if (status.status === 'FAILED') {
-    return { jobId: externalJobId, status: 'failed', error: 'HunyuanVideo generation failed' }
-  }
-
-  return { jobId: externalJobId, status: 'processing' }
 }

@@ -37,7 +37,6 @@ const MODEL_COLOURS: Record<string, string> = {
   skyreels_v1:    '#993556',
   hunyuan_1_5:    '#185FA5',
   wan_2_2:        '#3B6D11',
-  cogvideox:      '#0F6E56',
   ltx_2_3:        '#5F5E5A',
   pika_2_2:       '#00b8a0',
   minimax_hailuo: '#378ADD',
@@ -52,7 +51,6 @@ const MODEL_LABELS: Record<string, string> = {
   skyreels_v1:    'SkyReels V1',
   hunyuan_1_5:    'HunyuanVideo',
   wan_2_2:        'Wan 2.2',
-  cogvideox:      'CogVideoX',
   ltx_2_3:        'LTX-2.3',
   pika_2_2:       'Pika 2.2',
   minimax_hailuo: 'Minimax',
@@ -110,7 +108,9 @@ export function SwarmProgressPanel({ projectId, shots }: SwarmProgressPanelProps
             [event.shot_id!]: { ...prev[event.shot_id!], status: 'complete' },
           }))
         }
-      } catch { /* ignore parse errors */ }
+      } catch (err) {
+        console.warn("[caught] src/components/swarm/SwarmProgressPanel.tsx:111", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore parse errors */ }
     }
     es.onerror = () => es.close()
     return () => es.close()

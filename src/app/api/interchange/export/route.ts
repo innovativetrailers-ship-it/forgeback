@@ -3,16 +3,19 @@ import { db } from '@/lib/db'
 import { checkAndDeductCredits } from '@/lib/credits'
 import { exportEDL, exportFCPXML, exportDaVinciXML } from '@/lib/interchange/NativeFormats'
 import { exportTimeline, type InterchangeFormat } from '@/lib/interchange/OTIOClient'
+import { requireUser } from '@/lib/auth/requireUser'
 
 // POST { projectId, format: 'edl'|'fcpxml'|'aaf'|'resolve_xml'|'otioz' }
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: { projectId?: string; format?: string }
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/interchange/export/route.ts:15", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -40,6 +43,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, costMap[format] ?? 'export_interchange_native')
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/interchange/export/route.ts:42", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Insufficient credits'
     return NextResponse.json({ error: msg }, { status: 402 })
   }
@@ -83,6 +88,8 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/interchange/export/route.ts:85", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Export failed'
     return NextResponse.json({ error: msg }, { status: 500 })
   }

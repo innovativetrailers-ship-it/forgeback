@@ -1,0 +1,11 @@
+---
+description: SPEC-open-weight-models-in-pipeline. Read before adding H3/Wan/LTX/FLUX/Z-Image to the picker, registry flags, or LoRA-applied routing.
+globs: ["packages/core/src/logic/resolveModel.ts", "src/lib/models/**", "src/lib/fal/schemaSync.ts"]
+alwaysApply: false
+---
+
+# Open-weight models in the pipeline
+
+Contract: `docs/spec-references/SPEC-open-weight-models-in-pipeline.md`. Inherits TR-00. Do not add these ModelDefs until the user feeds TR-06. Overlay still wins: H3 Max and Wan 3.0 stay out of the live council until that fed prompt adopts them.
+
+Every open-weight model has two forms: BASE (no LoRA, general generation) and LoRA-APPLIED (`loraEndpoints[mode]` + loraUrl + trigger). Both are selectable. Manual pick wins. Orchestrator prefers LoRA > reference > seed on consistency/style shots when a matching asset exists. One H3 LoRA applies across t2v/i2v/r2v. Verify OpenAPI before writing any endpoint string.

@@ -1,4 +1,5 @@
-import { fal } from './client'
+import { buildWhisperSttInput, falEndpoint } from '@cinema/core/endpoints'
+import { runFal } from './client'
 
 export interface LipSyncInput {
   videoUrl: string
@@ -16,17 +17,10 @@ export async function lipSync(input: LipSyncInput): Promise<string> {
     throw new Error('LipSync requires either audioUrl or text')
   }
 
-  // fal-ai/sadtalker requires both fields; use a safe cast
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await (fal.run as (id: string, opts: { input: Record<string, any> }) => Promise<unknown>)(
-    'fal-ai/sadtalker',
-    {
-      input: {
-        source_image_url: input.videoUrl,
-        driven_audio_url: input.audioUrl ?? '',
-      },
-    }
-  ) as SadTalkerResult
+  const result = await runFal<SadTalkerResult>(falEndpoint('sadtalker'), {
+    source_image_url: input.videoUrl,
+    driven_audio_url: input.audioUrl ?? '',
+  })
 
   return result.video?.url ?? input.videoUrl
 }
@@ -40,13 +34,10 @@ export async function transcribeAudio(audioUrl: string): Promise<{
     chunks?: Array<{ timestamp: [number, number]; text: string }>
   }
 
-  const result = await fal.run('fal-ai/whisper', {
-    input: {
-      audio_url: audioUrl,
-      task: 'transcribe',
-      chunk_level: 'segment',
-    },
-  }) as WhisperResult
+  const result = await runFal<WhisperResult>(falEndpoint('whisper'), buildWhisperSttInput({
+    audioUrl,
+    chunkLevel: 'segment',
+  }))
 
   return {
     text: result.text ?? '',

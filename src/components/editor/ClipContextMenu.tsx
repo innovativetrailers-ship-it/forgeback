@@ -2,6 +2,9 @@
 
 import { useUIStore } from '@/store/ui'
 import { useEditorStore } from '@/store/editor'
+import { usePlaybackStore } from '@/store/playbackStore'
+import { deleteFromLibrary } from '@/lib/library/deleteFromLibrary'
+import { reorderTimelineClip } from '@/lib/timeline/syncToPlayback'
 import { cn } from '@/lib/utils'
 
 interface MenuItem {
@@ -13,11 +16,12 @@ interface MenuItem {
 }
 
 const CLIP_CONTEXT_ITEMS: MenuItem[] = [
+  { label: 'Add comment',           action: 'add_comment' },
   { label: 'Repaint segment',       action: 'open_repaint' },
   { label: 'Clip Extend →',         action: 'open_extend' },
   { label: 'Retime clip',           action: 'open_retime' },
   { label: 'Stabilise',             action: 'open_stabilise' },
-  { label: 'Upscale',               action: 'open_upscale' },
+  { label: 'AI Tools',             action: 'open_upscale' },
   { label: 'Remove object...',      action: 'open_object_removal' },
   { label: 'Recast character',      action: 'open_recast' },
   { label: 'Apply SFX makeup',      action: 'open_makeup' },
@@ -27,7 +31,10 @@ const CLIP_CONTEXT_ITEMS: MenuItem[] = [
   { separator: true },
   { label: 'Download clip',         action: 'download_clip' },
   { label: 'Copy grade to all',     action: 'copy_grade' },
-  { label: 'Remove from timeline',  action: 'remove_clip', danger: true },
+  { label: 'Move earlier',          action: 'move_earlier' },
+  { label: 'Move later',            action: 'move_later' },
+  { label: 'Remove from timeline',  action: 'remove_clip' },
+  { label: 'Delete from library',   action: 'delete_library', danger: true },
 ]
 
 interface Props {
@@ -44,6 +51,9 @@ export function ClipContextMenu({ clipId, x, y, onClose }: Props) {
   const handleAction = (action: string) => {
     onClose()
     switch (action) {
+      case 'add_comment':
+        setActiveRightPanel('comments')
+        break
       case 'open_repaint':
         openRepaintModal({ clipId, startSeconds: 0, endSeconds: 1 })
         break
@@ -55,7 +65,7 @@ export function ClipContextMenu({ clipId, x, y, onClose }: Props) {
         setActiveRightPanel('stabilise')
         break
       case 'open_upscale':
-        setActiveRightPanel('upscale')
+        window.dispatchEvent(new CustomEvent('cinema:ai-tools', { detail: { clipId } }))
         break
       case 'open_object_removal':
         setActiveRightPanel('object_removal')
@@ -81,8 +91,23 @@ export function ClipContextMenu({ clipId, x, y, onClose }: Props) {
       case 'copy_grade':
         window.dispatchEvent(new CustomEvent('copy-grade', { detail: { clipId } }))
         break
-      case 'remove_clip':
+      case 'move_earlier':
+        reorderTimelineClip(clipId, -1)
+        break
+      case 'move_later':
+        reorderTimelineClip(clipId, 1)
+        break
+      case 'remove_clip': {
+        const placement = window.confirm('Remove this clip from the timeline? The library take stays. Delete from library is the step that removes the file.')
+        if (!placement) break
+        const playback = usePlaybackStore.getState()
+        playback.suppressShot(clipId)
+        playback.removeTimelineClip(clipId)
         removeClip(clipId)
+        break
+      }
+      case 'delete_library':
+        void deleteFromLibrary(clipId)
         break
     }
   }

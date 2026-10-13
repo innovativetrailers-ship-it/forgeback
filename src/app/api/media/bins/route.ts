@@ -12,6 +12,7 @@ import {
   autoOrganiseBins,
   type BinClip,
 } from '@/lib/media/BinManager'
+import { requireUser } from '@/lib/auth/requireUser'
 
 type BinAction =
   | 'list'
@@ -41,13 +42,15 @@ interface BinsRequestBody {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: BinsRequestBody
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/media/bins/route.ts:50", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -136,6 +139,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 })
     }
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/media/bins/route.ts:138", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Bin operation failed'
     return NextResponse.json({ error: msg }, { status: 500 })
   }

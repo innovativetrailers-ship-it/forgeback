@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '../../../lib/db'
 import { renderQueue } from '../../../lib/queue'
+import { requireUser } from '@/lib/auth/requireUser'
 
 // Plugin API — Studio tier only, authenticated via API key
-function authenticatePlugin(req: NextRequest): { userId: string | null } {
+async function authenticatePlugin(req: NextRequest): Promise<{ userId: string | null }> {
   const apiKey = req.headers.get('x-api-key')
   if (!apiKey || apiKey !== process.env.PLUGIN_API_SECRET) {
     // Also allow x-user-id from normal auth middleware for Studio users
-    const userId = req.headers.get('x-user-id')
+    const userId = (await requireUser(req))?.id ?? null
     return { userId }
   }
   // For now, plugin key maps to a system user — in production, use a key→userId lookup
-  return { userId: req.headers.get('x-user-id') }
+  return { userId: (await requireUser(req))?.id ?? null }
 }
 
 export async function GET(req: NextRequest) {
-  const { userId } = authenticatePlugin(req)
+  const { userId } = await authenticatePlugin(req)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
@@ -39,16 +40,27 @@ export async function GET(req: NextRequest) {
 
     const [characters, locations] = await Promise.all([
       db.vaultCharacter.findMany({ where: { projectId } }),
-      db.vaultLocation.findMany({ where: { projectId } }),
+      db.asset.findMany({
+        where: { kind: 'location', boundary: { path: ['projectId'], equals: projectId } },
+        select: { id: true, label: true, sourceRefs: true, generatedImage: true },
+      }),
     ])
-    return NextResponse.json({ characters, locations })
+    return NextResponse.json({
+      characters,
+      locations: locations.map((row) => ({
+        id: row.id,
+        name: row.label ?? 'Location',
+        referenceUrls: row.sourceRefs,
+        imageUrl: row.generatedImage,
+      })),
+    })
   }
 
   return NextResponse.json({ error: 'Invalid resource' }, { status: 400 })
 }
 
 export async function POST(req: NextRequest) {
-  const { userId } = authenticatePlugin(req)
+  const { userId } = await authenticatePlugin(req)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
@@ -57,7 +69,9 @@ export async function POST(req: NextRequest) {
   let body: Record<string, unknown>
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/plugin/route.ts:60", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 

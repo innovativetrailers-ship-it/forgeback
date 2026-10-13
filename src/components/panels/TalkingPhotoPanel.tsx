@@ -43,6 +43,8 @@ export function TalkingPhotoPanel() {
       if (!res.ok) throw new Error(data.error ?? 'Generation failed')
       setJobId(data.jobId ?? null)
     } catch (err) {
+      console.warn("[caught] src/components/panels/TalkingPhotoPanel.tsx:45", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError(err instanceof Error ? err.message : 'Failed')
       setLoading(false)
     }

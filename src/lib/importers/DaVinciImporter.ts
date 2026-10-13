@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
@@ -22,7 +23,7 @@ export async function importDaVinciProject(fileBuffer: Buffer): Promise<Imported
     db.close()
 
     return {
-      projectName: 'DaVinci Resolve Project',
+      projectName: 'Colour project',
       sequences: timelines.map((t) => ({
         name: t.name,
         id: String(t.id),
@@ -38,6 +39,6 @@ export async function importDaVinciProject(fileBuffer: Buffer): Promise<Imported
       })),
     }
   } finally {
-    await fs.unlink(tmpPath).catch(() => {})
+    await fs.unlink(tmpPath).catch((err) => logCaught('lib/importers/DaVinciImporter', err))
   }
 }

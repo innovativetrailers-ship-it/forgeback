@@ -17,7 +17,10 @@ export async function exportTimeline(params: {
     }),
   })
   if (!response.ok) {
-    const err = await response.text().catch(() => response.statusText)
+    const err = await response.text().catch((err) => {
+      console.warn("[caught] src/lib/interchange/OTIOClient.ts:20", err instanceof Error ? { name: err.name, message: err.message } : err)
+      return (response.statusText)
+    })
     throw new Error(`OTIO export failed: ${err}`)
   }
   return Buffer.from(await response.arrayBuffer())
@@ -31,7 +34,10 @@ export async function importTimeline(file: Blob, filename: string): Promise<Time
     body: formData,
   })
   if (!response.ok) {
-    const err = await response.text().catch(() => response.statusText)
+    const err = await response.text().catch((err) => {
+      console.warn("[caught] src/lib/interchange/OTIOClient.ts:34", err instanceof Error ? { name: err.name, message: err.message } : err)
+      return (response.statusText)
+    })
     throw new Error(`OTIO import failed: ${err}`)
   }
   return response.json() as Promise<TimelineRecipe>
@@ -41,7 +47,9 @@ export async function checkOTIOHealth(): Promise<boolean> {
   try {
     const res = await fetch(`${OTIO_SERVICE}/health`, { signal: AbortSignal.timeout(3000) })
     return res.ok
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/interchange/OTIOClient.ts:44", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return false
   }
 }

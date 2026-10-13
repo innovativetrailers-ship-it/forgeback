@@ -1,11 +1,23 @@
+import { creditsForStripePrice } from '@cinema/core'
 import { stripe, usdCentsToCredits } from '@/lib/payments/stripe'
-import { db }                        from '@/lib/db'
+import { db } from '@/lib/db'
+import { grantCredits } from '@/lib/credits'
+import {
+  STRIPE_PRICE_TO_TIER,
+  SUBSCRIPTION_PLAN_CREDITS,
+} from '@/lib/payments/stripePrices'
+import { hasStripeSignature } from '@/lib/payments/stripeWebhook'
+import { upsertSubscription } from '@/lib/entitlement/resolve'
+import type { SubscriptionTier } from '@/lib/access/tiers'
 
-export const config = { api: { bodyParser: false } }
+export const runtime = 'nodejs'
 
 export async function POST(req: Request) {
   const body      = await req.text()
-  const signature = req.headers.get('stripe-signature')!
+  const signature = req.headers.get('stripe-signature')
+  if (!hasStripeSignature(signature)) {
+    return Response.json({ error: 'Missing stripe-signature' }, { status: 400 })
+  }
 
   let event: ReturnType<typeof stripe.webhooks.constructEvent>
   try {
@@ -15,6 +27,9 @@ export async function POST(req: Request) {
     console.error('[Stripe Webhook] Invalid signature:', msg)
     return Response.json({ error: 'Invalid signature' }, { status: 400 })
   }
+
+  const already = await db.processedStripeEvent.findUnique({ where: { eventId: event.id } })
+  if (already) return Response.json({ received: true })
 
   switch (event.type) {
 
@@ -27,16 +42,11 @@ export async function POST(req: Request) {
       const vendorCents = parseInt(pi.metadata.vendorCents ?? '0')
       const credits     = usdCentsToCredits(vendorCents)
 
-      await db.$transaction([
-        db.stripeDeposit.update({
-          where: { paymentIntentId: pi.id },
-          data:  { status: 'completed' },
-        }),
-        db.user.update({
-          where: { id: userId },
-          data:  { creditBalance: { increment: credits } },
-        }),
-      ])
+      await db.stripeDeposit.update({
+        where: { paymentIntentId: pi.id },
+        data:  { status: 'completed' },
+      })
+      await grantCredits(db, userId, 'stripe', `${event.id}:deposit`, credits, 'deposit')
 
       const record = await db.stripeCustomer.findUnique({ where: { userId } })
       if (record) {
@@ -51,19 +61,6 @@ export async function POST(req: Request) {
           },
         })
       }
-
-      const updatedUser = await db.user.findUnique({
-        where:  { id: userId },
-        select: { creditBalance: true },
-      })
-      await db.creditTransaction.create({
-        data: {
-          userId,
-          amount:      credits,
-          description: `Deposit: $${pi.amount / 100}`,
-          balanceAfter: updatedUser?.creditBalance ?? credits,
-        },
-      })
 
       console.log(`[Stripe] Deposit: $${pi.amount / 100} → ${credits} credits for ${userId}`)
       break
@@ -92,10 +89,117 @@ export async function POST(req: Request) {
       const refundedCents = charge.amount_refunded as number
       const credits       = usdCentsToCredits(refundedCents)
 
-      await db.$transaction([
-        db.user.update({ where: { id: userId }, data: { creditBalance: { decrement: credits } } }),
-        db.stripeDeposit.updateMany({ where: { paymentIntentId: pi.id }, data: { status: 'refunded' } }),
-      ])
+      await db.stripeDeposit.updateMany({ where: { paymentIntentId: pi.id }, data: { status: 'refunded' } })
+      await grantCredits(db, userId, 'stripe', `${event.id}:refund`, -credits, 'refund')
+      break
+    }
+
+    // Subscription invoice paid → reset credits; credit pack → additive
+    case 'invoice.paid': {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const invoice    = event.data.object as any
+      const customerId = invoice.customer as string
+      const priceId    = invoice.lines?.data?.[0]?.price?.id as string | undefined
+
+      const stripeRecord = await db.stripeCustomer.findUnique({
+        where: { stripeCustomerId: customerId },
+      })
+      if (!stripeRecord) break
+
+      const userId = stripeRecord.userId
+
+      // Never touch admin credits
+      const user = await db.user.findUnique({ where: { id: userId }, select: { role: true } })
+      if (user?.role === 'ADMIN') break
+
+      const tier = priceId ? STRIPE_PRICE_TO_TIER[priceId] : undefined
+      const packCredits = priceId ? creditsForStripePrice(priceId, process.env) : null
+      const isSubscription = !!invoice.subscription
+
+      if (isSubscription && tier && tier !== 'free' && tier !== 'admin') {
+        const credits = SUBSCRIPTION_PLAN_CREDITS[tier]
+        await db.user.update({
+          where: { id: userId },
+          data: { subscriptionTier: tier, subscriptionStatus: 'active' },
+        })
+        await grantCredits(db, userId, 'stripe', `${event.id}:subscription`, credits, 'subscription')
+        console.log(`[Stripe] Subscription paid: ${credits} credits, tier=${tier} for ${userId}`)
+      } else if (packCredits) {
+        await grantCredits(db, userId, 'stripe', event.id, packCredits, 'credit_pack')
+        console.log(`[Stripe] Credit pack: ${packCredits} credits for ${userId}`)
+      }
+      break
+    }
+
+    case 'invoice.payment_failed': {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const invoice = event.data.object as any
+      const customerId = invoice.customer as string
+      const stripeRecord = await db.stripeCustomer.findUnique({
+        where: { stripeCustomerId: customerId },
+      })
+      if (stripeRecord) {
+        await db.user.update({
+          where: { id: stripeRecord.userId },
+          data:  { subscriptionStatus: 'past_due' },
+        })
+      }
+      break
+    }
+
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated': {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sub = event.data.object as any
+      const customerId = sub.customer as string
+      const priceId = sub.items?.data?.[0]?.price?.id as string | undefined
+      const tier = (priceId ? STRIPE_PRICE_TO_TIER[priceId] : sub.metadata?.tier) as SubscriptionTier | undefined
+      const stripeRecord = await db.stripeCustomer.findUnique({
+        where: { stripeCustomerId: customerId },
+      })
+      if (stripeRecord && tier) {
+        await db.user.update({
+          where: { id: stripeRecord.userId },
+          data: {
+            subscriptionTier:   tier,
+            subscriptionStatus: sub.status as string,
+          },
+        })
+      }
+      if (stripeRecord && typeof sub.id === 'string') {
+        const plan = sub.metadata?.plan === 'desktop' ? 'desktop' : (tier ?? 'free')
+        await upsertSubscription({
+          userId: stripeRecord.userId,
+          providerSubId: sub.id,
+          providerCustomerId: customerId,
+          plan,
+          status: typeof sub.status === 'string' ? sub.status : 'expired',
+          currentPeriodEnd: typeof sub.current_period_end === 'number' ? new Date(sub.current_period_end * 1000) : null,
+        })
+      }
+      break
+    }
+
+    case 'customer.subscription.deleted': {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sub = event.data.object as any
+      const customerId = sub.customer as string
+      const stripeRecord = await db.stripeCustomer.findUnique({
+        where: { stripeCustomerId: customerId },
+      })
+      if (stripeRecord && typeof sub.id === 'string') {
+        await upsertSubscription({
+          userId: stripeRecord.userId,
+          providerSubId: sub.id,
+          plan: 'free',
+          status: 'canceled',
+          currentPeriodEnd: null,
+        })
+        await db.user.update({
+          where: { id: stripeRecord.userId },
+          data:  { subscriptionStatus: 'canceled' },
+        })
+      }
       break
     }
 
@@ -106,10 +210,18 @@ export async function POST(req: Request) {
       const userId  = session.metadata?.userId as string | undefined
       const credits = parseInt(session.metadata?.credits ?? '0')
       if (userId && credits > 0) {
-        await db.user.update({ where: { id: userId }, data: { creditBalance: { increment: credits } } })
+        await grantCredits(db, userId, 'stripe', `${event.id}:checkout`, credits, 'purchase')
+        return Response.json({ received: true })
       }
       break
     }
+  }
+
+  try {
+    await db.processedStripeEvent.create({ data: { eventId: event.id, type: event.type } })
+  } catch (err) {
+    console.warn('[Stripe Webhook] duplicate', event.id, err instanceof Error ? err.message : err)
+    return Response.json({ received: true })
   }
 
   return Response.json({ received: true })

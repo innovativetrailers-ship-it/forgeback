@@ -1,6 +1,6 @@
+import { runArgv } from '../shell/argv'
 import { uploadToR2 } from '../storage/r2'
-import { execSync } from 'child_process'
-import { existsSync, mkdirSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, rmSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 
@@ -28,16 +28,12 @@ export async function stabiliseVideo(params: {
     const optzoom = strength === 'cinematic' ? '0' : '1'
     const crop = Math.round(cropRatio * 100)
 
-    execSync(
-      `ffmpeg -i "${videoUrl}" -vf "vidstabdetect=stepsize=6:shakiness=8:accuracy=9:result=${transforms}" -f null - 2>/dev/null`
-    )
+    runArgv("ffmpeg", ["-i", videoUrl, "-vf", `vidstabdetect=stepsize=6:shakiness=8:accuracy=9:result=${transforms}`, "-f", "null", "-"])
 
     // Step 2: Apply stabilisation
-    execSync(
-      `ffmpeg -i "${videoUrl}" -vf "vidstabtransform=input=${transforms}:zoom=${crop}:smoothing=${smoothingValue}:optzoom=${optzoom},unsharp=5:5:0.8:3:3:0.4" -c:v libx264 -crf 18 -c:a copy "${stabilised}" -y 2>/dev/null`
-    )
+    runArgv("ffmpeg", ["-i", videoUrl, "-vf", `vidstabtransform=input=${transforms}:zoom=${crop}:smoothing=${smoothingValue}:optzoom=${optzoom},unsharp=5:5:0.8:3:3:0.4`, "-c:v", "libx264", "-crf", "18", "-c:a", "copy", stabilised, "-y"])
 
-    const buffer = execSync(`cat "${stabilised}"`)
+    const buffer = readFileSync(stabilised)
     const stabilisedUrl = await uploadToR2(buffer, `stabilised/${jobId}.mp4`, 'video/mp4')
     return { stabilisedUrl }
   } finally {

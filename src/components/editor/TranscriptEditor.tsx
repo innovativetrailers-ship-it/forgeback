@@ -23,21 +23,61 @@ export default function TranscriptEditor({ projectId, onApplyEdits }: Transcript
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedRange, setSelectedRange] = useState<{ start: number; end: number } | null>(null)
+  const [notice, setNotice] = useState('')
+  const [armed, setArmed] = useState(false)
   const { setPlayheadTime } = useEditorStore()
 
   const loadTranscript = useCallback(async () => {
     setLoading(true)
     try {
-      const resp = await fetch(`/api/timeline/transcribe?projectId=${projectId}`)
-      if (!resp.ok) throw new Error('Transcription failed')
-      const data = await resp.json() as { words: TranscriptWord[] }
-      setWords(data.words)
-    } catch {
-      // handle error
+      const projectRes = await fetch(`/api/projects/${projectId}`, { credentials: 'include' })
+      if (!projectRes.ok) throw new Error('Could not load the project')
+      const project = await projectRes.json() as {
+        recipe?: { tracks?: Array<{ clips?: Array<{ id?: string; sourceUrl?: string }> }> }
+      }
+      const clip = (project.recipe?.tracks ?? []).flatMap((track) => track.clips ?? []).find((row) => row.sourceUrl?.startsWith('http'))
+      const audioUrl = clip?.sourceUrl
+      if (!audioUrl) throw new Error('This project has no clip with a stored address')
+      if (!armed) {
+        const quote = await fetch('/api/studio/audio/gap', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ op: 'transcribe', confirm: false, audioUrl }),
+        })
+        const priced = await quote.json() as { estimateCredits?: number; error?: string }
+        if (!quote.ok) throw new Error(priced.error || 'Could not price transcription')
+        setArmed(true)
+        setNotice(`${priced.estimateCredits ?? 8} credits to transcribe. Press Transcribe again to run.`)
+        return
+      }
+      const resp = await fetch('/api/studio/audio/gap', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ op: 'transcribe', confirm: true, audioUrl }),
+      })
+      const data = await resp.json() as { words?: Array<{ text: string; start: number; end: number }>; error?: string }
+      if (!resp.ok) throw new Error(data.error || 'Transcription failed')
+      setArmed(false)
+      setWords((data.words ?? []).map((word) => ({
+        word: word.text,
+        start: word.start,
+        end: word.end,
+        confidence: 1,
+        trackId: '',
+        clipId: clip.id ?? projectId,
+        markedForRemoval: false,
+      })))
+      setNotice(`${data.words?.length ?? 0} words. The clip file stays.`)
+    } catch (err) {
+      console.warn('[transcript]', err instanceof Error ? err.message : err)
+      setArmed(false)
+      setNotice(err instanceof Error ? err.message : 'Transcription failed')
     } finally {
       setLoading(false)
     }
-  }, [projectId])
+  }, [projectId, armed])
 
   function toggleWord(idx: number) {
     setWords((prev) => {
@@ -119,7 +159,7 @@ export default function TranscriptEditor({ projectId, onApplyEdits }: Transcript
           disabled={loading}
           className="px-3 py-1.5 bg-[#00e5c8] hover:bg-[#00f0d5] disabled:opacity-50 rounded-lg text-sm font-medium transition-colors text-black"
         >
-          {loading ? 'Transcribing...' : 'Transcribe'}
+          {loading ? 'Transcribing...' : armed ? 'Confirm transcribe' : 'Transcribe'}
         </button>
         <input
           type="text"
@@ -136,6 +176,7 @@ export default function TranscriptEditor({ projectId, onApplyEdits }: Transcript
           Export SRT
         </button>
       </div>
+      {notice && <p className="px-4 py-2 text-xs text-white/60">{notice}</p>}
 
       {/* Stats bar */}
       {words.length > 0 && (

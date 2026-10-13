@@ -1,12 +1,15 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { checkAndDeductCredits } from '@/lib/credits'
-import { fal } from '@fal-ai/client'
+import { fal, falSubscribeBound} from '@/lib/fal/client'
+import { requireUser } from '@/lib/auth/requireUser'
+const falSubscribe = falSubscribeBound('app.api.avatar.create.route')
 import { db } from '@/lib/db'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { imageUrl, name, style } = await req.json() as {
@@ -22,13 +25,13 @@ export async function POST(req: NextRequest) {
   await checkAndDeductCredits(userId, 'avatar_create')
 
   try {
-    const result = await fal.subscribe('fal-ai/instant-id', {
+    const result = await falSubscribe(falEndpoint('instant-character'), {
       input: {
         image_url: imageUrl,
         prompt: `professional avatar portrait, ${style ?? 'realistic'} style, clean background`,
+        image_size: 'portrait_4_3',
         negative_prompt: 'blurry, deformed, ugly, watermark',
-        guidance_scale: 5,
-        num_inference_steps: 30,
+        num_images: 1,
       },
     })
 

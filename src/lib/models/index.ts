@@ -5,8 +5,7 @@
 import { fal } from '../fal/client'
 import { generateSkyReels } from './skyreels'
 import { generateLTX } from './ltx'
-import { generateCogVideoX } from './cogvideox'
-export { generateSkyReels, generateLTX, generateCogVideoX }
+export { generateSkyReels, generateLTX }
 
 export interface SwarmPayload {
   prompt: string
@@ -86,7 +85,7 @@ export async function generateKling30(payload: SwarmPayload): Promise<string> {
   const isI2V = !!payload.startFrameUrl
   return pollUntilDone(
     async () => {
-      const r = await klingClient.pollStatus(job.jobId, isI2V)
+      const r = await klingClient.pollStatus(job.jobId, 'pro', isI2V, job.pollUrl)
       return { status: r.status === 'complete' ? 'complete' : r.status === 'failed' ? 'failed' : 'pending', result: r.videoUrl }
     },
     5000, 120, 'Kling'
@@ -94,7 +93,7 @@ export async function generateKling30(payload: SwarmPayload): Promise<string> {
 }
 
 // ── Runway Gen-4.5 ───────────────────────────────────────────
-import * as runwayClient from './runway'
+import * as runwayClient from '@/lib/providers/runway'
 export async function generateRunway(payload: SwarmPayload): Promise<string> {
   const job = await runwayClient.generateVideo({
     prompt: payload.prompt,
@@ -125,36 +124,22 @@ export async function generateHunyuan(payload: SwarmPayload): Promise<string> {
   })
   return pollUntilDone(
     async () => {
-      const r = await hunyuanClient.pollStatus(job.jobId)
+      const r = await hunyuanClient.pollStatus(job.jobId, !!payload.startFrameUrl, job.pollUrl)
       return { status: r.status === 'complete' ? 'complete' : r.status === 'failed' ? 'failed' : 'pending', result: r.videoUrl }
     },
     8000, 90, 'HunyuanVideo'
   )
 }
 
-// ── Wan 2.2 ──────────────────────────────────────────────────
+// ── Wan 2.6 ──────────────────────────────────────────────────
 export async function generateWan22(payload: SwarmPayload): Promise<string> {
-  const endpoint = payload.startFrameUrl ? 'fal-ai/wan/image-to-video' : 'fal-ai/wan/v2.2/t2v'
-  const result = await fal.subscribe(endpoint, {
-    input: {
-      prompt: payload.prompt,
-      negative_prompt: payload.negativePrompt,
-      num_frames: Math.round(payload.duration * 16),
-      aspect_ratio: payload.aspectRatio,
-      ...(payload.startFrameUrl && { image_url: payload.startFrameUrl }),
-      ...(payload.seed !== undefined && { seed: payload.seed }),
-    },
-    pollInterval: 5000,
-  }) as unknown as { video: { url: string } }
-  return result.video.url
-}
-
-// ── CogVideoX ────────────────────────────────────────────────
-export async function generateCogVideoXSwarm(payload: SwarmPayload): Promise<string> {
-  return generateCogVideoX({
+  const { generateVideoSync } = await import('./wan')
+  return generateVideoSync({
     prompt: payload.prompt,
     negativePrompt: payload.negativePrompt,
     duration: payload.duration,
+    aspectRatio: payload.aspectRatio,
+    startFrameUrl: payload.startFrameUrl,
     seed: payload.seed,
   })
 }
@@ -166,6 +151,7 @@ export async function generateLTXSwarm(payload: SwarmPayload): Promise<string> {
     negativePrompt: payload.negativePrompt,
     duration: payload.duration,
     seed: payload.seed,
+    registryKey: 'ltx-2.3-fast',
   })
 }
 
@@ -224,20 +210,24 @@ export async function generateSkyReelsSwarm(payload: SwarmPayload): Promise<stri
 
 // ── Pixverse ─────────────────────────────────────────────────
 import * as pixverseClient from './pixverse'
-export async function generatePixverse(payload: SwarmPayload): Promise<string> {
+export async function generatePixverse(
+  payload: SwarmPayload,
+  registryKey: pixverseClient.PixverseRegistryKey = 'pixverse-v6',
+): Promise<string> {
+  const isI2V = Boolean(payload.startFrameUrl)
   const job = await pixverseClient.generateVideo({
     prompt: payload.prompt,
     negativePrompt: payload.negativePrompt,
     duration: Math.min(payload.duration, 10),
     aspectRatio: payload.aspectRatio,
     startFrameUrl: payload.startFrameUrl,
-  })
+  }, registryKey)
   if (job.status === 'complete' && job.videoUrl) return job.videoUrl
   if (job.status === 'failed') throw new Error(job.error ?? 'Pixverse failed')
 
   return pollUntilDone(
     async () => {
-      const r = await pixverseClient.pollStatus(job.jobId)
+      const r = await pixverseClient.pollStatus(job.jobId, registryKey, isI2V, job.pollUrl)
       return { status: r.status === 'complete' ? 'complete' : r.status === 'failed' ? 'failed' : 'pending', result: r.videoUrl }
     },
     5000, 120, 'Pixverse'

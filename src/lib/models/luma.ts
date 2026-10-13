@@ -1,58 +1,51 @@
-// Luma Ray 3 now routes through FAL — no direct Luma API key needed
+import { runFal, extractVideoUrl, fal, falQueueBound} from '@/lib/fal/client'
+const falQueueOps = falQueueBound('lib.models.luma')
+import { buildPayload } from '@/lib/fal/videoPayloads'
+import { resolveLumaEndpoint } from '@/lib/fal/lumaEndpoints'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
-
-const FAL_MODEL = 'fal-ai/luma-dream-machine'
 
 export async function generateVideo(
   input: GenerateVideoInput
 ): Promise<GenerateVideoOutput> {
-  const falInput: Record<string, unknown> = {
-    prompt:       input.prompt,
-    aspect_ratio: input.aspectRatio ?? '16:9',
-    duration:     input.duration,
-  }
-  if (input.startFrameUrl) {
-    falInput.keyframes = { frame0: { type: 'image', url: input.startFrameUrl } }
-  }
-  if (input.endFrameUrl) {
-    falInput.keyframes = {
-      ...(falInput.keyframes as object),
-      frame1: { type: 'image', url: input.endFrameUrl },
-    }
-  }
+  const isI2V = Boolean(input.startFrameUrl)
+  const model = resolveLumaEndpoint(isI2V)
 
-  const res = await fetch(`https://fal.run/${FAL_MODEL}`, {
-    method:  'POST',
-    headers: { Authorization: `Key ${process.env.FAL_API_KEY}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ input: falInput }),
+  const falInput = await buildPayload(model, 'luma-ray3', {
+    prompt: input.prompt,
+    duration: input.duration ?? 5,
+    aspectRatio: input.aspectRatio ?? '16:9',
+    imageUrl: input.startFrameUrl,
+    negativePrompt: input.negativePrompt,
   })
-  if (!res.ok) throw new Error(`Luma FAL error ${res.status}: ${await res.text()}`)
 
-  const data = await res.json() as { request_id?: string; video?: { url?: string }; video_url?: string }
-  const jobId    = data.request_id ?? `luma_${Date.now()}`
-  const videoUrl = data.video?.url ?? data.video_url
+  const data = await runFal(model, falInput)
+  const videoUrl = extractVideoUrl(data)
+  const jobId    = `luma_${Date.now()}`
 
   return {
     jobId,
-    status:  videoUrl ? 'complete' : 'pending',
+    status:  videoUrl ? 'complete' : 'failed',
     videoUrl,
-    pollUrl: videoUrl ? undefined : `https://queue.fal.run/${FAL_MODEL}/requests/${jobId}`,
+    error:   videoUrl ? undefined : 'Luma returned no video',
   }
 }
 
 export async function pollStatus(requestId: string): Promise<GenerateVideoOutput> {
-  const res = await fetch(
-    `https://queue.fal.run/${FAL_MODEL}/requests/${requestId}`,
-    { headers: { Authorization: `Key ${process.env.FAL_API_KEY}` } }
-  )
-  if (!res.ok) throw new Error(`Luma poll error ${res.status}`)
+  const model = resolveLumaEndpoint(false)
+  try {
+    const status = await falQueueOps.status(model, { requestId, logs: false }) as { status: string }
+    if (status.status !== 'COMPLETED') {
+      if (status.status === 'FAILED') {
+        return { jobId: requestId, status: 'failed', error: 'Luma generation failed' }
+      }
+      return { jobId: requestId, status: 'processing' }
+    }
+    const result = await falQueueOps.result(model, { requestId }) as { data: unknown }
+    const videoUrl = extractVideoUrl(result.data)
+    return { jobId: requestId, status: 'complete', videoUrl }
+  } catch (err) {
+    console.warn("[caught] src/lib/models/luma.ts:46", err instanceof Error ? { name: err.name, message: err.message } : err)
 
-  const data = await res.json() as { status?: string; video?: { url?: string }; video_url?: string; error?: string }
-  if (data.status === 'COMPLETED' || data.video?.url || data.video_url) {
-    return { jobId: requestId, status: 'complete', videoUrl: data.video?.url ?? data.video_url }
+    return { jobId: requestId, status: 'processing' }
   }
-  if (data.status === 'FAILED') {
-    return { jobId: requestId, status: 'failed', error: data.error ?? 'Luma generation failed' }
-  }
-  return { jobId: requestId, status: 'processing' }
 }

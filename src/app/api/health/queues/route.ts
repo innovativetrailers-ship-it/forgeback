@@ -30,6 +30,8 @@ export async function GET(req: NextRequest) {
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
+    console.warn("[caught] src/app/api/health/queues/route.ts:32", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }

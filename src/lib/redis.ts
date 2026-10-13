@@ -1,4 +1,5 @@
-import Redis from 'ioredis'
+import { logCaught } from '@/lib/diagnostics/caught'
+import Redis, { type RedisOptions } from 'ioredis'
 
 export const CINEMA_KEY_PREFIX = 'cinema:'
 
@@ -7,7 +8,7 @@ const isBuildTime =
   process.env.NEXT_PHASE === 'phase-export'
 
 // Accepted REDIS_URL patterns (set ONE on Vercel/Railway):
-//   rediss://default:<token>@<host>.upstash.io:6380  (preferred, all-in-one)
+//   rediss://default:<token>@<host>.upstash.io:6379  (preferred, all-in-one)
 //   https://<host>.upstash.io  +  REDIS_TOKEN=<token>
 //   redis://localhost:6379  (local / Docker)
 function buildRedisUrl(): string {
@@ -24,10 +25,36 @@ function buildRedisUrl(): string {
       )
     }
     const host = raw.replace(/^https?:\/\//, '').replace(/\/$/, '')
-    return `rediss://default:${token}@${host}:6380`
+    return `rediss://default:${token}@${host}:6379`
+  }
+
+  // Upstash TLS uses port 6379 (6380 times out); normalise legacy URLs.
+  if (raw.startsWith('rediss://') && raw.includes(':6380')) {
+    return raw.replace(':6380', ':6379')
   }
 
   return raw
+}
+
+function getRedisOptions(overrides: Partial<RedisOptions> = {}): RedisOptions {
+  const url = buildRedisUrl()
+
+  // Parse wire URL so TLS + IPv4 are explicit (fixes Railway → Upstash ETIMEDOUT).
+  if (url.startsWith('rediss://') || url.startsWith('redis://')) {
+    const parsed = new URL(url)
+    return {
+      host: parsed.hostname,
+      port: Number(parsed.port) || 6379,
+      username: parsed.username || 'default',
+      password: decodeURIComponent(parsed.password),
+      tls: parsed.protocol === 'rediss:' ? {} : undefined,
+      family: 4,
+      connectTimeout: 15_000,
+      ...overrides,
+    }
+  }
+
+  return { ...overrides }
 }
 
 const TEARDOWN_MSGS = ['Connection is closed', "stream isn't writeable", 'ECONNRESET']
@@ -56,28 +83,45 @@ function makeReconnectOnError(err: Error): boolean {
 
 export function createRedisConnection(): Redis {
   return suppressTeardown(
-    new Redis(buildRedisUrl(), {
-      maxRetriesPerRequest: null,
+    new Redis(getRedisOptions({
+      // Serverless-friendly: commands queue until the TLS socket is ready,
+      // avoiding "Stream isn't writeable" on cold-start invocations.
+      maxRetriesPerRequest: 3,
       lazyConnect: true,
       keyPrefix: CINEMA_KEY_PREFIX,
-      tls: {},
-      enableOfflineQueue: false,
+      enableOfflineQueue: true,
       retryStrategy: makeRetryStrategy('app'),
       reconnectOnError: makeReconnectOnError,
-    })
+    }))
   )
 }
 
 export function createBullMQConnection(): Redis {
   return suppressTeardown(
-    new Redis(buildRedisUrl(), {
+    new Redis(getRedisOptions({
       maxRetriesPerRequest: null,
-      lazyConnect: true,
-      tls: {},
+      lazyConnect: false,
       enableOfflineQueue: false,
       retryStrategy: makeRetryStrategy('bullmq'),
       reconnectOnError: makeReconnectOnError,
-    })
+    }))
+  )
+}
+
+// Producer-side connection for BullMQ queues (e.g. API routes adding jobs).
+// CRITICAL: no `keyPrefix` — BullMQ rejects ioredis keyPrefix and throws at
+// `new Queue()`. Key namespacing is done via BullMQ's own `prefix` option
+// (see `bullMQPrefix`). enableOfflineQueue:true + lazyConnect:true keep this
+// serverless-safe: commands buffer until the TLS socket is ready on cold start.
+export function createQueueConnection(): Redis {
+  return suppressTeardown(
+    new Redis(getRedisOptions({
+      maxRetriesPerRequest: null,
+      lazyConnect: true,
+      enableOfflineQueue: true,
+      retryStrategy: makeRetryStrategy('queue'),
+      reconnectOnError: makeReconnectOnError,
+    }))
   )
 }
 
@@ -100,6 +144,7 @@ class RedisStub {
 const globalForRedis = globalThis as unknown as {
   redis: Redis | undefined
   bullmqRedis: Redis | undefined
+  queueConnection: Redis | undefined
 }
 
 export const redis: Redis = isBuildTime
@@ -110,9 +155,15 @@ export const bullmqRedis: Redis = isBuildTime
   ? (new RedisStub() as unknown as Redis)
   : (globalForRedis.bullmqRedis ?? createBullMQConnection())
 
+// Prefix-free connection used by BullMQ queue producers (see createQueueConnection).
+export const queueConnection: Redis = isBuildTime
+  ? (new RedisStub() as unknown as Redis)
+  : (globalForRedis.queueConnection ?? createQueueConnection())
+
 if (!isBuildTime && process.env.NODE_ENV !== 'production') {
   globalForRedis.redis = redis
   globalForRedis.bullmqRedis = bullmqRedis
+  globalForRedis.queueConnection = queueConnection
 }
 
 export const bullMQPrefix = CINEMA_KEY_PREFIX
@@ -120,11 +171,13 @@ export const bullMQPrefix = CINEMA_KEY_PREFIX
 if (!isBuildTime) {
   const shutdown = async () => {
     await Promise.all([
-      globalForRedis.redis?.quit().catch(() => {}),
-      globalForRedis.bullmqRedis?.quit().catch(() => {}),
+      globalForRedis.redis?.quit().catch((err) => logCaught('lib/redis', err)),
+      globalForRedis.bullmqRedis?.quit().catch((err) => logCaught('lib/redis', err)),
+      globalForRedis.queueConnection?.quit().catch((err) => logCaught('lib/redis', err)),
     ])
     globalForRedis.redis = undefined
     globalForRedis.bullmqRedis = undefined
+    globalForRedis.queueConnection = undefined
   }
   process.on('beforeExit', shutdown)
   process.on('SIGTERM', shutdown)

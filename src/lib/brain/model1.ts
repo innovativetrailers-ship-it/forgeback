@@ -1,5 +1,5 @@
-import type OpenAI from 'openai'
-import { getOpenRouterClient } from './openai-client'
+import { llmModelForTask } from '@cinema/core'
+import { llmCall, type LlmContentPart } from '@/lib/llm/anthropicClient'
 
 export interface Model1Input {
   systemPrompt: string
@@ -16,7 +16,7 @@ export interface Model1Output {
 }
 
 export async function runModel1(input: Model1Input): Promise<Model1Output> {
-  const userContent: OpenAI.Chat.ChatCompletionContentPart[] = []
+  const userContent: LlmContentPart[] = []
 
   if (input.images?.length) {
     for (const img of input.images) {
@@ -36,24 +36,25 @@ export async function runModel1(input: Model1Input): Promise<Model1Output> {
 
   userContent.push({ type: 'text', text: input.userMessage })
 
-  const msg = await getOpenRouterClient().chat.completions.create({
-    model: 'groq/llama-3.3-70b-versatile',
-    max_tokens: input.requireJSON ? 4096 : 2048,
+  const msg = await llmCall({
+    model: llmModelForTask('mechanical').model,
+    maxTokens: input.requireJSON ? 4096 : 2048,
+    source: 'brain.model1',
     messages: [
       { role: 'system', content: input.systemPrompt },
-      { role: 'user', content: userContent }
+      { role: 'user', content: userContent },
     ],
   })
 
-  const text = msg.choices[0]?.message?.content ?? ''
+  const text = msg.content
 
   // Strip markdown code fences if the caller expects raw JSON
   const content = input.requireJSON ? stripJSONFences(text) : text
 
   return {
     content,
-    inputTokens: msg.usage?.prompt_tokens ?? 0,
-    outputTokens: msg.usage?.completion_tokens ?? 0,
+    inputTokens: msg.inputTokens,
+    outputTokens: msg.outputTokens,
   }
 }
 

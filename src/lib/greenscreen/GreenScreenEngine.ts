@@ -1,4 +1,8 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { logCaught } from '@/lib/diagnostics/caught'
+import { runFal } from '../fal/client'
+import { extractVideoFrame } from '../fal/frameExtract'
+import { relightImage } from '../fal/lighting'
 import { runModel1 } from '../brain/model1'
 import ffmpeg from 'fluent-ffmpeg'
 import { uploadToR2 } from '../storage/r2'
@@ -123,34 +127,19 @@ export class GreenScreenEngine {
       return { alphaVideoUrl: alphaUrl, lightingInfo: lighting }
 
     } else if (job.extractionMode === 'ai_matting') {
-      const result = await fal.run('fal-ai/birefnet-general', {
-        input: {
+      const result = await runFal(falEndpoint('birefnet-general'), {
           image_url: job.sourceVideoUrl,
           model: 'General Use (Heavy)',
           operating_resolution: '1024x1024',
           output_format: 'webp',
           refine_foreground: true,
-        },
-      }) as unknown as { image: { url: string } }
-
-      const depth = await fal.run('fal-ai/depth-anything-v2', {
-        input: { image_url: job.sourceVideoUrl },
-      }) as unknown as { image_url: string }
+        }) as unknown as { image: { url: string } }
 
       const lighting = await this.extractLightingInfo(job.sourceVideoUrl)
-      return { alphaVideoUrl: result.image.url, depthMapUrl: depth.image_url, lightingInfo: lighting }
+      return { alphaVideoUrl: result.image.url, lightingInfo: lighting }
 
     } else {
-      const depth = await fal.run('fal-ai/depth-anything-v2', {
-        input: { image_url: job.sourceVideoUrl },
-      }) as unknown as { image_url: string }
-
-      const rembgResult = await fal.run('fal-ai/imageutils/rembg', {
-        input: { image_url: job.sourceVideoUrl },
-      }) as unknown as { image: { url: string } }
-
-      const lighting = await this.extractLightingInfo(job.sourceVideoUrl)
-      return { alphaVideoUrl: rembgResult.image.url, depthMapUrl: depth.image_url, lightingInfo: lighting }
+      throw new Error('Depth-Anything-v2 is not in the registry. Depth matting is disabled.')
     }
   }
 
@@ -161,10 +150,12 @@ export class GreenScreenEngine {
     switch (config.source) {
       case 'ai_generated': {
         const bgPrompt = `${config.prompt}. ${config.timeOfDay ?? 'natural daylight'}, ${config.weather ?? 'clear weather'}. No people in frame. Photorealistic environment, wide shot, background plate for compositing.`
-        const result = await fal.run('fal-ai/wan-t2v-14b', {
-          input: { prompt: bgPrompt, num_frames: 81 },
-        }) as unknown as { video: { url: string } }
-        return result.video.url
+        const { WAN_T2V } = await import('@/lib/fal/wanEndpoints')
+        const result = await runFal(WAN_T2V, {
+          prompt: bgPrompt,
+          duration: 5,
+        }) as unknown as { video?: { url: string }; video_url?: string }
+        return result.video?.url ?? result.video_url ?? ''
       }
 
       case 'user_uploaded':
@@ -172,18 +163,19 @@ export class GreenScreenEngine {
 
       case 'location_vault': {
         const { db } = await import('../db')
-        const location = await db.vaultLocation.findUnique({ where: { id: config.locationId! } })
-        return location?.referenceUrls?.[0] ?? ''
+        const asset = await db.asset.findFirst({
+          where: { id: config.locationId!, kind: 'location' },
+          include: { plates: { take: 1, select: { imageUrl: true } } },
+        })
+        return asset?.generatedImage || asset?.plates[0]?.imageUrl || ''
       }
 
       case 'hdri_environment': {
-        const result = await fal.run('fal-ai/ic-light', {
-          input: {
-            image_url: config.hdriUrl!,
-            prompt: `Panoramic environment background, ${config.timeOfDay ?? 'natural light'}`,
-          },
-        }) as unknown as { image_url: string }
-        return result.image_url
+        const result = await relightImage({
+          imageUrl: config.hdriUrl!,
+          prompt: `Panoramic environment background, ${config.timeOfDay ?? 'natural light'}`,
+        })
+        return result.imageUrl
       }
 
       case 'solid_colour':
@@ -207,14 +199,12 @@ export class GreenScreenEngine {
     })
     const bdLighting = JSON.parse(backdropLighting.content)
 
-    const relitResult = await fal.run('fal-ai/ic-light', {
-      input: {
-        image_url: foregroundUrl,
-        prompt: `Relight to match: ${bdLighting.direction} ${bdLighting.temperature} lighting, ${bdLighting.intensity} quality, ${bdLighting.ambient}`,
-      },
-    }) as unknown as { image_url: string }
+    const relitResult = await relightImage({
+      imageUrl: foregroundUrl,
+      prompt: `Relight to match: ${bdLighting.direction} ${bdLighting.temperature} lighting, ${bdLighting.intensity} quality, ${bdLighting.ambient}`,
+    })
 
-    return relitResult.image_url
+    return relitResult.imageUrl
   }
 
   private async composite(
@@ -241,7 +231,7 @@ export class GreenScreenEngine {
 
     await Promise.all([
       this.downloadFile(foregroundAlphaUrl, fgPath),
-      this.downloadFile(backdropUrl, bgPath).catch(() => {}),
+      this.downloadFile(backdropUrl, bgPath).catch((err) => logCaught('lib/greenscreen/GreenScreenEngine', err)),
     ])
 
     await new Promise<void>((res, rej) => {
@@ -270,13 +260,11 @@ export class GreenScreenEngine {
   }
 
   private async extractLightingInfo(videoUrl: string): Promise<LightingInfo> {
-    const frame = await fal.run('fal-ai/video-frame-extractor', {
-      input: { video_url: videoUrl, timestamp: 0.5 },
-    }) as unknown as { image_url: string }
+    const frameUrl = await extractVideoFrame(videoUrl, { timestamp: 0.5 })
     const analysis = await runModel1({
       systemPrompt: 'Analyse lighting. Return JSON: {"direction": "string", "temperature_kelvin": number, "intensity": "soft|medium|hard", "shadows": "direction"}',
       userMessage: 'Analyse the lighting in this frame.',
-      images: [frame.image_url],
+      images: [frameUrl],
       requireJSON: true,
     })
     return JSON.parse(analysis.content)

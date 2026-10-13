@@ -24,7 +24,9 @@ export async function convertToTimelineRecipe(
             const { access } = await import('fs/promises')
             await access(mediaItem.filePath)
             sourceUrl = `/api/import/serve?path=${encodeURIComponent(mediaItem.filePath)}`
-          } catch {
+          } catch (err) {
+            console.warn("[caught] src/lib/importers/RecipeConverter.ts:27", err instanceof Error ? { name: err.name, message: err.message } : err)
+
             offlineMedia.push(mediaItem.filePath)
           }
         }

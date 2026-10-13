@@ -1,7 +1,7 @@
 /**
  * Distillation Worker
  * Periodically reads approved training data and generates
- * routing optimisation reports for the MediaRouter.
+ * routing optimisation reports for model delegation.
  * Run with: tsx src/workers/distillation.ts
  */
 
@@ -22,7 +22,10 @@ async function runDistillation() {
   const rows = await db.trainingData.findMany({
     orderBy: { createdAt: 'desc' },
     take: 200,
-  }).catch(() => [] as Awaited<ReturnType<typeof db.trainingData.findMany>>)
+  }).catch((err) => {
+    console.warn("[caught] src/workers/distillation.ts:25", err instanceof Error ? { name: err.name, message: err.message } : err)
+    return ([] as Awaited<ReturnType<typeof db.trainingData.findMany>>)
+  })
 
   const signals = rows.filter((row) => {
     const meta = (row.metadata ?? {}) as Record<string, unknown>
@@ -72,7 +75,13 @@ Return JSON: {
 }
 
 // Run immediately then on interval
-runDistillation().catch(console.error)
-setInterval(() => runDistillation().catch(console.error), DISTILLATION_INTERVAL_MS)
+runDistillation().catch((err) => {
+  console.warn("[caught] src/workers/distillation.ts:75", err instanceof Error ? { name: err.name, message: err.message } : err)
+  console.error(err)
+})
+setInterval(() => runDistillation().catch((err) => {
+  console.warn("[caught] src/workers/distillation.ts:76", err instanceof Error ? { name: err.name, message: err.message } : err)
+  console.error(err)
+}), DISTILLATION_INTERVAL_MS)
 
 process.on('SIGTERM', () => { redis.quit(); process.exit(0) })

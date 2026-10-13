@@ -85,7 +85,9 @@ export async function searchStockMusic(
       license: 'Creative Commons',
       tags: track.track_genres?.map((g) => g.genre_title) ?? [],
     }))
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/stock/StockLibrary.ts:88", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return []
   }
 }

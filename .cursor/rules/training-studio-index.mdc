@@ -1,0 +1,26 @@
+---
+description: Training Studio index TR-00. One TR prompt per session. Serverless FAL LoRA training. Do not start a TR until the user feeds that prompt.
+alwaysApply: true
+---
+
+# Training Studio (TR-00)
+
+Full text: `docs/spec-references/TR-00-INDEX.md`. Contracts: `SPEC-training-studio-sidebar.md`, `SPEC-TRAINING-MODEL-CATALOG.md`, `SPEC-TRAINING-STUDIO-SUBCATEGORIES.md`, `SPEC-open-weight-models-in-pipeline.md`. On-demand rules: `training-studio-sidebar`, `training-model-catalog`, `training-studio-subcategories`, `open-weight-models`.
+
+A TR is the only permission to change training-studio or open-weight-pool code. Feed one TR per session. TR-01 through TR-06 are not started from this index. `spec-reconciliation-overlay.md` still wins on conflict. This queue does not replace build-0 through build-6, BP-01 through BP-13, MP-01 through MP-15, OR-01 through OR-06, or WF-01 through WF-03, and it does not lift `GENERATION_PAUSED`.
+
+## Order
+
+Build after MP-01..12 works. TR-01 trainer + LoRA-inference registry. TR-02 train pipeline (zip → fal.storage → gated trainer → queue/webhook → store LoRA). TR-03 asset entities + LoRA inference wiring. TR-04 sidebar UI. TR-05 genre presets + import + rights. TR-06 open-weight bases in the selectable pool (BASE + LoRA-applied).
+
+## Every TR inherits
+
+1. Every trainer and LoRA-inference call is a gated paid FAL call (`submitToFal` / `providerSubmit`), pause-aware, with `source` and cost shown + confirmed.
+2. Training CONTENT is the user's. Do not repurpose footage, faces, or voices. Honour deletion. Outcome data (aggregate, anonymised) may feed the orchestrator.
+3. Verify every endpoint with the free OpenAPI fetch, then `https://fal.ai/models/<id>/llms.txt`, before any registry string is written. Schema wins over the catalog.
+4. Additive `migrate deploy` only. Never `migrate dev`. Never reset.
+5. H3 Max, Seedance 2.5, and Kling 2.6 stay evaluate-only until a fed prompt adopts them. Gemini Omni Flash 1.1 is wired (MP-14); Omni Audio and Omni Character FAL ids 404 and stay unwired. Wan 3.0 stays out of the default council until a fed prompt adopts it. HappyHorse stays out of the council until one clean generation.
+6. Manual model choice is never silently replaced. Native audio stays off where the field exists except Grok.
+7. ElevenLabs TTS, dialogue, clone (`clone-voice`), SFX, music, dubbing, voice-changer, STT, isolation, and forced-alignment are on FAL. Voice design FAL ids 404 and stay unwired.
+
+On a paid-API task, run `node scripts/check-chokepoints.mjs` and report it. Do not touch files outside the fed prompt.

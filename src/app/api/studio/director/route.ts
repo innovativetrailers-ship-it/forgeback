@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { runAIDirector, queueDirectorGenerations } from '@/lib/studio/director'
+import { runAIDirector } from '@/lib/studio/director'
 import { checkAndDeductCredits } from '@/lib/credits'
 import { db } from '@/lib/db'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   brief: z.string().min(10).max(2000),
@@ -13,7 +14,7 @@ const schema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
@@ -29,13 +30,18 @@ export async function POST(request: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'ai_director')
   } catch (err) {
+    console.warn("[caught] src/app/api/studio/director/route.ts:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
   // Fetch available vault assets
   const [characters, locations] = await Promise.all([
     db.vaultCharacter.findMany({ where: { projectId } }),
-    db.vaultLocation.findMany({ where: { projectId } }),
+    db.asset.findMany({
+      where: { kind: 'location', boundary: { path: ['projectId'], equals: projectId } },
+      select: { id: true, label: true },
+    }),
   ])
 
   const { recipe, directorNotes } = await runAIDirector({
@@ -43,26 +49,10 @@ export async function POST(request: NextRequest) {
     style,
     targetDuration,
     projectId,
-    availableCharacters: characters.map((c) => ({
-      id: c.id,
-      name: c.name,
-      modelFamily: c.modelFamily,
-      loraModelId: c.loraModelId,
-      loraStatus: c.loraStatus,
-      referenceUrls: c.referenceUrls as string[],
-    })),
-    availableLocations: locations.map((l) => ({
-      id: l.id,
-      name: l.name,
-      generativePrompt: l.generativePrompt,
-      source: l.source,
-    })),
+    userId,
+    availableCharacters: characters.map((c) => ({ id: c.id, name: c.name })),
+    availableLocations: locations.map((l) => ({ id: l.id, name: l.label ?? 'Location' })),
   })
 
-  if (autoQueue) {
-    const queuedRecipe = await queueDirectorGenerations(recipe, userId)
-    return NextResponse.json({ recipe: queuedRecipe, directorNotes, queued: true })
-  }
-
-  return NextResponse.json({ recipe, directorNotes, queued: false })
+  return NextResponse.json({ recipe, directorNotes, queued: false, autoQueue })
 }

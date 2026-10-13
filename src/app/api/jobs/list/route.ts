@@ -1,18 +1,20 @@
 import { NextResponse } from 'next/server'
+import { authSecret } from '@/lib/auth/requiredEnv'
 import { db } from '@/lib/db'
 import { jwtVerify } from 'jose'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(req: Request) {
   try {
     const authHeader = req.headers.get('Authorization')
-    const encodedUserId = req.headers.get('x-user-id')
+    const encodedUserId = (await requireUser(req))?.id ?? null
 
     let userId: string | undefined
 
     // Mobile JWT auth
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7)
-      const secret = new TextEncoder().encode(process.env.NEXTAUTH_SECRET!)
+      const secret = new TextEncoder().encode(authSecret())
       const { payload } = await jwtVerify(token, secret)
       userId = payload.sub
     }

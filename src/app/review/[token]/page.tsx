@@ -12,12 +12,20 @@ interface ReviewComment {
   createdAt: string
 }
 
+interface ApprovalStep {
+  role: string
+  status: 'pending' | 'approved' | 'changes-requested'
+  note?: string
+}
+
 interface ReviewData {
   title: string
   status: string
   allowDownload: boolean
-  projectId: string
   videoUrl: string | null
+  watermark: string
+  versions: { version: number; label: string; url: string }[]
+  approvalChain: ApprovalStep[]
   comments: ReviewComment[]
 }
 
@@ -31,19 +39,33 @@ export default function ReviewPage() {
   const [authorName, setAuthorName] = useState('')
   const [authorEmail, setAuthorEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [pin, setPin] = useState('')
+  const [pinDraft, setPinDraft] = useState('')
+  const [needsPin, setNeedsPin] = useState(false)
   const [annotation, setAnnotation] = useState<{ x: number; y: number } | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  async function loadReview() {
-    const res = await fetch(`/api/review/${token}`)
+  async function loadReview(nextPin = pin) {
+    const res = await fetch(`/api/review/${token}`, {
+      headers: nextPin ? { 'x-review-pin': nextPin } : {},
+    })
     const data = (await res.json()) as ReviewData & { error?: string }
+    if (res.status === 401) {
+      setNeedsPin(true)
+      setReview(null)
+      throw new Error(data.error ?? 'PIN required')
+    }
     if (!res.ok) throw new Error(data.error ?? 'Review not found')
+    setNeedsPin(false)
     setReview(data)
   }
 
   useEffect(() => {
     loadReview()
-      .catch((err: Error) => setError(err.message))
+      .catch((err: Error) => {
+        console.warn("[caught] src/app/review/[token]/page.tsx:46", err instanceof Error ? { name: err.name, message: err.message } : err)
+        return (setError(err.message))
+      })
       .finally(() => setLoading(false))
   }, [token])
 
@@ -61,7 +83,10 @@ export default function ReviewPage() {
     try {
       const res = await fetch(`/api/review/${token}/comments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(pin ? { 'x-review-pin': pin } : {}),
+        },
         body: JSON.stringify({
           authorName,
           authorEmail,
@@ -78,6 +103,8 @@ export default function ReviewPage() {
       setAnnotation(null)
       await loadReview()
     } catch (err) {
+      console.warn("[caught] src/app/review/[token]/page.tsx:80", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       alert((err as Error).message)
     } finally {
       setSubmitting(false)
@@ -96,7 +123,10 @@ export default function ReviewPage() {
 
     const res = await fetch(`/api/review/${token}/approve`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(pin ? { 'x-review-pin': pin } : {}),
+      },
       body: JSON.stringify({
         decision,
         approverName: authorName,
@@ -120,7 +150,41 @@ export default function ReviewPage() {
     )
   }
 
-  if (error || !review) {
+  if (needsPin || (error && !review)) {
+    return (
+      <div className="min-h-screen bg-[#0c0c10] flex items-center justify-center">
+        <form
+          className="w-full max-w-sm rounded-xl border border-white/10 bg-[#12121a] p-6"
+          onSubmit={(event) => {
+            event.preventDefault()
+            setLoading(true)
+            setError(null)
+            setPin(pinDraft)
+            void loadReview(pinDraft)
+              .catch((err: Error) => {
+                console.warn('[review]', err instanceof Error ? err.message : err)
+                setError(err.message)
+              })
+              .finally(() => setLoading(false))
+          }}
+        >
+          <h1 className="text-lg text-white">Review PIN</h1>
+          <p className="mt-2 text-sm text-white/50">{error ?? 'Enter the PIN for this review.'}</p>
+          <input
+            value={pinDraft}
+            onChange={(event) => setPinDraft(event.target.value)}
+            className="mt-4 w-full rounded-lg bg-white/10 px-3 py-2 text-white outline-none"
+            autoComplete="off"
+          />
+          <button type="submit" className="mt-4 w-full rounded-lg bg-[#00e5c8] py-2 text-sm font-medium text-black">
+            Open review
+          </button>
+        </form>
+      </div>
+    )
+  }
+
+  if (!review) {
     return (
       <div className="min-h-screen bg-[#0c0c10] flex items-center justify-center">
         <div className="text-red-400 text-lg">{error ?? 'Review not found'}</div>
@@ -144,6 +208,13 @@ export default function ReviewPage() {
           <span className={`text-sm capitalize ${statusColor[review.status] ?? 'text-gray-400'}`}>
             {review.status.replace('_', ' ')}
           </span>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-white/60">
+            {review.approvalChain.map((step) => (
+              <span key={step.role}>
+                {step.role}: {step.status}{step.note ? ` — ${step.note}` : ''}
+              </span>
+            ))}
+          </div>
         </div>
         <div className="flex gap-3">
           <button
@@ -151,7 +222,7 @@ export default function ReviewPage() {
             onClick={() => void submitDecision('approved')}
             className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm font-medium transition-colors"
           >
-            Approve
+            Approve {review.approvalChain.find((step) => step.status !== 'approved')?.role ?? 'step'}
           </button>
           <button
             type="button"
@@ -180,6 +251,9 @@ export default function ReviewPage() {
               className="absolute inset-0 w-full h-full cursor-crosshair"
               onClick={handleFrameClick}
             />
+            <div className="pointer-events-none absolute bottom-3 right-3 rounded bg-black/55 px-2 py-1 text-xs text-white/80">
+              {review.watermark}
+            </div>
             {annotation && (
               <div
                 className="absolute w-6 h-6 rounded-full bg-[#00f0d5] border-2 border-white -translate-x-1/2 -translate-y-1/2 pointer-events-none"

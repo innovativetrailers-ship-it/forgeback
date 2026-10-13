@@ -6,6 +6,8 @@ import {
   ChevronLeft, ChevronRight, Settings, Crosshair,
 } from 'lucide-react'
 import { useEditorStore } from '@/store/editor'
+import { useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
+import { canPlaySrc, pauseAfterPlay, playMedia } from '@/lib/timeline/playback'
 
 type PreviewQuality = 'proxy' | 'full'
 type AspectMode = 'fit' | 'fill' | 'native'
@@ -13,11 +15,11 @@ type SafeAreaMode = 'none' | 'action' | 'title' | 'broadcast'
 
 export function Preview() {
   const {
-    recipe,
     playheadTime, setPlayheadTime,
     isPlaying, setIsPlaying,
     selectedClipId,
   } = useEditorStore()
+  const recipe = useEditorRecipeView()
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -33,6 +35,7 @@ export function Preview() {
   const [isLooping, setIsLooping] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showControls, setShowControls] = useState(true)
+  const [noMedia, setNoMedia] = useState(false)
 
   const totalDuration = recipe?.totalDuration ?? 0
   const fps = recipe?.fps ?? 24
@@ -59,9 +62,18 @@ export function Preview() {
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
-    if (isPlaying) v.play().catch(() => {})
-    else v.pause()
-  }, [isPlaying])
+    if (isPlaying) {
+      if (!canPlaySrc(activeVideoUrl)) {
+        console.warn('play_not_supported', { src: activeVideoUrl })
+        setNoMedia(true)
+        return
+      }
+      setNoMedia(false)
+      if (playMedia(v, activeVideoUrl) === 'unsupported') setNoMedia(true)
+    } else {
+      void pauseAfterPlay(v)
+    }
+  }, [isPlaying, activeVideoUrl])
 
   // Volume / mute
   useEffect(() => {
@@ -177,10 +189,14 @@ export function Preview() {
     >
       {/* VIDEO AREA */}
       <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+        {noMedia || !canPlaySrc(activeVideoUrl) ? (
+          <div className="text-red-400/80 text-sm">No media</div>
+        ) : (
         <video
           ref={videoRef}
           src={activeVideoUrl}
           className={`${videoClass} transition-all`}
+          crossOrigin="anonymous"
           onTimeUpdate={handleTimeUpdate}
           onEnded={handleEnded}
           onLoadedMetadata={() => {
@@ -188,6 +204,7 @@ export function Preview() {
           }}
           onClick={() => setIsPlaying(!isPlaying)}
         />
+        )}
 
         {/* Safe area overlays */}
         {safeArea !== 'none' && (

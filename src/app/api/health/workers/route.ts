@@ -34,6 +34,8 @@ export async function GET(req: NextRequest) {
       { status: allAlive ? 200 : 503 }
     )
   } catch (err) {
+    console.warn("[caught] src/app/api/health/workers/route.ts:36", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }

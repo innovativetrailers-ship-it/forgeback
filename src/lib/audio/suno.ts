@@ -1,4 +1,8 @@
+import { requireCallerSource } from '@cinema/core'
+import { assertGenerationNotPaused } from '@/lib/generation/pause'
+
 const SUNO_API = 'https://studio-api.suno.ai/api'
+export const SUNO_V1_BASE = 'https://api.suno.ai/v1'
 
 interface SunoClip {
   id: string
@@ -13,6 +17,7 @@ async function sunoRequest<T>(
   path: string,
   body?: unknown
 ): Promise<T> {
+  assertGenerationNotPaused('audio.suno')
   const res = await fetch(`${SUNO_API}${path}`, {
     method,
     headers: {
@@ -34,7 +39,10 @@ export async function generateMusic(params: {
   prompt: string
   durationSeconds: number
   instrumental?: boolean
+  source?: string
 }): Promise<{ audioUrl: string; title: string }> {
+  const source = requireCallerSource(params.source ?? 'audio.music')
+  assertGenerationNotPaused(source)
   interface SunoGenerateResponse {
     clips: SunoClip[]
   }

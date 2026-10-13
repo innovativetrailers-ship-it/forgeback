@@ -1,10 +1,12 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { runFal } from '../fal/client'
 import ffmpeg from 'fluent-ffmpeg'
 import fs from 'fs/promises'
 import path from 'path'
 import os from 'os'
 import { uploadToR2 } from '../storage/r2'
 import type { SwarmResult, Shot, ModelId } from './types'
+import { modelTierRank } from '../routing/modelTierRank'
 
 // ── Per-model grain and colour profiles ──────────────────────
 const MODEL_PROFILES: Record<ModelId, {
@@ -20,7 +22,6 @@ const MODEL_PROFILES: Record<ModelId, {
   runway_gen4_5:  { grainLevel: 0.10, colourTemp: -50,   contrastBias:  0.03, saturationBias:  0.03, compressionSharpness: 0.90 },
   skyreels_v1:    { grainLevel: 0.18, colourTemp: 150,   contrastBias:  0.10, saturationBias:  0.12, compressionSharpness: 0.82 },
   wan_2_2:        { grainLevel: 0.25, colourTemp: -200,  contrastBias: -0.08, saturationBias: -0.05, compressionSharpness: 0.72 },
-  cogvideox:      { grainLevel: 0.22, colourTemp: 50,    contrastBias:  0.02, saturationBias: -0.03, compressionSharpness: 0.75 },
   ltx_2_3:        { grainLevel: 0.30, colourTemp: 0,     contrastBias:  0.00, saturationBias:  0.00, compressionSharpness: 0.65 },
   pika_2_2:       { grainLevel: 0.14, colourTemp: 300,   contrastBias:  0.12, saturationBias:  0.15, compressionSharpness: 0.80 },
   minimax_hailuo: { grainLevel: 0.16, colourTemp: -150,  contrastBias: -0.03, saturationBias:  0.02, compressionSharpness: 0.83 },
@@ -124,25 +125,35 @@ export class SeamlessBlender {
 
       if (colourDistance > 200 || grainDistance > 0.1) {
         try {
-          const lastFrameUrl = await this.extractFrameFromLocal(normalised[i].localPath, 'last')
-          const firstFrameUrl = await this.extractFrameFromLocal(normalised[i + 1].localPath, 'first')
+          const rankA = modelTierRank(modelA)
+          const rankB = modelTierRank(modelB)
+          const anchorIdx = rankA >= rankB ? i : i + 1
+          const targetIdx = rankA >= rankB ? i + 1 : i
 
-          const adjusted = await fal.run('fal-ai/ic-light', {
-            input: {
-              image_url: firstFrameUrl,
+          const anchorFrame = await this.extractFrameFromLocal(
+            normalised[anchorIdx].localPath,
+            anchorIdx < targetIdx ? 'last' : 'first',
+          )
+          const targetFrame = await this.extractFrameFromLocal(
+            normalised[targetIdx].localPath,
+            targetIdx > anchorIdx ? 'first' : 'last',
+          )
+
+          const adjusted = await runFal(falEndpoint('iclight-v2'), {
+              image_url: targetFrame,
               prompt: 'match lighting temperature and colour tone of reference',
-              reference_image: lastFrameUrl,
-            },
-          }) as unknown as { image_url?: string }
+            }) as unknown as { images?: Array<{ url?: string }> }
 
           await this.applyProgressiveBoundaryGrade(
-            normalised[i + 1].localPath,
-            adjusted.image_url ?? firstFrameUrl,
+            normalised[targetIdx].localPath,
+            adjusted.images?.[0]?.url ?? targetFrame,
             8,
             tmpDir,
-            normalised[i + 1].shot_id
+            normalised[targetIdx].shot_id
           )
-        } catch { /* non-fatal — boundary normalisation degrades gracefully */ }
+        } catch (err) {
+          console.warn("[caught] src/lib/swarm/SeamlessBlender.ts:153", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal — boundary normalisation degrades gracefully */ }
       }
     }
   }
@@ -244,9 +255,16 @@ export class SeamlessBlender {
   private async extractFrameFromLocal(clipPath: string, position: 'first' | 'last'): Promise<string> {
     const fileBuffer = await fs.readFile(clipPath)
     const tempUrl = await uploadToR2(fileBuffer, `temp/frame-extract-${Date.now()}.mp4`, 'video/mp4')
-    const timestamp = position === 'first' ? 0.1 : 999
-    const result = await fal.run('fal-ai/video-frame-extractor', { input: { video_url: tempUrl, timestamp } }) as unknown as { image_url?: string }
-    return result.image_url ?? tempUrl
+    const { extractVideoFrame } = await import('@/lib/fal/frameExtract')
+    try {
+      return await extractVideoFrame(tempUrl, {
+        frameType: position === 'first' ? 'first' : 'last',
+      })
+    } catch (err) {
+      console.warn("[caught] src/lib/swarm/SeamlessBlender.ts:260", err instanceof Error ? { name: err.name, message: err.message } : err)
+
+      return tempUrl
+    }
   }
 
   private async downloadFile(url: string, dest: string): Promise<void> {

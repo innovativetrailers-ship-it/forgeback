@@ -1,0 +1,11 @@
+---
+description: SPEC-A1 realtime collaboration. Read before adding multiplayer sync, presence, project roles, or concurrent generation.
+globs: ["src/store/**", "src/lib/timeline/**", "src/lib/collab/**", "src/components/ultimate/**", "src/hooks/useProjectCollab.ts"]
+alwaysApply: false
+---
+
+# Real-time collaboration
+
+Contract: `docs/spec-references/SPEC-A1-realtime-collaboration.md`. Fed: `WF-03-realtime-collaboration.md`.
+
+One project, live co-edit of the canonical store (`playbackStore.recipe`, script, cast, shot plan, playbook). LWW-CRDT per clip in `@cinema/core`; server-authoritative for generation jobs, trained assets, and billing. Presence + document sync use **SSE** (not WebSockets — overlay / project.mdc). Generate = owner/director/editor. Concurrent generate of the same shot is one job (claim + BP-02). Owner account is billed. Pause still applies. Overlay still wins. Do not add a third timeline store.

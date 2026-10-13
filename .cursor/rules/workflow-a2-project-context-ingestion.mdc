@@ -1,0 +1,11 @@
+---
+description: SPEC-A2 project context ingestion. Read before adding drop-file/link ingest, parsers, embeddings, or orchestrator RAG links.
+globs: ["packages/core/src/logic/ingest.ts", "packages/core/src/logic/premiseLock.ts", "packages/core/src/logic/modelKnowledge.ts", "src/lib/ingest/**", "src/lib/cognition/**", "src/lib/vault/**", "src/app/api/projects/**/ingest/**"]
+alwaysApply: false
+---
+
+# Project context ingestion (WF-01)
+
+Contract: `docs/spec-references/SPEC-A2-project-context-ingestion.md`. Prompt: `docs/spec-references/WF-01-context-ingestion.md`. Inherits WF-00.
+
+Drop any file/link → detect type → parse → understand (gated `claudeCall`, source `ingest.understand`) → embed (Voyage/pgvector) → link to shot plan, VaultCharacter, VaultLocation, premise-lock, style, notes, or Training Studio voice candidates. The orchestrator (OR-01/OR-02/OR-06) reads it via `loadProjectGenerationContext` and `queryProjectRAG`. Content is the user's. Overlay still wins. Do not start WF-02 from this rule.

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Paid-call, swallowed-catch, and endpoint-registry guards. A bypass fails the commit.
+cd "$(dirname "$0")/../.." || exit 1
+node scripts/verify-static.mjs || exit 1

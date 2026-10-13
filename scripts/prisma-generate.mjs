@@ -11,7 +11,7 @@ if (!process.env.DATABASE_URL) {
 
 const result = spawnSync('npx', ['prisma', 'generate'], {
   stdio: 'inherit',
-  shell: true,
+  shell: false,
 })
 
 process.exit(result.status ?? 1)

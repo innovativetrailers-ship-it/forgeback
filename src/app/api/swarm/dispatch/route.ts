@@ -31,7 +31,10 @@ export async function POST(req: NextRequest) {
     shotList: shot_list,
     userId: session.user.id,
     projectId,
-  }).catch(console.error)
+  }).catch((err) => {
+    console.warn("[caught] src/app/api/swarm/dispatch/route.ts:34", err instanceof Error ? { name: err.name, message: err.message } : err)
+    console.error(err)
+  })
 
   return NextResponse.json(
     { status: 'dispatched', projectId },

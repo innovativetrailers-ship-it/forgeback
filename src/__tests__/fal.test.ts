@@ -1,7 +1,7 @@
 // Mock the fal client
 jest.mock('../lib/fal/client', () => ({
+  runFal: jest.fn(),
   fal: {
-    run: jest.fn(),
     queue: {
       submit: jest.fn(),
       status: jest.fn(),
@@ -11,30 +11,30 @@ jest.mock('../lib/fal/client', () => ({
   },
 }))
 
-import { fal } from '../lib/fal/client'
+import { runFal } from '../lib/fal/client'
 import { relightScene, generateDepthMapFromUrl, generateNormalMap } from '../lib/fal/lighting'
 import { upscaleImage, removeBackground } from '../lib/fal/enhancement'
 import { buildIPAdapterPayload } from '../lib/fal/character'
 
-const mockFal = fal as jest.Mocked<typeof fal>
+const mockRunFal = runFal as jest.MockedFunction<typeof runFal>
 
 describe('fal/lighting', () => {
   beforeEach(() => jest.clearAllMocks())
 
   it('relightScene calls ic-light and returns outputUrl', async () => {
-    ;(mockFal.run as jest.Mock).mockResolvedValue({ images: [{ url: 'https://r2.example.com/relit.jpg' }] })
+    mockRunFal.mockResolvedValue({ images: [{ url: 'https://r2.example.com/relit.jpg' }] })
 
     const result = await relightScene({
       imageUrl: 'https://example.com/input.jpg',
       prompt: 'neon lights from left',
     })
 
-    expect(mockFal.run).toHaveBeenCalledWith(expect.stringContaining('iclight'), expect.any(Object))
+    expect(mockRunFal).toHaveBeenCalledWith(expect.stringContaining('iclight'), expect.any(Object))
     expect(result.outputUrl).toBe('https://r2.example.com/relit.jpg')
   })
 
   it('generateDepthMapFromUrl calls depth-anything and returns depthUrl', async () => {
-    ;(mockFal.run as jest.Mock).mockResolvedValue({ image: { url: 'https://r2.example.com/depth.jpg' } })
+    mockRunFal.mockResolvedValue({ image: { url: 'https://r2.example.com/depth.jpg' } })
 
     const result = await generateDepthMapFromUrl('https://example.com/input.jpg')
     expect(result.depthUrl).toBe('https://r2.example.com/depth.jpg')
@@ -45,14 +45,14 @@ describe('fal/enhancement', () => {
   beforeEach(() => jest.clearAllMocks())
 
   it('upscaleImage returns upscaledUrl', async () => {
-    ;(mockFal.run as jest.Mock).mockResolvedValue({ image: { url: 'https://r2.example.com/upscaled.jpg' } })
+    mockRunFal.mockResolvedValue({ image: { url: 'https://r2.example.com/upscaled.jpg' } })
 
     const result = await upscaleImage('https://example.com/input.jpg', 'aura-sr')
     expect(result.upscaledUrl).toBeTruthy()
   })
 
   it('removeBackground returns maskedUrl', async () => {
-    ;(mockFal.run as jest.Mock).mockResolvedValue({ image: { url: 'https://r2.example.com/rembg.png' } })
+    mockRunFal.mockResolvedValue({ image: { url: 'https://r2.example.com/rembg.png' } })
 
     const result = await removeBackground('https://example.com/input.jpg')
     expect(result.maskedUrl).toBeTruthy()

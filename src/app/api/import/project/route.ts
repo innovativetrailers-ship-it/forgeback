@@ -42,6 +42,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result)
   } catch (err) {
+    console.warn("[caught] src/app/api/import/project/route.ts:44", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const message = err instanceof Error ? err.message : 'Import failed'
     return NextResponse.json({ error: message }, { status: 400 })
   }

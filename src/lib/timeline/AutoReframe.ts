@@ -1,7 +1,9 @@
-import { fal } from '../fal/client'
+import { runArgv } from '../shell/argv'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '../fal/client'
+const falSubscribe = falSubscribeBound('lib.timeline.AutoReframe')
 import { uploadToR2 } from '../storage/r2'
-import { execSync } from 'child_process'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 
@@ -32,9 +34,7 @@ export async function reframeClip(params: {
 
   try {
     // Get source video dimensions
-    const probeOut = execSync(
-      `ffprobe -v quiet -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "${clipUrl}"`
-    ).toString().trim()
+    const probeOut = runArgv("ffprobe", ["-v", "quiet", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", clipUrl]).toString().trim()
     const [srcW, srcH] = probeOut.split(',').map(Number)
 
     const targetRatio = aspectRatioToDecimal(targetAspectRatio)
@@ -45,9 +45,9 @@ export async function reframeClip(params: {
 
     if (subjectTracking) {
       // Extract 1fps thumbnails for subject detection
-      execSync(`ffmpeg -i "${clipUrl}" -vf fps=1 "${framesDir}/thumb%04d.jpg" -y 2>/dev/null`)
+      runArgv("ffmpeg", ["-i", clipUrl, "-vf", "fps=1", `${framesDir}/thumb%04d.jpg`, "-y"])
 
-      const thumbFiles = execSync(`ls "${framesDir}"`)
+      const thumbFiles = readdirSync(framesDir).join("\n")
         .toString()
         .trim()
         .split('\n')
@@ -57,9 +57,9 @@ export async function reframeClip(params: {
 
       // Detect subjects in each thumbnail
       for (const thumb of thumbFiles) {
-        const thumbData = execSync(`base64 "${join(framesDir, thumb)}"`).toString().trim()
+        const thumbData = readFileSync(join(framesDir, thumb)).toString('base64')
         try {
-          const detection = await fal.subscribe('fal-ai/detr', {
+          const detection = await falSubscribe(falEndpoint('detr'), {
             input: { image_url: `data:image/jpeg;base64,${thumbData}` },
           }) as unknown as {
             objects: Array<{ box: { xmin: number; ymin: number; xmax: number; ymax: number } }>
@@ -78,7 +78,9 @@ export async function reframeClip(params: {
             const y = Math.round((srcH - targetH) / 2)
             cropCoords.push({ x, y, width: targetW, height: targetH })
           }
-        } catch {
+        } catch (err) {
+          console.warn("[caught] src/lib/timeline/AutoReframe.ts:82", err instanceof Error ? { name: err.name, message: err.message } : err)
+
           const x = Math.round((srcW - targetW) / 2)
           const y = Math.round((srcH - targetH) / 2)
           cropCoords.push({ x, y, width: targetW, height: targetH })
@@ -98,7 +100,7 @@ export async function reframeClip(params: {
 
       // Write crop expr file for FFmpeg
       const dur = parseFloat(
-        execSync(`ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${clipUrl}"`).toString().trim()
+        runArgv("ffprobe", ["-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", clipUrl]).toString().trim()
       )
       const segDur = dur / smoothed.length
 
@@ -114,11 +116,9 @@ export async function reframeClip(params: {
     }
 
     const outputPath = join(tmpDir, 'reframed.mp4')
-    execSync(
-      `ffmpeg -i "${clipUrl}" -vf "${cropFilter},scale=${targetW}:${targetH}" -c:v libx264 -crf 18 -c:a copy "${outputPath}" -y 2>/dev/null`
-    )
+    runArgv("ffmpeg", ["-i", clipUrl, "-vf", `${cropFilter},scale=${targetW}:${targetH}`, "-c:v", "libx264", "-crf", "18", "-c:a", "copy", outputPath, "-y"])
 
-    const buffer = execSync(`cat "${outputPath}"`)
+    const buffer = readFileSync(outputPath)
     const reframedUrl = await uploadToR2(buffer, `reframed/${jobId}.mp4`, 'video/mp4')
     return { reframedUrl }
   } finally {

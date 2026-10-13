@@ -1,10 +1,12 @@
 import { create } from 'zustand'
 import { nanoid } from 'nanoid'
+import type { WorkspaceName } from '@/lib/editor/foundation'
 
 // ─── Panel / Tool / Right-Panel types ─────────────────────────────────────────
 
 export type PanelId =
   | 'generate' | 'vault' | 'library' | 'location' | 'cast'
+  | 'training'
   | 'makeup' | 'sfx_makeup' | 'greenscreen' | 'cgi' | 'vfx' | 'transitions'
   | 'audio' | 'stock' | 'script' | 'storyboard' | 'avatar'
   | 'translate' | 'highlight' | 'highlights' | 'brandkit' | 'brand_kit' | 'settings'
@@ -16,6 +18,7 @@ export type ToolId =
   | 'select' | 'razor' | 'repaint' | 'text' | 'motion_brush'
   | 'track' | 'hand' | 'zoom'
   | 'crop' | 'morph_cut' | 'stabilise' | 'retime' | 'extend'
+  | 'planar_track' | 'mask_bezier' | 'mask_freehand' | 'luma_key' | 'particles'
 
 /** @deprecated use ToolId */
 export type EditTool = 'select' | 'razor' | 'repaint' | 'motion_brush' | 'text'
@@ -26,17 +29,19 @@ export type RightPanelId =
   | 'lighting' | 'effects' | 'transform'
   | 'transcript' | 'stabilise' | 'retime' | 'planar_track'
   | 'object_removal' | 'emotion' | 'spatial' | 'shoppable'
+  | 'color_ai' | 'comments'
 
 export type FilmToolbarTab =
   | 'script' | 'storyboard' | 'director' | 'ai_director' | 'continuity'
   | 'cast' | 'locations' | 'colour' | 'vfx_mix' | 'audio_mix'
-  | 'greenscreen' | 'sfx_makeup' | 'cgi'
+  | 'greenscreen' | 'sfx_makeup' | 'cgi' | 'edit' | 'motion'
   | 'multicam' | 'transcript' | 'export_hub' | 'collab_grade' | 'plugin' | 'review'
+  | 'emotion_lattice'
 
 export type SimpleModeTab =
   | 'text_to_video' | 'image_to_video' | 'audio_to_video'
   | 'auto_social' | 'avatar_video' | 'translate' | 'highlights'
-  | 'slides_to_video'
+  | 'slides_to_video' | 'talking_photo'
 
 export type EditorMode = 'simple' | 'advanced' | 'ultimate'
 
@@ -64,6 +69,8 @@ interface UIState {
   activeFilmTab: FilmToolbarTab | null
   /** @deprecated use activeFilmTab */
   filmToolbarTab: FilmToolbarTab | null
+  workspace: WorkspaceName
+  lookDev: 'makeup' | 'greenscreen' | 'location'
   editorMode: EditorMode
   activeModal: ModalId | null
   modalPayload: Record<string, unknown>
@@ -90,8 +97,8 @@ interface UIState {
 
   // Film toolbar
   setActiveFilmTab: (tab: FilmToolbarTab | null) => void
-  /** @deprecated use setActiveFilmTab */
   setFilmToolbarTab: (tab: FilmToolbarTab | null) => void
+  setWorkspace: (workspace: WorkspaceName, lookDev?: 'makeup' | 'greenscreen' | 'location') => void
 
   // Mode
   setEditorMode: (mode: EditorMode) => void
@@ -129,6 +136,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   activeRightPanel: 'properties',
   activeFilmTab: null,
   filmToolbarTab: null,
+  workspace: 'Creator',
+  lookDev: 'makeup',
   editorMode: 'advanced',
   activeModal: null,
   modalPayload: {},
@@ -151,6 +160,7 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   setActiveFilmTab: (tab) => set({ activeFilmTab: tab, filmToolbarTab: tab }),
   setFilmToolbarTab: (tab) => set({ filmToolbarTab: tab, activeFilmTab: tab }),
+  setWorkspace: (workspace, lookDev) => set(lookDev ? { workspace, lookDev } : { workspace }),
 
   setEditorMode: (editorMode) => set({ editorMode }),
 

@@ -26,7 +26,7 @@ export type SceneCategory =
 
 export type ModelId =
   | 'seedance_2_0' | 'veo_3_1' | 'kling_3_0' | 'runway_gen4_5' | 'skyreels_v1'
-  | 'hunyuan_1_5' | 'wan_2_2' | 'cogvideox' | 'ltx_2_3' | 'pika_2_2'
+  | 'hunyuan_1_5' | 'wan_2_2' | 'ltx_2_3' | 'pika_2_2'
   | 'minimax_hailuo' | 'mochi_1' | 'pixverse'
 
 export type OutcomeTier = 'Draft' | 'Studio' | 'Blockbuster'

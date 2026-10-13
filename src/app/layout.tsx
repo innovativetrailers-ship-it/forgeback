@@ -4,6 +4,8 @@ import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Providers } from '@/components/providers'
 import { ToastContainer } from '@/components/ui/ToastContainer'
+import { UpgradeModal } from '@/components/ui/UpgradeModal'
+import { FeatureRequestButton } from '@/components/features/FeatureRequestButton'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://cinema.growthengine.ai'
 
@@ -21,12 +23,8 @@ export const metadata: Metadata = {
     'text to video',
     'video editing',
     'AI director',
-    'CapCut alternative',
-    'Adobe Premiere alternative',
-    'Kling',
-    'Runway',
-    'Veo 3',
-    'Luma Dream Machine',
+    'cinematic video',
+    'film editing',
   ],
   authors: [{ name: 'Growth Engine', url: APP_URL }],
   creator: 'Growth Engine',
@@ -37,10 +35,10 @@ export const metadata: Metadata = {
     siteName: 'CINÉMA',
     title: 'CINÉMA — AI Film Production Platform',
     description:
-      "The world's most advanced AI film and video production platform. Create professional-grade video with Kling, Runway, Veo 3, and more.",
+      "The world's most advanced AI film and video production platform. Create professional-grade video from a script.",
     images: [
       {
-        url: '/og-image.png',
+        url: '/opengraph-image',
         width: 1200,
         height: 630,
         alt: 'CINÉMA — AI Film Production Platform',
@@ -52,7 +50,7 @@ export const metadata: Metadata = {
     title: 'CINÉMA — AI Film Production Platform',
     description:
       "The world's most advanced AI film and video production platform.",
-    images: ['/og-image.png'],
+    images: ['/opengraph-image'],
     creator: '@growthengine',
   },
   robots: {
@@ -67,12 +65,8 @@ export const metadata: Metadata = {
     },
   },
   icons: {
-    icon: [
-      { url: '/favicon.ico' },
-      { url: '/icon-16.png', sizes: '16x16', type: 'image/png' },
-      { url: '/icon-32.png', sizes: '32x32', type: 'image/png' },
-    ],
-    apple: [{ url: '/apple-icon.png', sizes: '180x180', type: 'image/png' }],
+    icon: [{ url: '/brand/icon-32.png', type: 'image/png', sizes: '32x32' }],
+    apple: [{ url: '/brand/icon-180.png', sizes: '180x180', type: 'image/png' }],
   },
   manifest: '/site.webmanifest',
 }
@@ -90,6 +84,8 @@ export default function RootLayout({
             {children}
             <Toaster richColors position="bottom-right" />
             <ToastContainer />
+            <UpgradeModal />
+            <FeatureRequestButton />
           </TooltipProvider>
         </Providers>
       </body>

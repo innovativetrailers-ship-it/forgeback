@@ -1,15 +1,16 @@
+import { buildWhisperSttInput, falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAndDeductCredits, refundCredits, OPERATION_COSTS } from '../../../../lib/credits'
-import { fal } from '../../../../lib/fal/client'
+import { fal , falSubscribeBound} from '../../../../lib/fal/client'
+import { requireUser } from '@/lib/auth/requireUser'
+const falSubscribe = falSubscribeBound('app.api.translate.video.route')
 import { synthesiseSpeech } from '../../../../lib/audio/elevenlabs'
 import { uploadToR2 } from '../../../../lib/storage/r2'
-import Anthropic from '@anthropic-ai/sdk'
-import { execSync } from 'child_process'
-import { mkdirSync, rmSync, existsSync } from 'fs'
+import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
+import { mkdirSync, rmSync, existsSync, readFileSync } from 'fs'
+import { runArgv } from '@/lib/shell/argv'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 interface TranslationJob {
   sourceVideoUrl: string
@@ -23,13 +24,15 @@ interface TranslationJob {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: TranslationJob
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/translate/video/route.ts:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -38,6 +41,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'video_translate')
   } catch (e) {
+    console.warn("[caught] src/app/api/translate/video/route.ts:39", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     return NextResponse.json({ error: (e as Error).message }, { status: 402 })
   }
 
@@ -47,14 +52,14 @@ export async function POST(req: NextRequest) {
 
   try {
     // 1. Whisper transcription with word timestamps
-    const transcriptResult = await fal.subscribe('fal-ai/whisper', {
-      input: { audio_url: sourceVideoUrl, task: 'transcribe' },
+    const transcriptResult = await falSubscribe(falEndpoint('whisper'), {
+      input: buildWhisperSttInput({ audioUrl: sourceVideoUrl, chunkLevel: 'word' }),
     }) as unknown as { text: string; chunks: Array<{ text: string; timestamp: [number, number] }> }
 
     const sourceText = transcriptResult.text
 
     // 2. Claude translation
-    const translationResp = await anthropic.messages.create({
+    const translationResp = await claudeCall({
       model: 'claude-haiku-4-20250514',
       max_tokens: 4096,
       messages: [
@@ -63,8 +68,8 @@ export async function POST(req: NextRequest) {
           content: `Translate the following text to ${targetLanguage}. Preserve proper nouns and brand names. Maintain natural spoken rhythm. Return ONLY the translated text, no explanation:\n\n${sourceText}`,
         },
       ],
-    })
-    const translatedText = translationResp.content[0].type === 'text' ? translationResp.content[0].text : sourceText
+    }, { source: 'translate' })
+    const translatedText = claudeText(translationResp) || sourceText
 
     // 3. ElevenLabs multilingual TTS
     let dubbedAudioUrl: string | null = null
@@ -80,12 +85,16 @@ export async function POST(req: NextRequest) {
     // 4. Generate SRT captions
     const srtLines: string[] = []
     const words = transcriptResult.chunks
+    const translatedWords = translatedText.split(/\s+/).filter(Boolean)
+    const segmentCount = Math.max(1, Math.ceil(words.length / 8))
     let segIdx = 1
     for (let i = 0; i < words.length; i += 8) {
       const seg = words.slice(i, i + 8)
       const start = seg[0].timestamp[0]
       const end = seg[seg.length - 1].timestamp[1]
-      const text = seg.map((w) => w.text).join(' ')
+      const sliceAt = Math.floor(((segIdx - 1) * translatedWords.length) / segmentCount)
+      const sliceTo = Math.floor((segIdx * translatedWords.length) / segmentCount)
+      const text = translatedWords.slice(sliceAt, Math.max(sliceTo, sliceAt + 1)).join(' ') || translatedText
       srtLines.push(`${segIdx}\n${formatSRTTime(start)} --> ${formatSRTTime(end)}\n${text}\n`)
       segIdx++
     }
@@ -96,7 +105,7 @@ export async function POST(req: NextRequest) {
     // 5. Lip resync if dubbing
     let finalVideoUrl = sourceVideoUrl
     if (dubAudio && dubbedAudioUrl && resyncLips) {
-      const lipResult = await fal.subscribe('fal-ai/sadtalker', {
+      const lipResult = await falSubscribe(falEndpoint('sadtalker'), {
         input: {
           source_image_url: sourceVideoUrl,
           driven_audio_url: dubbedAudioUrl,
@@ -115,10 +124,8 @@ export async function POST(req: NextRequest) {
         ? `[0:a][1:a]amix=inputs=2:duration=shortest`
         : `[1:a]anull`
 
-      execSync(
-        `ffmpeg -i "${sourceVideoUrl}" -i "${audioPath}" -filter_complex "${mixArg}" -c:v copy "${outputPath}" -y 2>/dev/null`
-      )
-      const outBuf = execSync(`cat "${outputPath}"`)
+      runArgv('ffmpeg', ['-i', sourceVideoUrl, '-i', audioPath, '-filter_complex', mixArg, '-c:v', 'copy', outputPath, '-y'])
+      const outBuf = readFileSync(outputPath)
       finalVideoUrl = await uploadToR2(outBuf, `translated/${jobId}.mp4`, 'video/mp4')
     }
 
@@ -129,6 +136,8 @@ export async function POST(req: NextRequest) {
       dubbedAudioUrl,
     })
   } catch (e) {
+    console.warn("[caught] src/app/api/translate/video/route.ts:130", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     await refundCredits(userId, OPERATION_COSTS['video_translate'] ?? 15, 'Video translation failed')
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   } finally {

@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { nanoid } from 'nanoid'
@@ -60,4 +61,22 @@ export async function deleteFromR2(key: string): Promise<void> {
 
 export function keyFromUrl(url: string): string {
   return url.replace(`${PUBLIC_URL}/`, '')
+}
+
+export { clipVideoKey, objectKeyFromStored, renderVideoKey } from './keys'
+
+export function publicUrlForKey(key: string): string {
+  const base = PUBLIC_URL.replace(/\/$/, '')
+  return base ? `${base}/${key}` : key
+}
+
+export async function objectExists(key: string): Promise<boolean> {
+  try {
+    await r2.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }))
+    return true
+  } catch (err) {
+    console.warn("[caught] src/lib/storage/r2.ts:83", err instanceof Error ? { name: err.name, message: err.message } : err)
+
+    return false
+  }
 }

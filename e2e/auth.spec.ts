@@ -61,6 +61,7 @@ test.describe('Registration page', () => {
     await page.fill('input[name="name"], input[placeholder*="name" i]', 'Test User')
     await page.fill('input[type="email"]', `test-${ts}@playwright.cinema`)
     await page.fill('input[type="password"]', 'TestPassword123!')
+    await page.fill('input[name="dateOfBirth"]', '1990-01-01')
     // Confirm password if present
     const confirmInput = page.locator('input[name="confirm"], input[placeholder*="confirm" i]')
     if (await confirmInput.count() > 0) {

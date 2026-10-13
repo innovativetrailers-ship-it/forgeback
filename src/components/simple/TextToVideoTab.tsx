@@ -31,10 +31,10 @@ export function TextToVideoTab({ onGenerated, creditBalance, userRole }: Props) 
     if (!prompt.trim() || isLoading) return
     setIsLoading(true)
 
-    const clientId = nanoid()
-    const newClip: GeneratedClip = {
-      id: clientId,
-      jobId: clientId,
+    const clipId = nanoid()
+    const baseClip: GeneratedClip = {
+      id: clipId,
+      jobId: clipId,
       prompt,
       model: modelOverride || selectedPill.model,
       quality,
@@ -45,7 +45,6 @@ export function TextToVideoTab({ onGenerated, creditBalance, userRole }: Props) 
       progress: 0,
       createdAt: new Date(),
     }
-    onGenerated(newClip)
 
     try {
       const res = await fetch('/api/jobs/create', {
@@ -65,16 +64,14 @@ export function TextToVideoTab({ onGenerated, creditBalance, userRole }: Props) 
 
       if (!res.ok) {
         const err = await res.json() as { error?: string }
-        onGenerated({ ...newClip, status: 'failed', error: err.error ?? 'Failed to create job' })
+        onGenerated({ ...baseClip, status: 'failed', error: err.error ?? 'Failed to create job' })
         return
       }
 
       const { jobId } = await res.json() as { jobId: string }
+      const activeClip = { ...baseClip, jobId, status: 'processing' as const }
+      onGenerated(activeClip)
 
-      // Update clip with real jobId
-      onGenerated({ ...newClip, id: jobId, jobId, status: 'processing' })
-
-      // Subscribe to SSE stream
       const sse = new EventSource(`/api/jobs/${jobId}/stream`)
 
       sse.onmessage = (e) => {
@@ -84,13 +81,12 @@ export function TextToVideoTab({ onGenerated, creditBalance, userRole }: Props) 
           message?: string
           outputUrl?: string
           error?: string
+          userMessage?: string
         }
 
         if (data.status === 'complete' && data.outputUrl) {
           onGenerated({
-            ...newClip,
-            id: jobId,
-            jobId,
+            ...activeClip,
             status: 'complete',
             videoUrl: data.outputUrl,
             progress: 100,
@@ -98,31 +94,30 @@ export function TextToVideoTab({ onGenerated, creditBalance, userRole }: Props) 
           sse.close()
         } else if (data.status === 'failed') {
           onGenerated({
-            ...newClip,
-            id: jobId,
-            jobId,
+            ...activeClip,
             status: 'failed',
-            error: data.error ?? 'Generation failed',
+            error: data.userMessage ?? data.error ?? 'Generation failed',
+            userMessage: data.userMessage,
           })
           sse.close()
         } else {
           onGenerated({
-            ...newClip,
-            id: jobId,
-            jobId,
+            ...activeClip,
             status: 'processing',
             progress: data.progress ?? 0,
-            progressMessage: data.message,
+            progressMessage: data.userMessage ?? data.message,
+            userMessage: data.userMessage,
           })
         }
       }
 
-      sse.onerror = () => {
-        onGenerated({ ...newClip, id: jobId, jobId, status: 'failed', error: 'Connection lost' })
-        sse.close()
-      }
+      // Transient disconnect — let EventSource auto-reconnect and re-sync from
+      // the DB-polling stream rather than marking the clip failed.
+      sse.onerror = () => {}
     } catch (err) {
-      onGenerated({ ...newClip, status: 'failed', error: (err as Error).message })
+      console.warn("[caught] src/components/simple/TextToVideoTab.tsx:114", err instanceof Error ? { name: err.name, message: err.message } : err)
+
+      onGenerated({ ...baseClip, status: 'failed', error: (err as Error).message })
     } finally {
       setIsLoading(false)
     }

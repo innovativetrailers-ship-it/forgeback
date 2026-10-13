@@ -1,4 +1,6 @@
-import { fal } from '../fal/client'
+import { buildWhisperSttInput, falEndpoint } from '@cinema/core/endpoints'
+import { fal, falSubscribeBound} from '../fal/client'
+const falSubscribe = falSubscribeBound('lib.audio.FillerRemover')
 import { db } from '../db'
 
 const DEFAULT_FILLER_WORDS = [
@@ -47,8 +49,8 @@ export async function removeFillersAndSilence(params: {
   }
 
   // Whisper transcription with word-level timestamps
-  const transcriptResult = await fal.subscribe('fal-ai/whisper', {
-    input: { audio_url: audioUrl, task: 'transcribe' },
+  const transcriptResult = await falSubscribe(falEndpoint('whisper'), {
+    input: buildWhisperSttInput({ audioUrl, chunkLevel: 'word' }),
   }) as unknown as { chunks: Array<{ text: string; timestamp: [number, number] }> }
 
   // Parse word-level timestamps

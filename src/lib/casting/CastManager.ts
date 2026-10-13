@@ -1,4 +1,5 @@
 import { runModel1 } from '../brain/model1'
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 import type { CastMember, SceneCast, MakeupState, MakeupEffect } from './types'
 
 export class CastManager {
@@ -24,7 +25,7 @@ export class CastManager {
 
     if (activeCast.length === 1) {
       const char = activeCast[0].member
-      modelRecommendation = char.lockedModelFamily ?? 'seedance_2_0'
+      modelRecommendation = char.lockedModelFamily ?? refuseSilentModelSwap(char.name, 'seedance_2_0')
       reasoning = `Single character scene — using ${char.name}'s locked model`
     } else if (activeCast.length === 2) {
       modelRecommendation = 'seedance_2_0'

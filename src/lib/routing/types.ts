@@ -4,6 +4,7 @@ export type { Shot, ShotList, ModelId, OutcomeTier, SceneCategory, SwarmResult }
 export interface SceneSegment {
   segmentId: string
   clipId: string
+  shotId: string
   startSeconds: number
   endSeconds: number
   prompt: string
@@ -11,8 +12,10 @@ export interface SceneSegment {
   tier: string
   requirements: string[]
   characterIds?: string[]
+  isHardCut?: boolean
   anchorStartFrameUrl?: string
   anchorEndFrameUrl?: string
+  styleReferenceUrl?: string
   estimatedCredits: number
 }
 

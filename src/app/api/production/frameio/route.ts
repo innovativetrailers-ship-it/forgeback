@@ -6,6 +6,7 @@ import {
   getFrameIOTeams,
   getFrameIOProjects,
 } from '@/lib/production/FrameIOClient'
+import { requireUser } from '@/lib/auth/requireUser'
 
 interface FrameIOBody {
   action: 'create_project' | 'upload' | 'sync_comments' | 'list_teams' | 'list_projects'
@@ -19,7 +20,7 @@ interface FrameIOBody {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   if (!process.env.FRAMEIO_TOKEN) {
@@ -29,7 +30,9 @@ export async function POST(req: NextRequest) {
   let body: FrameIOBody
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/production/frameio/route.ts:32", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -78,6 +81,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Unknown action: ${body.action}` }, { status: 400 })
     }
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/production/frameio/route.ts:80", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Frame.io operation failed'
     return NextResponse.json({ error: msg }, { status: 500 })
   }

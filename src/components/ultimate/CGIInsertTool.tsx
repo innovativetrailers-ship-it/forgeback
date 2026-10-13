@@ -45,11 +45,23 @@ export function CGIInsertTool({ sourceVideoUrl, videoDuration, onInsertComplete 
       const res = await fetch('/api/cgi/insert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoUrl: sourceVideoUrl, prompt, insertAt, duration }),
+        body: JSON.stringify({
+          videoUrl: sourceVideoUrl,
+          prompt,
+          insertionTimestamps: [insertAt, insertAt + duration],
+        }),
       })
 
       if (!res.ok) throw new Error('CGI API failed')
-      const data = await res.json() as { jobId: string }
+      const data = await res.json() as { jobId?: string; outputUrl?: string }
+
+      if (data.outputUrl && !data.jobId) {
+        const done: CGIInsert = { ...newInsert, status: 'complete', outputUrl: data.outputUrl, progress: 100 }
+        setInserts((prev) => prev.map((ins) => (ins.id === id ? done : ins)))
+        onInsertComplete(done)
+        return
+      }
+      if (!data.jobId) throw new Error('CGI API failed')
 
       const sse = new EventSource(`/api/jobs/${data.jobId}/stream`)
       sse.onmessage = (e) => {
@@ -70,7 +82,9 @@ export function CGIInsertTool({ sourceVideoUrl, videoDuration, onInsertComplete 
         sse.close()
         setInserts((prev) => prev.map((ins) => ins.id === id ? { ...ins, status: 'failed' } : ins))
       }
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/ultimate/CGIInsertTool.tsx:85", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setInserts((prev) => prev.map((ins) => ins.id === id ? { ...ins, status: 'failed' } : ins))
     } finally {
       setIsSubmitting(false)

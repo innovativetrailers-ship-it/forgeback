@@ -8,8 +8,10 @@ import { TopBar } from '@/components/layout/TopBar'
 import { IconRail } from '@/components/layout/IconRail'
 import { LeftPanel } from '@/components/layout/LeftPanel'
 import { RightPanel } from '@/components/layout/RightPanel'
-import { VideoPreview } from '@/components/editor/VideoPreview'
+import { InteractivePlayer } from '@/components/playback/InteractivePlayer'
 import { Timeline } from '@/components/editor/Timeline'
+import { ImportClipButton } from '@/components/editor/ImportClipButton'
+import { PreProductionBoard } from '@/components/editor/PreProductionBoard'
 import { RepaintModal } from '@/components/editor/RepaintModal'
 import { ReviewPortalModal } from '@/components/review/ReviewPortalModal'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
@@ -17,8 +19,21 @@ import { useStudioStore } from '@/store/editor'
 import { useUIStore } from '@/store/ui'
 import { useCredits } from '@/hooks/useCredits'
 import { toast } from '@/lib/toast'
+import { fetchJsonSafe } from '@/lib/safeFetch'
+import { fireRewardSignal } from '@/lib/feedback/signal'
 import { DEFAULT_ZOOM } from '@/components/editor/constants'
 import type { TimelineRecipe, Clip, Track } from '@/lib/timeline/schema'
+import { usePlaybackStore } from '@/store/playbackStore'
+import { importLegacyPendingClips } from '@/lib/timeline/importLegacyPending'
+import { useJobStore } from '@/store/jobStore'
+import { jobPlaybackPath } from '@/lib/media/jobPlayback'
+import { subscribeJobStream } from '@/lib/jobs/subscribeJobStream'
+import { computeTimelineDuration, isVideoMediaUrl } from '@/lib/timeline/playback'
+import { adoptEditorRecipe, ensureEditorProject, hydrateTimelineFromShots } from '@/lib/projects/loadProject'
+import { moveClipInRecipe, recipeForTimeline, reconcileTimeline } from '@/lib/timeline/reconcileTimeline'
+import { splitTimelineClip } from '@/lib/timeline/syncToPlayback'
+import type { ProjectLoadedDetail } from '@/lib/projects/loadProject'
+import { useProjectLoadListener } from '@/hooks/useProjectLoadListener'
 
 // Default 8-track timeline scaffold
 const DEFAULT_TRACKS: Track[] = [
@@ -58,11 +73,20 @@ interface Location { id: string; name: string }
 export default function AdvancedPage() {
   const { data: session } = useSession()
   const { balance: creditBalance } = useCredits()
-  const projectId = useRef(nanoid())
-  const { activeModal, modalPayload, closeModal } = useUIStore()
+  const playbackProjectId = usePlaybackStore((s) => s.projectId)
+  const storedRecipe = usePlaybackStore((s) => s.recipe)
+  const storedPlayhead = usePlaybackStore((s) => s.playheadTime)
+  const persistRecipe = usePlaybackStore((s) => s.setRecipe)
+  const commitRecipe = usePlaybackStore((s) => s.commitRecipe)
+  const canonicalRecipe = usePlaybackStore((s) => s.recipe)
+  const persistPlayhead = usePlaybackStore((s) => s.setPlayhead)
 
-  const [recipe, setRecipe] = useState<TimelineRecipe>(() => buildDefaultRecipe(projectId.current))
-  const [playheadTime, setPlayheadTime] = useState(0)
+  const projectId = useRef('')
+  const { activeModal, modalPayload, closeModal } = useUIStore()
+  const activeTool = useUIStore((s) => s.activeTool)
+
+  const [recipe, setRecipe] = useState<TimelineRecipe>(() => storedRecipe ?? buildDefaultRecipe('pending'))
+  const [playheadTime, setPlayheadTime] = useState(storedPlayhead)
   const [isPlaying, setIsPlaying] = useState(false)
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null)
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM)
@@ -74,91 +98,113 @@ export default function AdvancedPage() {
   const [locations, setLocations] = useState<Location[]>([])
   const [isExporting, setIsExporting] = useState(false)
 
-  // History stack for undo/redo
-  const historyRef = useRef<TimelineRecipe[]>([])
-  const historyIndexRef = useRef(-1)
-
   const commitHistory = useCallback((newRecipe: TimelineRecipe) => {
-    const stack = historyRef.current.slice(0, historyIndexRef.current + 1)
-    stack.push(newRecipe)
-    historyRef.current = stack.slice(-50)
-    historyIndexRef.current = historyRef.current.length - 1
     setRecipe(newRecipe)
-  }, [])
+    commitRecipe(newRecipe)
+  }, [commitRecipe])
 
-  const undo = useCallback(() => {
-    if (historyIndexRef.current <= 0) return
-    historyIndexRef.current -= 1
-    setRecipe(historyRef.current[historyIndexRef.current])
-  }, [])
+  useEffect(() => {
+    if (!session) return
+    let cancelled = false
+    void ensureEditorProject().then(({ projectId: id, shots }) => {
+      if (cancelled) return
+      projectId.current = id
+      const state = usePlaybackStore.getState()
+      const base = adoptEditorRecipe(state.recipe, id, buildDefaultRecipe(id))
+      console.log('[timeline_mount]', JSON.stringify({
+        before: state.recipe?.projectId ?? null,
+        editor: id,
+        after: base.projectId,
+        clips: base.tracks.find((track) => track.id === 't-v1')?.clips.length ?? 0,
+      }))
+      const { recipe: next } = reconcileTimeline(shots, base)
+      usePlaybackStore.getState().setRecipe(next)
+      setRecipe(next)
+      void importLegacyPendingClips().then((count) => {
+        if (cancelled || count <= 0) return
+        const fresh = usePlaybackStore.getState().recipe
+        if (fresh) setRecipe(fresh)
+      })
+    }).catch((err) => {
+      console.warn("[caught] src/app/(editor)/advanced/page.tsx:118", err instanceof Error ? { name: err.name, message: err.message } : err)
+      console.error(err)
+    })
+    return () => { cancelled = true }
+  }, [session])
 
-  const redo = useCallback(() => {
-    if (historyIndexRef.current >= historyRef.current.length - 1) return
-    historyIndexRef.current += 1
-    setRecipe(historyRef.current[historyIndexRef.current])
-  }, [])
+  useProjectLoadListener(useCallback((detail: ProjectLoadedDetail) => {
+    projectId.current = detail.projectId
+    usePlaybackStore.setState({ past: [], future: [] })
+    setRecipe(detail.recipe)
+    persistRecipe(detail.recipe)
+  }, [persistRecipe]))
+
+  useEffect(() => {
+    persistPlayhead(playheadTime)
+  }, [playheadTime, persistPlayhead])
+
+  useEffect(() => {
+    if (!canonicalRecipe || canonicalRecipe === recipe) return
+    setRecipe(canonicalRecipe)
+  }, [canonicalRecipe, recipe])
 
   // Load characters + locations
   useEffect(() => {
     if (!session) return
     Promise.all([
-      fetch('/api/vault/character/list').then((r) => r.json()),
-      fetch('/api/vault/location/list').then((r) => r.json()),
+      fetchJsonSafe<{ characters?: Character[] }>('/api/vault/character/list', {}),
+      fetchJsonSafe<{ locations?: Location[] }>('/api/vault/location/list', {}),
     ]).then(([chars, locs]) => {
-      setCharacters((chars as { characters: Character[] }).characters ?? [])
-      setLocations((locs as { locations: Location[] }).locations ?? [])
-    }).catch(console.error)
+      setCharacters(chars.characters ?? [])
+      setLocations(locs.locations ?? [])
+    }).catch((err) => {
+      console.warn("[caught] src/app/(editor)/advanced/page.tsx:146", err instanceof Error ? { name: err.name, message: err.message } : err)
+      console.error(err)
+    })
   }, [session])
 
-  // Playback ticker
-  useEffect(() => {
-    if (!isPlaying) return
-    const raf = setInterval(() => {
-      setPlayheadTime((t) => {
-        const next = t + 1 / recipe.fps
-        if (next >= recipe.durationSeconds) {
-          setIsPlaying(false)
-          return 0
-        }
-        return next
-      })
-    }, 1000 / recipe.fps)
-    return () => clearInterval(raf)
-  }, [isPlaying, recipe.fps, recipe.durationSeconds])
+  const timelineRecipe = recipeForTimeline(canonicalRecipe, recipe) ?? recipe
+  const allClips = timelineRecipe.tracks.flatMap((t) => t.clips)
+  const timelineDuration = computeTimelineDuration(timelineRecipe.tracks, timelineRecipe.durationSeconds)
 
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return
       if (e.code === 'Space') { e.preventDefault(); setIsPlaying((p) => !p) }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo() }
-      // Tool switching now handled by TopBar keyboard handler
       if (e.key === 'Home') setPlayheadTime(0)
-      if (e.key === 'End') setPlayheadTime(recipe.durationSeconds)
+      if (e.key === 'End') setPlayheadTime(timelineDuration)
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [undo, redo, recipe.durationSeconds])
+  }, [timelineDuration])
 
-  // All clips flat (for preview + repaint)
-  const allClips = recipe.tracks.flatMap((t) => t.clips)
   const selectedClip = selectedClipId ? allClips.find((c) => c.id === selectedClipId) ?? null : null
+
+  const handlePlaybackEnded = useCallback(() => {
+    const videoClips = allClips
+      .filter((c) => c.sourceUrl && isVideoMediaUrl(c.sourceUrl))
+      .sort((a, b) => a.startTime - b.startTime)
+    const current = videoClips.find(
+      (c) => c.startTime <= playheadTime && c.endTime > playheadTime,
+    )
+    if (!current) {
+      setIsPlaying(false)
+      return
+    }
+    const next = videoClips[videoClips.indexOf(current) + 1]
+    if (next) {
+      setPlayheadTime(next.startTime)
+    } else {
+      setIsPlaying(false)
+      setPlayheadTime(timelineDuration)
+    }
+  }, [allClips, playheadTime, timelineDuration])
 
   // Timeline mutations
   const handleClipMove = useCallback((clipId: string, newStart: number, targetTrackId: string) => {
-    const updated = { ...recipe }
-    updated.tracks = recipe.tracks.map((track) => {
-      const clip = track.clips.find((c) => c.id === clipId)
-      if (!clip) return track
-      if (track.id === targetTrackId) {
-        const dur = clip.endTime - clip.startTime
-        return { ...track, clips: track.clips.map((c) => c.id === clipId ? { ...c, startTime: newStart, endTime: newStart + dur } : c) }
-      }
-      return { ...track, clips: track.clips.filter((c) => c.id !== clipId) }
-    })
-    setRecipe(updated)
-  }, [recipe])
+    commitHistory(moveClipInRecipe(recipe, clipId, newStart, targetTrackId))
+  }, [recipe, commitHistory])
 
   const handleClipTrim = useCallback((clipId: string, edge: 'start' | 'end', newTime: number) => {
     const updated = { ...recipe }
@@ -225,36 +271,107 @@ export default function AdvancedPage() {
     }
     commitHistory(updated)
 
-    // Track active job
     setActiveJobs((jobs) => [...jobs, { jobId, clipId, trackId, progress: 0, message: 'Queued' }])
+    useJobStore.getState().addJob({
+      jobId,
+      prompt: (clipData.prompt as string) ?? '',
+      mode: 'advanced',
+      clipId,
+      trackId,
+      startedAt: Date.now(),
+    })
 
-    // Subscribe via SSE
-    const sse = new EventSource(`/api/jobs/${jobId}/stream`)
-    sse.onmessage = (e) => {
-      const data = JSON.parse(e.data) as { status: string; progress?: number; message?: string; outputUrl?: string }
-      setActiveJobs((jobs) => jobs.map((j) =>
-        j.jobId === jobId ? { ...j, progress: data.progress ?? j.progress, message: data.message ?? j.message } : j
-      ))
-      if (data.status === 'complete' && data.outputUrl) {
-        setRecipe((current) => ({
-          ...current,
-          tracks: current.tracks.map((t) => ({
-            ...t,
-            clips: t.clips.map((c) => c.id === clipId ? { ...c, sourceUrl: data.outputUrl! } : c),
-          })),
-        }))
+    subscribeJobStream(jobId, {
+      onProgress: (data) => {
+        setActiveJobs((jobs) => jobs.map((j) =>
+          j.jobId === jobId ? { ...j, progress: data.progress ?? j.progress, message: data.message ?? j.message } : j
+        ))
+      },
+      onComplete: (outputUrl) => {
+        const sourceUrl = jobPlaybackPath(jobId) ?? (outputUrl.startsWith('/') ? outputUrl : '')
+        setRecipe((current) => {
+          const updated = {
+            ...current,
+            tracks: current.tracks.map((t) => ({
+              ...t,
+              clips: t.clips.map((c) => c.id === clipId ? { ...c, sourceUrl: sourceUrl || c.sourceUrl } : c),
+            })),
+          }
+          persistRecipe(updated)
+          const projectId = usePlaybackStore.getState().projectId
+          if (projectId) void hydrateTimelineFromShots(projectId, updated).catch((err) => {
+            console.warn("[caught] src/app/(editor)/advanced/page.tsx:284", err instanceof Error ? { name: err.name, message: err.message } : err)
+            console.error(err)
+          })
+          return updated
+        })
         setActiveJobs((jobs) => jobs.filter((j) => j.jobId !== jobId))
-        sse.close()
-      } else if (data.status === 'failed') {
+        useJobStore.getState().removeJob(jobId)
+      },
+      onFailed: () => {
         setActiveJobs((jobs) => jobs.filter((j) => j.jobId !== jobId))
-        sse.close()
+        useJobStore.getState().removeJob(jobId)
+      },
+    })
+  }, [recipe, commitHistory, persistRecipe])
+
+  const resumedJobsRef = useRef(new Set<string>())
+
+  useEffect(() => {
+    const staleMs = 30 * 60 * 1000
+    const { activeJobs, removeJob } = useJobStore.getState()
+
+    for (const job of activeJobs) {
+      if (Date.now() - job.startedAt > staleMs) {
+        removeJob(job.jobId)
+        continue
       }
+      if (!job.clipId || !job.trackId || job.mode !== 'advanced') continue
+      if (resumedJobsRef.current.has(job.jobId)) continue
+      resumedJobsRef.current.add(job.jobId)
+
+      setActiveJobs((prev) => [...prev, {
+        jobId: job.jobId,
+        clipId: job.clipId!,
+        trackId: job.trackId!,
+        progress: 0,
+        message: 'Resuming…',
+      }])
+
+      subscribeJobStream(job.jobId, {
+        onProgress: (data) => {
+          setActiveJobs((jobs) => jobs.map((j) =>
+            j.jobId === job.jobId ? { ...j, progress: data.progress ?? j.progress, message: data.message ?? j.message } : j
+          ))
+        },
+        onComplete: (outputUrl) => {
+          const sourceUrl = jobPlaybackPath(job.jobId) ?? (outputUrl.startsWith('/') ? outputUrl : '')
+          setRecipe((current) => {
+            const updated = {
+              ...current,
+              tracks: current.tracks.map((t) => ({
+                ...t,
+                clips: t.clips.map((c) => c.id === job.clipId ? { ...c, sourceUrl: sourceUrl || c.sourceUrl } : c),
+              })),
+            }
+            persistRecipe(updated)
+            const projectId = usePlaybackStore.getState().projectId
+            if (projectId) void hydrateTimelineFromShots(projectId, updated).catch((err) => {
+              console.warn("[caught] src/app/(editor)/advanced/page.tsx:338", err instanceof Error ? { name: err.name, message: err.message } : err)
+              console.error(err)
+            })
+            return updated
+          })
+          setActiveJobs((jobs) => jobs.filter((j) => j.jobId !== job.jobId))
+          removeJob(job.jobId)
+        },
+        onFailed: () => {
+          setActiveJobs((jobs) => jobs.filter((j) => j.jobId !== job.jobId))
+          removeJob(job.jobId)
+        },
+      })
     }
-    sse.onerror = () => {
-      setActiveJobs((jobs) => jobs.filter((j) => j.jobId !== jobId))
-      sse.close()
-    }
-  }, [recipe, commitHistory])
+  }, [persistRecipe])
 
   // Repaint complete → update clip URL
   const handleRepaintComplete = useCallback((clipId: string, newVideoUrl: string) => {
@@ -272,6 +389,8 @@ export default function AdvancedPage() {
         body: JSON.stringify({ recipe }),
       })
       const { jobId } = await res.json() as { jobId: string }
+      // Exporting the film is the strongest positive signal in the RLAIF loop.
+      fireRewardSignal(jobId, 'export')
       const sse = new EventSource(`/api/jobs/${jobId}/stream`)
       sse.onmessage = (e) => {
         const data = JSON.parse(e.data) as { status: string; outputUrl?: string }
@@ -284,7 +403,9 @@ export default function AdvancedPage() {
           sse.close()
         }
       }
-    } catch { setIsExporting(false) }
+    } catch (err) {
+      console.warn("[caught] src/app/(editor)/advanced/page.tsx:382", err instanceof Error ? { name: err.name, message: err.message } : err)
+ setIsExporting(false) }
   }
 
   return (
@@ -298,21 +419,25 @@ export default function AdvancedPage() {
 
         {/* Centre: preview + timeline */}
         <div className="flex flex-col flex-1 overflow-hidden">
-          <VideoPreview
+          <InteractivePlayer
             clips={allClips}
+            tracks={timelineRecipe.tracks}
             playheadTime={playheadTime}
             isPlaying={isPlaying}
-            duration={recipe.durationSeconds}
+            duration={timelineDuration}
             activeJobs={activeJobs}
             onPlayPause={() => setIsPlaying((p) => !p)}
             onSeek={setPlayheadTime}
             onSkipToStart={() => setPlayheadTime(0)}
-            onSkipToEnd={() => setPlayheadTime(recipe.durationSeconds)}
+            onSkipToEnd={() => setPlayheadTime(timelineDuration)}
+            onPlaybackEnded={handlePlaybackEnded}
+            onClipEdited={(clipId, url) => handleClipUpdate(clipId, { sourceUrl: url })}
           />
 
+          <ImportClipButton />
           <ErrorBoundary>
             <Timeline
-              recipe={recipe}
+              recipe={timelineRecipe}
               playheadTime={playheadTime}
               selectedClipId={selectedClipId}
               zoomLevel={zoomLevel}
@@ -322,6 +447,8 @@ export default function AdvancedPage() {
               onClipSelect={(id) => { setSelectedClipId(id); useStudioStore.getState().selectClip(id) }}
               onClipMove={handleClipMove}
               onClipTrim={handleClipTrim}
+              razor={activeTool === 'razor'}
+              onClipSplit={(clipId, atTime) => splitTimelineClip(clipId, atTime)}
               onTrackToggleMute={handleTrackToggleMute}
               onZoomChange={setZoomLevel}
               onScrollChange={setScrollOffset}
@@ -344,7 +471,8 @@ export default function AdvancedPage() {
         />
       )}
 
-      <ReviewPortalModal projectId={projectId.current} />
+      <ReviewPortalModal projectId={playbackProjectId ?? ''} />
+      <PreProductionBoard projectId={playbackProjectId ?? ''} />
     </div>
   )
 }

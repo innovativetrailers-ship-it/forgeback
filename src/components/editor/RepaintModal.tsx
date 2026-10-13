@@ -11,21 +11,19 @@ interface Props {
   onRepaintComplete: (clipId: string, newVideoUrl: string) => void
 }
 
-const MODELS = [
-  { value: 'auto', label: 'Auto (locked model)' },
-  { value: 'kling_standard', label: 'Kling Standard' },
-  { value: 'kling_pro', label: 'Kling Pro' },
-  { value: 'veo3', label: 'Veo 3' },
-  { value: 'seedance', label: 'Seedance' },
-  { value: 'runway', label: 'Runway Gen-4' },
-]
+const ENGINES = [
+  { value: 'inpaint', label: 'Wan inpaint' },
+  { value: 'void', label: 'Void inpaint' },
+  { value: 'restyle', label: 'Hunyuan restyle' },
+  { value: 'swap', label: 'Pika swap' },
+] as const
 
 export function RepaintModal({ clip, surroundingClips, onClose, onRepaintComplete }: Props) {
   const [newPrompt, setNewPrompt] = useState(clip.prompt ?? '')
-  const [model, setModel] = useState('auto')
-  const [motionMatch, setMotionMatch] = useState(true)
+  const [engine, setEngine] = useState<(typeof ENGINES)[number]['value']>('inpaint')
+  const [rect, setRect] = useState('0.3, 0.3, 0.4, 0.4')
+  const [takeUrl, setTakeUrl] = useState<string | null>(null)
   const [isRepainting, setIsRepainting] = useState(false)
-  const [progress, setProgress] = useState(0)
   const [progressMsg, setProgressMsg] = useState('')
 
   useEffect(() => {
@@ -36,59 +34,41 @@ export function RepaintModal({ clip, surroundingClips, onClose, onRepaintComplet
 
   const handleRepaint = async () => {
     if (!newPrompt.trim() || isRepainting) return
+    if (!clip.sourceUrl.startsWith('http')) {
+      setProgressMsg('This clip needs a stored video address.')
+      return
+    }
+    const parts = rect.split(',').map((part) => Number(part.trim()))
+    const [x, y, w, h] = parts
+    if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
+      setProgressMsg('Mask is x, y, width, height from 0 to 1.')
+      return
+    }
     setIsRepainting(true)
-    setProgress(0)
-    setProgressMsg('Creating repaint job…')
-
+    setProgressMsg('8 credits. Generating a new take. This clip stays until you accept.')
     try {
-      const res = await fetch('/api/jobs/create', {
+      const res = await fetch('/api/studio/timeline/edit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          type: 'REPAINT',
-          payload: {
-            originalVideoUrl: clip.sourceUrl,
-            prompt: newPrompt,
-            model: model === 'auto' ? (clip.modelUsed ?? 'kling_standard') : model,
-            motionMatch,
-            contextClips: surroundingClips.map((c) => c.sourceUrl).filter(Boolean),
-          },
+          op: 'inpaint',
+          confirm: true,
+          prompt: newPrompt.trim(),
+          engine,
+          videoUrl: clip.sourceUrl,
+          parentClipId: clip.id,
+          mask: { x, y, w, h },
         }),
       })
-
-      if (!res.ok) throw new Error('Failed to create repaint job')
-      const { jobId } = await res.json() as { jobId: string }
-
-      const sse = new EventSource(`/api/jobs/${jobId}/stream`)
-      sse.onmessage = (e) => {
-        const data = JSON.parse(e.data) as {
-          status: string
-          progress?: number
-          message?: string
-          outputUrl?: string
-          error?: string
-        }
-
-        setProgress(data.progress ?? 0)
-        setProgressMsg(data.message ?? '')
-
-        if (data.status === 'complete' && data.outputUrl) {
-          onRepaintComplete(clip.id, data.outputUrl)
-          sse.close()
-          onClose()
-        } else if (data.status === 'failed') {
-          setProgressMsg(`Error: ${data.error ?? 'Repaint failed'}`)
-          setIsRepainting(false)
-          sse.close()
-        }
-      }
-      sse.onerror = () => {
-        setProgressMsg('Connection lost')
-        setIsRepainting(false)
-        sse.close()
-      }
+      const data = await res.json() as { takeUrl?: string; error?: string }
+      if (!res.ok || !data.takeUrl) throw new Error(data.error ?? 'Repaint failed')
+      setTakeUrl(data.takeUrl)
+      setProgressMsg('Take is in the library. Accept places it on this clip.')
     } catch (err) {
-      setProgressMsg((err as Error).message)
+      console.warn('[repaint]', err instanceof Error ? err.message : err)
+      setProgressMsg(err instanceof Error ? err.message : 'Repaint failed')
+    } finally {
       setIsRepainting(false)
     }
   }
@@ -150,24 +130,23 @@ export function RepaintModal({ clip, surroundingClips, onClose, onRepaintComplet
             <div>
               <p className="text-[10px] text-white/35 uppercase tracking-wider mb-2 font-medium">Model</p>
               <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
+                value={engine}
+                onChange={(e) => setEngine(e.target.value as (typeof ENGINES)[number]['value'])}
                 className="w-full bg-[#12121a] border border-white/10 rounded-lg px-3 py-2
                   text-xs text-white/70 focus:outline-none focus:border-[#00e5c8]/40"
               >
-                {MODELS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                {ENGINES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
             </div>
-
-            <label className="flex items-center gap-2.5 cursor-pointer">
-              <div
-                onClick={() => setMotionMatch((v) => !v)}
-                className={`w-8 h-4 rounded-full transition-colors relative ${motionMatch ? 'bg-[#00e5c8]' : 'bg-white/15'}`}
-              >
-                <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${motionMatch ? 'translate-x-4' : 'translate-x-0.5'}`} />
-              </div>
-              <span className="text-xs text-white/50">Match camera motion</span>
-            </label>
+            <div>
+              <p className="text-[10px] text-white/35 uppercase tracking-wider mb-2 font-medium">Rectangle mask</p>
+              <input
+                value={rect}
+                onChange={(event) => setRect(event.target.value)}
+                className="w-full bg-[#12121a] border border-white/10 rounded-lg px-3 py-2 text-xs text-white/70"
+              />
+              <p className="mt-1 text-[10px] text-white/35">x, y, width, height from 0 to 1. The rectangle is held across the clip. A moving track is not on the gateway.</p>
+            </div>
           </div>
         </div>
 
@@ -185,36 +164,41 @@ export function RepaintModal({ clip, surroundingClips, onClose, onRepaintComplet
           </div>
         )}
 
-        {/* Progress bar */}
-        {isRepainting && (
+        {progressMsg && <p className="px-5 pb-3 text-[10px] text-white/50">{progressMsg}</p>}
+        {takeUrl && (
           <div className="px-5 pb-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] text-white/40">{progressMsg}</span>
-              <span className="text-[10px] text-[#00e5c8]">{progress}%</span>
-            </div>
-            <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#00e5c8] rounded-full transition-all duration-500"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+            <p className="mb-1 text-[10px] uppercase tracking-wider text-white/35">Take</p>
+            <video src={takeUrl} className="max-h-32 w-full rounded bg-black" controls playsInline />
           </div>
         )}
 
-        {/* Footer */}
         <div className="flex items-center justify-between px-5 py-4 border-t border-white/8">
           <button onClick={onClose} className="px-4 py-2 rounded-xl border border-white/10 text-white/50 text-sm hover:border-white/25 transition-colors">
             Cancel
           </button>
-          <button
-            onClick={handleRepaint}
-            disabled={!newPrompt.trim() || isRepainting}
-            className="px-5 py-2 rounded-xl bg-[#00e5c8] hover:bg-[#00f0d5] text-black font-semibold text-sm
-              disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-          >
-            {isRepainting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            {isRepainting ? 'Repainting…' : 'Repaint'}
-          </button>
+          <div className="flex gap-2">
+            {takeUrl && (
+              <button
+                type="button"
+                className="px-4 py-2 rounded-xl border border-white/15 text-sm text-white/70"
+                onClick={() => {
+                  onRepaintComplete(clip.id, takeUrl)
+                  onClose()
+                }}
+              >
+                Accept
+              </button>
+            )}
+            <button
+              onClick={handleRepaint}
+              disabled={!newPrompt.trim() || isRepainting}
+              className="px-5 py-2 rounded-xl bg-[#00e5c8] hover:bg-[#00f0d5] text-black font-semibold text-sm
+                disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              {isRepainting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              {isRepainting ? 'Repainting…' : 'Repaint · 8 credits'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

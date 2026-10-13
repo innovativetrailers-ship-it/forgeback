@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { applyLUT, applyASCCDL, applyFilmEmulation, applyColourCorrection, FILM_EMULATION_LUTS } from '@/lib/studio/colour'
 import { checkAndDeductCredits } from '@/lib/credits'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const lutSchema = z.object({
   operation: z.literal('lut'),
@@ -39,7 +40,7 @@ const correctionSchema = z.object({
 const schema = z.discriminatedUnion('operation', [lutSchema, cdlSchema, filmSchema, correctionSchema])
 
 export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
@@ -49,6 +50,8 @@ export async function POST(request: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'colour_grade')
   } catch (err) {
+    console.warn("[caught] src/app/api/studio/colour/route.ts:51", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 

@@ -1,0 +1,11 @@
+---
+description: SPEC-09 production and delivery. Read before changing ForgeFlow, ForgeReview, export presets, C2PA, or location.
+globs: ["cinematic-forge-v3/src/renderer/components/forgeflow/**", "cinematic-forge-v3/src/renderer/components/forgereview/**", "cinematic-forge-v3/src/renderer/components/export/**", "cinematic-forge-v3/src/main/export/**", "src/components/panels/LocationPanel.tsx"]
+alwaysApply: false
+---
+
+# SPEC-09 — Production and delivery
+
+Contract: `docs/spec-references/SPEC-09-production-delivery.md`. Inherits SPEC-00. Do not build from it until the user feeds this spec.
+
+Shot status is six stages. Review is local annotations plus one Approve. Export presets, loudness, reframe, and the C2PA checkbox are wired. A cryptographic signature needs the cert env. Location search, Mapillary, satellite, and Cesium save a plate the direction card can attach.

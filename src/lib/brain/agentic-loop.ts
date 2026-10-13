@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import { runModel1 } from './model1'
 import { callCouncil } from './council'
 import { db } from '../db'
@@ -50,7 +51,9 @@ First, plan your approach step by step, then produce your output.`
 
       try {
         result = schema.parse(JSON.parse(lastOutput))
-      } catch {
+      } catch (err) {
+        console.warn("[caught] src/lib/brain/agentic-loop.ts:54", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         // Continue to critique
       }
     } else if (i === 1 && result !== null) {
@@ -94,7 +97,9 @@ Produce a revised, improved output addressing every critique point.`
 
       try {
         result = schema.parse(JSON.parse(lastOutput))
-      } catch {
+      } catch (err) {
+        console.warn("[caught] src/lib/brain/agentic-loop.ts:98", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         // Use last successful result or fallback to council
       }
       break
@@ -135,7 +140,7 @@ Produce a revised, improved output addressing every critique point.`
         },
         isProcessed: false,
       },
-    }).catch(() => {}) // Non-blocking
+    }).catch((err) => logCaught('lib/brain/agentic-loop', err)) // Non-blocking
   }
 
   return { result, iterations, chainOfThought }

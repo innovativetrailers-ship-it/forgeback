@@ -1,4 +1,5 @@
-import { fal } from './client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { runFal } from './client'
 
 async function upscaleRaw(
   imageUrl: string,
@@ -11,20 +12,18 @@ async function upscaleRaw(
   }
 
   const modelMap: Record<string, string> = {
-    aura: 'fal-ai/aura-sr',
-    esrgan: 'fal-ai/real-esrgan',
-    clarity: 'fal-ai/clarity-upscaler',
-    codeformer: 'fal-ai/codeformer',
+    aura: falEndpoint('aura-sr'),
+    esrgan: falEndpoint('real-esrgan'),
+    clarity: falEndpoint('clarity-upscaler'),
+    codeformer: falEndpoint('codeformer'),
   }
 
-  const result = await fal.run(modelMap[model] ?? modelMap.aura, {
-    input: {
-      image_url: imageUrl,
-      ...(model === 'aura' && { upscaling_factor: scale }),
-      ...(model === 'esrgan' && { scale }),
-      ...(model === 'clarity' && { scale }),
-    },
-  }) as UpscaleResult
+  const result = await runFal<UpscaleResult>(modelMap[model] ?? modelMap.aura, {
+    image_url: imageUrl,
+    ...(model === 'aura' && { upscaling_factor: scale }),
+    ...(model === 'esrgan' && { scale }),
+    ...(model === 'clarity' && { scale }),
+  })
 
   return result.image?.url ?? result.images?.[0]?.url ?? imageUrl
 }
@@ -34,9 +33,9 @@ async function removeBackgroundRaw(imageUrl: string): Promise<string> {
     image?: { url: string }
   }
 
-  const result = await fal.run('fal-ai/birefnet', {
-    input: { image_url: imageUrl },
-  }) as RembgResult
+  const result = await runFal<RembgResult>(falEndpoint('birefnet'), {
+    image_url: imageUrl,
+  })
 
   return result.image?.url ?? imageUrl
 }
@@ -46,9 +45,10 @@ export async function restoreFace(imageUrl: string): Promise<string> {
     image?: { url: string }
   }
 
-  const result = await fal.run('fal-ai/codeformer', {
-    input: { image_url: imageUrl, fidelity: 0.7 },
-  }) as CodeformerResult
+  const result = await runFal<CodeformerResult>(falEndpoint('codeformer'), {
+    image_url: imageUrl,
+    fidelity: 0.7,
+  })
 
   return result.image?.url ?? imageUrl
 }
@@ -58,18 +58,15 @@ export async function generateProxyFrame(prompt: string): Promise<string> {
     images?: Array<{ url: string }>
   }
 
-  const result = await fal.run('fal-ai/flux/schnell', {
-    input: {
-      prompt,
-      image_size: 'landscape_16_9' as const,
-      num_inference_steps: 4,
-    },
-  }) as FluxResult
+  const result = await runFal<FluxResult>(falEndpoint('flux/schnell'), {
+    prompt,
+    image_size: 'landscape_16_9' as const,
+    num_inference_steps: 4,
+  })
 
   return result.images?.[0]?.url ?? ''
 }
 
-// Typed public API — all functions return structured objects
 export async function upscaleImage(
   imageUrl: string,
   model: 'aura-sr' | 'esrgan' | 'clarity' | 'codeformer' = 'aura-sr'
@@ -89,9 +86,9 @@ export async function extractDepthMap(imageUrl: string): Promise<{ depthUrl: str
     image?: { url: string }
   }
 
-  const result = await fal.run('fal-ai/depth-anything-v2', {
-    input: { image_url: imageUrl },
-  }) as DepthResult
+  const result = await runFal<DepthResult>(falEndpoint('imageutils/depth'), {
+    image_url: imageUrl,
+  })
 
   return { depthUrl: result.image?.url ?? imageUrl }
 }
@@ -107,14 +104,16 @@ export async function checkNSFWImage(imageUrl: string): Promise<{ safe: boolean;
   }
 
   try {
-    const result = await fal.run('fal-ai/nsfw-detector', {
-      input: { image_url: imageUrl },
-    }) as NSFWResult
+    const result = await runFal<NSFWResult>(falEndpoint('nsfw-detector'), {
+      image_url: imageUrl,
+    })
 
     const isNsfw = result.has_nsfw_concept?.[0] ?? false
     const score = result.safety_checker_result?.[0]?.score ?? (isNsfw ? 0.9 : 0.05)
     return { safe: !isNsfw, score }
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/fal/enhancement.ts:113", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return { safe: true, score: 0 }
   }
 }

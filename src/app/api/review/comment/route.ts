@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '../../../../lib/db'
 import { z } from 'zod'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const AddCommentSchema = z.object({
   token: z.string(),
@@ -21,7 +22,9 @@ export async function POST(req: NextRequest) {
   let body: z.infer<typeof AddCommentSchema>
   try {
     body = AddCommentSchema.parse(await req.json())
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/review/comment/route.ts:24", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
@@ -46,17 +49,22 @@ export async function POST(req: NextRequest) {
     },
   })
 
+  const { broadcastCollab } = await import('@/lib/collab/hub')
+  broadcastCollab(reviewLink.projectId, { type: 'review_comment', comment, projectId: reviewLink.projectId })
+
   return NextResponse.json({ comment }, { status: 201 })
 }
 
 export async function PATCH(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: z.infer<typeof ResolveCommentSchema>
   try {
     body = ResolveCommentSchema.parse(await req.json())
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/review/comment/route.ts:62", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 

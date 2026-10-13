@@ -1,6 +1,6 @@
+import { runArgv } from '../shell/argv'
 import { uploadToR2 } from '../storage/r2'
-import { execSync } from 'child_process'
-import { existsSync, mkdirSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, rmSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 
@@ -30,12 +30,10 @@ export async function extendClip(params: {
     if (direction === 'end' || direction === 'both') {
       // Extract last frame of clip
       const lastFramePath = join(tmpDir, 'last_frame.jpg')
-      execSync(
-        `ffmpeg -sseof -0.1 -i "${clipUrl}" -vframes 1 "${lastFramePath}" -y 2>/dev/null`
-      )
+      runArgv("ffmpeg", ["-sseof", "-0.1", "-i", clipUrl, "-vframes", "1", lastFramePath, "-y"])
 
       // Upload last frame to generate continuation
-      const lastFrameData = execSync(`base64 "${lastFramePath}"`).toString().trim()
+      const lastFrameData = readFileSync(lastFramePath).toString('base64')
       const lastFrameUrl = await uploadToR2(
         Buffer.from(lastFrameData, 'base64'),
         `extend-frames/${jobId}_last.jpg`,
@@ -65,11 +63,9 @@ export async function extendClip(params: {
     if (direction === 'start' || direction === 'both') {
       // Extract first frame
       const firstFramePath = join(tmpDir, 'first_frame.jpg')
-      execSync(
-        `ffmpeg -i "${clipUrl}" -vframes 1 "${firstFramePath}" -y 2>/dev/null`
-      )
+      runArgv("ffmpeg", ["-i", clipUrl, "-vframes", "1", firstFramePath, "-y"])
 
-      const firstFrameData = execSync(`base64 "${firstFramePath}"`).toString().trim()
+      const firstFrameData = readFileSync(firstFramePath).toString('base64')
       const firstFrameUrl = await uploadToR2(
         Buffer.from(firstFrameData, 'base64'),
         `extend-frames/${jobId}_first.jpg`,
@@ -92,9 +88,7 @@ export async function extendClip(params: {
         const preBuf = Buffer.from(await (await fetch(preScene.videoUrl)).arrayBuffer())
         require('fs').writeFileSync(preScenePath, preBuf)
 
-        execSync(
-          `ffmpeg -i "${preScenePath}" -vf reverse -c:v libx264 "${preReversedPath}" -y 2>/dev/null`
-        )
+        runArgv("ffmpeg", ["-i", preScenePath, "-vf", "reverse", "-c:v", "libx264", preReversedPath, "-y"])
 
         parts.unshift(preReversedPath)
         if (!parts.includes(clipUrl)) parts.push(clipUrl)
@@ -110,13 +104,11 @@ export async function extendClip(params: {
     require('fs').writeFileSync(concatList, parts.map((p) => `file '${p}'`).join('\n') + '\n')
 
     const outputPath = join(tmpDir, 'extended.mp4')
-    execSync(
-      `ffmpeg -f concat -safe 0 -i "${concatList}" -c:v libx264 -crf 18 -c:a copy "${outputPath}" -y 2>/dev/null`
-    )
+    runArgv("ffmpeg", ["-f", "concat", "-safe", "0", "-i", concatList, "-c:v", "libx264", "-crf", "18", "-c:a", "copy", outputPath, "-y"])
 
     void tier
 
-    const buffer = execSync(`cat "${outputPath}"`)
+    const buffer = readFileSync(outputPath)
     const extendedClipUrl = await uploadToR2(buffer, `extended/${jobId}.mp4`, 'video/mp4')
     return { extendedClipUrl }
   } finally {

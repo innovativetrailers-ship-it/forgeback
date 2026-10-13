@@ -15,7 +15,7 @@ export async function getAerialPathAssets(
   tilesetUrl:     string
   waypoints:      Array<{ lat: number; lng: number; alt: number }>
 }> {
-  const token = process.env.CESIUM_ION_TOKEN!
+  const token = process.env.CESIUM_ION_ACCESS_TOKEN!
 
   const terrainAssetId = 1
   const tilesetAssetId = 2275207

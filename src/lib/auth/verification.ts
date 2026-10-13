@@ -26,13 +26,6 @@ async function verifyStripePayment(paymentIntentId: string): Promise<void> {
   }
 }
 
-async function verifyPayPalCapture(orderId: string): Promise<void> {
-  const { paypalPost } = await import('../paypal/client')
-  const order = await paypalPost<{ status: string }>(`/v2/checkout/orders/${orderId}`, undefined)
-  if (order.status !== 'COMPLETED') {
-    throw new Error(`PayPal order not completed: ${order.status}`)
-  }
-}
 
 async function sendWelcomeEmail(userId: string): Promise<void> {
   try {
@@ -40,7 +33,9 @@ async function sendWelcomeEmail(userId: string): Promise<void> {
     if (!user?.email) return
     // Placeholder — wire to your email provider (Resend, SendGrid, etc.)
     console.info(`[welcome-email] Would send welcome to ${user.email}`)
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/auth/verification.ts:36", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     // Non-fatal — don't block activation on email failure
   }
 }
@@ -48,13 +43,11 @@ async function sendWelcomeEmail(userId: string): Promise<void> {
 export async function activateUser(params: {
   userId: string
   planId: 'pro' | 'studio' | 'ultimate' | 'free'
-  paymentProvider?: 'stripe' | 'paypal'
+  paymentProvider?: 'stripe'
   externalPaymentId?: string
 }): Promise<void> {
   if (params.paymentProvider === 'stripe' && params.externalPaymentId) {
     await verifyStripePayment(params.externalPaymentId)
-  } else if (params.paymentProvider === 'paypal' && params.externalPaymentId) {
-    await verifyPayPalCapture(params.externalPaymentId)
   }
 
   const role = ROLE_MAP[params.planId] ?? 'FREE'
@@ -65,6 +58,7 @@ export async function activateUser(params: {
     data: {
       role,
       creditBalance: credits,
+      subscriptionTier:   params.planId === 'free' ? 'free' : params.planId,
       subscriptionStatus: params.planId === 'free' ? 'trial' : 'active',
     },
   })

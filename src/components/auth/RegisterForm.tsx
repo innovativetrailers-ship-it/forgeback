@@ -40,6 +40,7 @@ export function RegisterForm() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
@@ -54,7 +55,7 @@ export function RegisterForm() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, dateOfBirth }),
       })
 
       const data = await res.json()
@@ -79,7 +80,9 @@ export function RegisterForm() {
         router.push('/simple')
         router.refresh()
       }
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/auth/RegisterForm.tsx:82", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       toast.error('Something went wrong. Please try again.')
     } finally {
       setLoading(false)
@@ -160,6 +163,7 @@ export function RegisterForm() {
           </Label>
           <Input
             id="name"
+            name="name"
             type="text"
             placeholder="Jane Doe"
             value={name}
@@ -189,6 +193,25 @@ export function RegisterForm() {
           />
           {errors.email && (
             <p className="text-xs text-destructive">{errors.email[0]}</p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="dateOfBirth" className="text-sm font-medium">
+            Date of birth
+          </Label>
+          <Input
+            id="dateOfBirth"
+            name="dateOfBirth"
+            type="date"
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
+            required
+            autoComplete="bday"
+            className="h-11 bg-background/50 border-border/60 focus:border-[#00e5c8]/50"
+          />
+          {errors.dateOfBirth && (
+            <p className="text-xs text-destructive">{errors.dateOfBirth[0]}</p>
           )}
         </div>
 

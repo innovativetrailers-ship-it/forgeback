@@ -4,12 +4,12 @@
  * Throws if critical variables are missing.
  */
 
+import { FAL_KEY_ENV, hasFalKey } from '@/lib/config/keys'
+
 const CRITICAL = [
   'DATABASE_URL',
   'REDIS_URL',
   'AUTH_SECRET',
-  'FAL_API_KEY',
-  'ANTHROPIC_API_KEY',
   'R2_ACCOUNT_ID',
   'R2_ACCESS_KEY_ID',
   'R2_SECRET_ACCESS_KEY',
@@ -20,7 +20,7 @@ const OPTIONAL: Record<string, string[]> = {
   stripe:     ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'NEXT_PUBLIC_STRIPE_PUBLIC_KEY'],
   runway:     ['RUNWAY_API_KEY'],
   elevenlabs: ['ELEVENLABS_API_KEY', 'ELEVENLABS_DEFAULT_VOICE_ID'],
-  suno:       ['SUNO_API_KEY'],
+  suno:       ['SUNO_API_KEY', 'SUNO_GATEWAY_URL', 'SUNO_MODEL'],
   location:   ['MAPILLARY_ACCESS_TOKEN', 'CESIUM_ION_TOKEN'],
   stock:      ['PEXELS_API_KEY'],
   xai:        ['XAI_API_KEY'],
@@ -29,7 +29,8 @@ const OPTIONAL: Record<string, string[]> = {
 }
 
 export function validateEnv(): void {
-  const missing = CRITICAL.filter(k => !process.env[k])
+  const missing: string[] = CRITICAL.filter(k => !process.env[k])
+  if (!hasFalKey()) missing.push(FAL_KEY_ENV)
   if (missing.length > 0) {
     throw new Error(
       `[CINEMA] Missing critical env vars — app cannot start:\n${missing.map(k => `  • ${k}`).join('\n')}`
@@ -47,4 +48,4 @@ export function validateEnv(): void {
 }
 
 /** List of all required env var names for documentation */
-export const REQUIRED_ENV_VARS = CRITICAL
+export const REQUIRED_ENV_VARS = [...CRITICAL, FAL_KEY_ENV] as const

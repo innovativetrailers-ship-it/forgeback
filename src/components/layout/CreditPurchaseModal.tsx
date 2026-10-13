@@ -1,22 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { CREDIT_PACKS, type CreditPack } from '@cinema/core'
 import { useUIStore } from '@/store/ui'
 import { useQueryClient } from '@tanstack/react-query'
-
-interface CreditPack {
-  credits: number
-  priceUSD: number
-  label: string
-  popular?: boolean
-}
-
-const CREDIT_PACKS: CreditPack[] = [
-  { credits: 100,   priceUSD: 5,   label: '100 Credits' },
-  { credits: 500,   priceUSD: 20,  label: '500 Credits' },
-  { credits: 2000,  priceUSD: 65,  label: '2,000 Credits', popular: true },
-  { credits: 10000, priceUSD: 250, label: '10,000 Credits' },
-]
 
 export function CreditPurchaseModal() {
   const { activeModal, closeModal } = useUIStore()
@@ -39,32 +26,14 @@ export function CreditPurchaseModal() {
       if (!res.ok || !data.url) throw new Error(data.error ?? 'Payment failed')
       window.location.href = data.url
     } catch (err) {
+      console.warn("[caught] src/components/layout/CreditPurchaseModal.tsx:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError((err as Error).message)
     } finally {
       setLoading(null)
     }
   }
 
-  async function handlePayPal(pack: CreditPack) {
-    setLoading(pack.credits)
-    setError(null)
-    try {
-      const res = await fetch('/api/credits/purchase/paypal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packId: String(pack.credits) }),
-      })
-      const data = await res.json() as { orderId?: string; approvalUrl?: string; error?: string }
-      if (!res.ok) throw new Error(data.error ?? 'PayPal error')
-      if (data.approvalUrl) {
-        window.location.href = data.approvalUrl
-      }
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setLoading(null)
-    }
-  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -109,9 +78,9 @@ export function CreditPurchaseModal() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <span className="text-white font-semibold">{pack.label}</span>
-                  <span className="ml-2 text-gray-500 text-sm">${pack.priceUSD}</span>
+                  <span className="ml-2 text-gray-500 text-sm">A${(pack.priceAudCents / 100).toFixed(0)}</span>
                   <span className="ml-1 text-gray-600 text-xs">
-                    (${(pack.priceUSD / pack.credits * 100).toFixed(1)}¢/cr)
+                    (A${((pack.priceAudCents / 100) / pack.credits * 100).toFixed(1)}¢/cr)
                   </span>
                 </div>
               </div>
@@ -124,20 +93,13 @@ export function CreditPurchaseModal() {
                 >
                   {loading === pack.credits ? '...' : 'Pay with Card'}
                 </button>
-                <button
-                  onClick={() => handlePayPal(pack)}
-                  disabled={loading !== null}
-                  className="flex-1 py-1.5 rounded-lg text-sm font-medium bg-[#FFC439] text-[#003087] hover:bg-[#FFB820] disabled:opacity-50 disabled:cursor-not-allowed transition font-bold"
-                >
-                  {loading === pack.credits ? '...' : 'PayPal'}
-                </button>
               </div>
             </div>
           ))}
         </div>
 
         <div className="px-6 pb-5 text-center text-gray-600 text-xs">
-          Payments secured by Stripe & PayPal · Credits are non-refundable
+          Payments secured by Stripe · Credits are non-refundable
         </div>
       </div>
     </div>

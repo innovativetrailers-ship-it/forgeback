@@ -1,9 +1,7 @@
 /**
- * PlanarTracker — tracks a surface through a clip using fal-ai/cotracker.
- * Returns corner-pin keyframe data for warping replacement textures.
+ * PlanarTracker — corner-pin keyframes for warping a replacement texture.
+ * The gateway has no live point-tracker id (OpenAPI 404), so tracking is not submitted.
  */
-
-import { fal } from '@fal-ai/client'
 
 export interface Quad {
   topLeft:     [number, number]
@@ -34,48 +32,9 @@ export async function trackPlanarSurface(params: {
   initialQuad: Quad
   fps?:        number
 }): Promise<TrackResult> {
-  const { videoUrl, initialQuad, fps = 30 } = params
-
-  // CoTracker tracks points through video
-  const trackPoints = [
-    initialQuad.topLeft,
-    initialQuad.topRight,
-    initialQuad.bottomRight,
-    initialQuad.bottomLeft,
-  ]
-
-  const result = await fal.subscribe('fal-ai/cotracker', {
-    input: {
-      video_url:   videoUrl,
-      queries:     trackPoints.map(([x, y]) => [0, x, y]),  // frame 0 seed points
-      grid_size:   0,     // point mode (not grid)
-      backward_tracking: false,
-    },
-  })
-
-  const data = result.data as {
-    tracks: Array<Array<[number, number]>>   // [point_idx][frame_idx] = [x, y]
-    visibilities?: Array<Array<boolean>>
-  }
-
-  const numFrames = data.tracks[0]?.length ?? 0
-  const keyframes: TrackKeyframe[] = []
-
-  for (let f = 0; f < numFrames; f++) {
-    const points = data.tracks.map(track => track[f] ?? [0, 0]) as [number, number][]
-    keyframes.push({
-      frame:   f,
-      timeSec: f / fps,
-      quad: {
-        topLeft:     points[0],
-        topRight:    points[1],
-        bottomRight: points[2],
-        bottomLeft:  points[3],
-      },
-    })
-  }
-
-  return { keyframes, fps, totalFrames: numFrames }
+  void params
+  console.warn('[planar] point tracker is not on the gateway (OpenAPI 404). Nothing submitted.')
+  throw new Error('Point tracking is not on the gateway. Nothing was submitted.')
 }
 
 /** Build FFmpeg perspective filter args from a quad for a single frame */

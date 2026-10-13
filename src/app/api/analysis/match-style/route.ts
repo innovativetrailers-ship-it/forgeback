@@ -3,12 +3,13 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { checkAndDeductCredits, refundOperationCredits } from '@/lib/credits'
 import { ReferenceVideoAnalyser } from '@/lib/analysis/ReferenceVideoAnalyser'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const analyser = new ReferenceVideoAnalyser()
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {
@@ -24,6 +25,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'reference_style_apply')
   } catch (err) {
+    console.warn("[caught] src/app/api/analysis/match-style/route.ts:26", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -46,6 +49,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ styleDNA, updatedShots })
   } catch (err) {
+    console.warn("[caught] src/app/api/analysis/match-style/route.ts:48", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     await refundOperationCredits(userId, 'reference_style_apply')
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Style matching failed' }, { status: 500 })
   }

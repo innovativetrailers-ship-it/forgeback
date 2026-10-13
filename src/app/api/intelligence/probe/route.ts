@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/requireUser'
 /**
  * Intelligence probe trigger API.
  * Runs the probe battery against one or more models.
@@ -5,14 +6,21 @@
  * POST { modelId, modelVersion?, probeCategories?, tier?, mode }
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { db } from '@/lib/db'
 import { ModelIntelligenceAnalyser } from '@/lib/intelligence/analyser'
 import { PROBE_BATTERY, getProbeSets } from '@/lib/intelligence/probe-battery'
+import { intelligenceProbesEnabled } from '@/lib/intelligence/guards'
 import type { OutcomeTier } from '@/lib/routing/types'
+
+function countProbes(probeSet: typeof PROBE_BATTERY): number {
+  return probeSet.reduce((n, set) => n + set.probes.length, 0)
+}
 
 const VALID_MODELS = [
   'veo_3_1', 'kling_3_0', 'seedance_2_0', 'runway_gen4_5',
   'wan_2_6', 'ltx_2_3', 'minimax_hailuo', 'skyreels_v1',
-  'cogvideox_5b', 'mochi_1',
+  'mochi_1',
 ]
 
 interface ProbeRequestBody {
@@ -24,19 +32,41 @@ interface ProbeRequestBody {
 }
 
 export async function POST(req: NextRequest) {
-  // Accept either CRON_SECRET (worker trigger) or x-user-id (admin UI)
+  if (!intelligenceProbesEnabled()) {
+    return NextResponse.json(
+      {
+        error:
+          'Intelligence probes disabled. Requires RUN_MODEL_EVAL=true, ALLOW_BILLABLE_EVAL=true, ENABLE_INTELLIGENCE_PROBES=true, NODE_ENV≠production, and GENERATION_PAUSED=false.',
+      },
+      { status: 403 },
+    )
+  }
+
+  // Full battery = 118 FAL video generations per model — CRON_SECRET or ADMIN only.
   const cronSecret = req.headers.get('authorization')
-  const userId = req.headers.get('x-user-id')
+  const session = await auth()
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
 
   const isWorker = cronSecret === `Bearer ${process.env.CRON_SECRET}`
-  if (!isWorker && !userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!isWorker) {
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const user = await db.user.findUnique({ where: { id: userId }, select: { role: true } })
+    if (user?.role !== 'ADMIN') {
+      return NextResponse.json(
+        { error: 'Intelligence probes require admin or CRON_SECRET (118 FAL calls per model)' },
+        { status: 403 },
+      )
+    }
   }
 
   let body: ProbeRequestBody
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/intelligence/probe/route.ts:66", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -56,8 +86,12 @@ export async function POST(req: NextRequest) {
 
   const analyser = new ModelIntelligenceAnalyser()
 
+  const falCalls = countProbes(probeSet)
+
   try {
-    console.log(`[Intelligence API] Starting ${mode} probe: ${modelId} v${modelVersion}, ${probeSet.length} category sets`)
+    console.log(
+      `[Intelligence API] Starting ${mode} probe: ${modelId} v${modelVersion}, ${probeSet.length} categories, ${falCalls} FAL calls`,
+    )
     const results = await analyser.probeModel({ modelId, modelVersion, probeSet, tier })
     const report = await analyser.writeAnalysisReport(modelId, results)
 
@@ -66,6 +100,7 @@ export async function POST(req: NextRequest) {
       modelId,
       modelVersion,
       probesRun: results.length,
+      falCallsAttempted: falCalls,
       categories: [...new Set(results.map(r => r.category))],
       summary: {
         avgQuality: results.length > 0
@@ -78,6 +113,8 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/intelligence/probe/route.ts:112", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Probe run failed'
     return NextResponse.json({ error: msg }, { status: 500 })
   }
@@ -85,7 +122,7 @@ export async function POST(req: NextRequest) {
 
 // GET — list valid models and probe categories
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   return NextResponse.json({

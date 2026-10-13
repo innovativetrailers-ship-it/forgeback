@@ -1,12 +1,41 @@
 import type { CompositorNode } from '../schema'
 import type { CompositorFrame, NodeInputs } from '../frame'
 import { loadEXRFromURL } from '../EXRLoader'
+import { applyMatte, compositeSubject, matchColour } from '@/lib/greenscreen/matte'
+import {
+  applyLayer3D,
+  applyParticles,
+  applyRoto,
+  applyVectorWarp,
+  deepMerge,
+  propagateRoto,
+  runOfx,
+  type RotoLayer,
+  type RotoPoint,
+} from '../vfx'
 
 type SharpFactory = (input?: import('sharp').SharpOptions | Buffer) => import('sharp').Sharp
 
 async function sharp(): Promise<SharpFactory> {
   const mod = await import('sharp')
   return (mod as unknown as { default: SharpFactory }).default
+}
+
+async function decodeRaw(encoded: Buffer): Promise<{ data: Buffer; width: number; height: number }> {
+  const s = await sharp()
+  const raw = s(encoded).ensureAlpha().raw() as {
+    toBuffer(options: { resolveWithObject: true }): Promise<{ data: Buffer; info: { width: number; height: number } }>
+  }
+  const decoded = await raw.toBuffer({ resolveWithObject: true })
+  return { data: decoded.data, width: decoded.info.width, height: decoded.info.height }
+}
+
+async function encodePng(raw: Buffer, width: number, height: number): Promise<Buffer> {
+  const s = await sharp() as (
+    input: Buffer,
+    options: { raw: { width: number; height: number; channels: 4 } },
+  ) => import('sharp').Sharp
+  return s(raw, { raw: { width, height, channels: 4 } }).png().toBuffer()
 }
 
 function num(v: unknown, fallback: number): number {
@@ -68,6 +97,27 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
       const fg = inputs.foreground ?? video
       const bg = inputs.background
       if (!fg || !bg) return { video: fg ?? bg }
+      if (p.greenScreen === true) {
+        try {
+          const front = await decodeRaw(fg.rgba)
+          let back = await decodeRaw(bg.rgba)
+          if (back.width !== front.width || back.height !== front.height) {
+            const s = await sharp()
+            const resized = await s(bg.rgba).resize(front.width, front.height).png().toBuffer()
+            back = await decodeRaw(resized)
+          }
+          matchColour(front.data, back.data, num(p.colourMatch, 0))
+          const merged = compositeSubject(front.data, back.data, front.width, front.height, {
+            lightWrap: num(p.lightWrap, 0),
+            shadow: num(p.shadow, 0),
+            colourMatch: num(p.colourMatch, 0),
+          })
+          const png = await encodePng(Buffer.from(merged), front.width, front.height)
+          return { video: { ...fg, width: front.width, height: front.height, rgba: png } }
+        } catch (err) {
+          console.warn('[compositor]', err instanceof Error ? err.message : err)
+        }
+      }
       const merged = await mergeFrames(
         fg,
         bg,
@@ -211,7 +261,6 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
       return { exr: inputs.exr }
     }
 
-    case 'DeepMerge':
     case 'DeepHold':
     case 'DepthMap':
       return { video, depth: inputs.depth ?? video }
@@ -225,10 +274,141 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
     case 'MotionBlur':
     case 'Keyer':
     case 'LumaKeyer':
+    case 'SpillSuppress': {
+      if (!video) return { video }
+      try {
+        const decoded = await decodeRaw(video.rgba)
+        const colour = String(p.colour ?? '#00ff00')
+        applyMatte(decoded.data, {
+          mode: node.type === 'LumaKeyer' ? 'luma' : 'chroma',
+          colour,
+          tolerance: node.type === 'SpillSuppress' ? 0 : num(p.tolerance, node.type === 'LumaKeyer' ? num(p.low, 0.2) : 0.4),
+          softness: node.type === 'SpillSuppress' ? 0 : num(p.softness ?? p.rollOff, 0.05),
+          spill: num(p.spill, node.type === 'SpillSuppress' ? 1 : 0),
+          invert: p.invert === true,
+          lumaLow: num(p.lumaLow ?? p.low, num(p.tolerance, 0.2)),
+          lumaHigh: num(p.lumaHigh ?? p.high, Math.min(1, num(p.tolerance, 0.2) + 0.15)),
+          shrink: num(p.shrink, 0),
+          grow: num(p.grow, 0),
+          holeFill: p.holeFill === true,
+          width: decoded.width,
+          height: decoded.height,
+        })
+        const png = await encodePng(decoded.data, decoded.width, decoded.height)
+        return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
+      } catch (err) {
+        console.warn('[compositor]', err instanceof Error ? err.message : err)
+        return { video }
+      }
+    }
+
     case 'DifferenceKey':
-    case 'SpillSuppress':
+      return { video }
+
     case 'Roto':
-    case 'Mask':
+    case 'Mask': {
+      if (!video) return { video }
+      const points = Array.isArray(p.points) ? propagateRoto(p.points as RotoPoint[], num(p.trackDx, 0), num(p.trackDy, 0)) : []
+      const layers = Array.isArray(p.layers)
+        ? (p.layers as RotoLayer[]).map((layer) => ({
+            ...layer,
+            points: propagateRoto(layer.points ?? [], num(p.trackDx, 0), num(p.trackDy, 0)),
+          }))
+        : undefined
+      try {
+        const decoded = await decodeRaw(video.rgba)
+        const masked = applyRoto(
+          decoded.data,
+          decoded.width,
+          decoded.height,
+          points,
+          p.combine === 'subtract' ? 'subtract' : 'add',
+          {
+            layers,
+            spline: node.type === 'Roto' && p.spline !== false,
+            motion: num(p.motionDx, 0) || num(p.motionDy, 0)
+              ? { dx: num(p.motionDx, 0), dy: num(p.motionDy, 0) }
+              : undefined,
+          },
+        )
+        const png = await encodePng(masked, decoded.width, decoded.height)
+        return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
+      } catch (err) {
+        console.warn('[compositor]', err instanceof Error ? err.message : err)
+        return { video }
+      }
+    }
+
+    case 'Particle': {
+      if (!video) return { video }
+      const decoded = await decodeRaw(video.rgba)
+      const painted = applyParticles(decoded.data, decoded.width, decoded.height, num(p.rate, 40), num(p.seed, 1), {
+        lifetime: num(p.lifetime, 1),
+        forceY: num(p.forceY, 0),
+        sprite: num(p.sprite, 1),
+      })
+      const png = await encodePng(painted, decoded.width, decoded.height)
+      return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
+    }
+
+    case 'Layer3D':
+    case 'Camera3D': {
+      if (!video) return { video }
+      const decoded = await decodeRaw(video.rgba)
+      const shifted = applyLayer3D(decoded.data, decoded.width, decoded.height, {
+        cameraX: num(p.cameraX ?? p.x, 0),
+        cameraY: num(p.cameraY ?? p.y, 0),
+        cameraZ: num(p.cameraZ ?? p.z, 1),
+        depth: num(p.depth, 1),
+        light: num(p.light, 1),
+      })
+      const png = await encodePng(shifted, decoded.width, decoded.height)
+      return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
+    }
+
+    case 'VectorWarp': {
+      if (!video) return { video }
+      const decoded = await decodeRaw(video.rgba)
+      const warped = applyVectorWarp(decoded.data, decoded.width, decoded.height, num(p.dx, 0), num(p.dy, 0))
+      const png = await encodePng(warped, decoded.width, decoded.height)
+      return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
+    }
+
+    case 'DeepMerge': {
+      const front = inputs.foreground ?? video
+      const back = inputs.background
+      const frontZ = Array.isArray(p.frontZ) ? p.frontZ as number[] : null
+      const backZ = Array.isArray(p.backZ) ? p.backZ as number[] : null
+      if (!front || !back || !frontZ || !backZ) return { video, depth: inputs.depth ?? video }
+      try {
+        const frontRaw = await decodeRaw(front.rgba)
+        const backRaw = await decodeRaw(back.rgba)
+        const merged = deepMerge(frontRaw.data, backRaw.data, frontZ, backZ)
+        const png = await encodePng(merged, frontRaw.width, frontRaw.height)
+        return { video: { ...front, rgba: png, width: frontRaw.width, height: frontRaw.height } }
+      } catch (err) {
+        console.warn('[compositor]', err instanceof Error ? err.message : err)
+        return { video, depth: inputs.depth ?? video }
+      }
+    }
+
+    case 'OfxPlugin': {
+      if (!video) return { video }
+      try {
+        const decoded = await decodeRaw(video.rgba)
+        const hosted = runOfx(decoded.data, String(p.pluginId ?? ''), num(p.amount, 1), typeof p.script === 'string' ? p.script : undefined)
+        if (hosted.error) {
+          console.warn('[compositor]', hosted.error)
+          return { video }
+        }
+        const png = await encodePng(hosted.rgba, decoded.width, decoded.height)
+        return { video: { ...video, width: decoded.width, height: decoded.height, rgba: png } }
+      } catch (err) {
+        console.warn('[compositor]', err instanceof Error ? err.message : err)
+        return { video }
+      }
+    }
+
     case 'Transform':
     case 'Tracker':
     case 'Tracker2D':
@@ -236,7 +416,6 @@ export async function processNode(node: CompositorNode, inputs: NodeInputs): Pro
     case 'CornerPin':
     case 'Premult':
     case 'Text3D':
-    case 'Particle':
     case 'TimeOffset':
     case 'Shuffle':
     case 'MixChannels':

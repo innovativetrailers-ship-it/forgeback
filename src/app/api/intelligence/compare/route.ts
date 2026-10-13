@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/requireUser'
 /**
  * Cross-model comparison API.
  * GET /api/intelligence/compare?category=physics_fluid
@@ -8,9 +9,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { intelligenceDb, callDomainLLM } from '@/lib/firewall/domain-guard'
 import { MODEL_VERSIONS } from '@/lib/intelligence/update-watcher'
 import { ALL_CATEGORIES } from '@/lib/intelligence/probe-battery'
+import { intelligenceProbesEnabled } from '@/lib/intelligence/guards'
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
@@ -78,17 +80,27 @@ export async function GET(req: NextRequest) {
 
 // POST — generate a cross-model summary narrative using cheap crew
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: { category?: string }
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/intelligence/compare/route.ts:88", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
   const category = body.category ?? 'all'
+
+  if (!intelligenceProbesEnabled()) {
+    return NextResponse.json(
+      { error: 'Intelligence eval disabled (eval harness triple-gated off)' },
+      { status: 503 },
+    )
+  }
+
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const allResults = await intelligenceDb.getProbeResultsForModel('', since)
 
@@ -119,6 +131,8 @@ export async function POST(req: NextRequest) {
   }
 
   const narrative = await callDomainLLM('intelligence', {
+    source: 'intelligence:compare:narrative',
+    billableClass: 'eval',
     systemPrompt: `You are a machine learning research analyst. Write concise, actionable cross-model comparison summaries for internal use. Focus on routing implications.`,
     userMessage: `Write a cross-model comparison summary for ${category === 'all' ? 'all categories' : `category: ${category}`}.
 

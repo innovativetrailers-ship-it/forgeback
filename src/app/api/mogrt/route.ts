@@ -4,6 +4,7 @@ import { checkAndDeductCredits,
          refundCredits }              from '@/lib/credits'
 import { generateMoGRT,
          MOGRT_TEMPLATES }           from '@/lib/mogrt/MoGRTGenerator'
+import { requireUser } from '@/lib/auth/requireUser'
 
 /** GET /api/mogrt — list all 200 templates */
 export async function GET(req: NextRequest) {
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
 /** POST /api/mogrt — AI-generate a custom template from description (E06) */
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId  = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId  = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { description } = await req.json() as { description: string }

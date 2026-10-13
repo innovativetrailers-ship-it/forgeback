@@ -2,17 +2,21 @@
 
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { Eye, EyeOff, Film, Loader2 } from 'lucide-react'
+import { BrandLogo } from '@/components/brand/BrandLogo'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
 export function LoginForm() {
   const router = useRouter()
+  const search = useSearchParams()
+  const next = search.get('callbackUrl')
+  const afterLogin = next && next.startsWith('/desktop') ? next : '/simple'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
@@ -31,7 +35,7 @@ export function LoginForm() {
       if (result?.error) {
         toast.error('Invalid email or password')
       } else {
-        router.push('/simple')
+        router.push(afterLogin)
         router.refresh()
       }
     } finally {
@@ -40,12 +44,12 @@ export function LoginForm() {
   }
 
   async function handleGoogle() {
-    console.log('Google button clicked!')
     setGoogleLoading(true)
     try {
-      await signIn('google', { callbackUrl: '/simple' })
+      await signIn('google', { callbackUrl: afterLogin })
     } catch (err) {
-      console.error('Google sign in error:', err)
+      console.error('[Google sign-in]', err)
+      toast.error('Google sign-in failed. Please try again.')
       setGoogleLoading(false)
     }
   }
@@ -54,9 +58,12 @@ export function LoginForm() {
     <div className="w-full space-y-6">
       {/* Logo */}
       <div className="text-center space-y-2">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#00e5c8]/10 border border-[#00e5c8]/20 mb-2">
-          <Film className="w-6 h-6 text-[#00e5c8]" />
-        </div>
+        <BrandLogo
+          size={360}
+          showWordmark={false}
+          onBlack
+          className="justify-center mb-2 w-full"
+        />
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
           Welcome back
         </h1>

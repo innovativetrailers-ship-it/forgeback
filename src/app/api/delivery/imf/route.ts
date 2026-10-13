@@ -2,15 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkAndDeductCredits } from '@/lib/credits'
 import { packageIMF, type IMFPackageSpec } from '@/lib/delivery/IMFPackager'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: Partial<IMFPackageSpec> & { projectId?: string }
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/delivery/imf/route.ts:13", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -26,6 +29,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'imf_package')
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/delivery/imf/route.ts:28", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Insufficient credits'
     return NextResponse.json({ error: msg }, { status: 402 })
   }
@@ -82,6 +87,8 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/delivery/imf/route.ts:84", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'IMF packaging failed'
     if (msg.includes('ECONNREFUSED') || msg.includes('fetch')) {
       return NextResponse.json(

@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/requireUser'
 /**
  * POST /api/color/cdl — apply ASC CDL grade to a clip
  * Body: { videoUrl, cdl: CDLValues, outputFormat?: string }
@@ -11,14 +12,14 @@ import { cdlToFFmpeg,
          validateCDL }               from '@/lib/color/CDLWheels'
 import type { CDLValues }            from '@/lib/color/CDLWheels'
 import { uploadToR2 }                from '@/lib/storage/r2'
-import { execSync }                  from 'child_process'
+import { runArgv } from '@/lib/shell/argv'
 import { mkdirSync, rmSync }         from 'fs'
 import { join }                      from 'path'
 import { randomUUID }                from 'crypto'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId  = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId  = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {
@@ -42,10 +43,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const outFile = join(tmpDir, 'graded.mp4')
-    execSync(
-      `ffmpeg -i "${videoUrl}" -vf "${filter}" -c:v libx264 -preset fast -crf 22 -c:a copy "${outFile}" -y 2>/dev/null`,
-      { timeout: 120_000 },
-    )
+    runArgv('ffmpeg', ['-i', videoUrl, '-vf', filter, '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-c:a', 'copy', outFile, '-y'])
 
     const key      = `color/cdl/${randomUUID()}.mp4`
     const buffer   = require('fs').readFileSync(outFile) as Buffer

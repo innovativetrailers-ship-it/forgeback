@@ -57,6 +57,8 @@ function DepositForm({ onClose }: { onClose: () => void }) {
       setTimeout(onClose, 2000)
 
     } catch (err: unknown) {
+      console.warn("[caught] src/components/payments/DepositModal.tsx:59", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError(err instanceof Error ? err.message : 'Payment failed')
     } finally {
       setIsProcessing(false)

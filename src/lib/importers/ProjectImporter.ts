@@ -40,7 +40,9 @@ export async function detectFormat(filename: string, buffer: Buffer): Promise<Im
       const zip = new AdmZip(buffer)
       const entries = zip.getEntries().map((e) => e.entryName)
       if (entries.some((e) => e.includes('draft_content.json'))) return 'capcut'
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/importers/ProjectImporter.ts:43", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // not a valid zip — fall through
     }
   }

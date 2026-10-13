@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { checkAndDeductCredits, refundOperationCredits } from '@/lib/credits'
 import { SeriesManager } from '@/lib/series/SeriesManager'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const manager = new SeriesManager()
 
@@ -11,7 +12,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id: seriesId } = await params
@@ -32,6 +33,8 @@ export async function POST(
   try {
     await checkAndDeductCredits(userId, creditKey)
   } catch (err) {
+    console.warn("[caught] src/app/api/series/[id]/episode/route.ts:34", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -69,6 +72,8 @@ export async function POST(
         send({ status: 'complete', outputUrl })
         controller.close()
       } catch (err) {
+        console.warn("[caught] src/app/api/series/[id]/episode/route.ts:71", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         await refundOperationCredits(userId, creditKey)
         send({ status: 'error', error: err instanceof Error ? err.message : 'Episode generation failed' })
         controller.close()

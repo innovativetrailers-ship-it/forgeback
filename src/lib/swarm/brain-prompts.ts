@@ -79,7 +79,7 @@ Wan 2.2 (wildlife/texture): Natural texture descriptors ("coarse fur catching th
 Anchors: "photorealistic", "wildlife photography", "National Geographic aesthetic".
 Use for animals, nature, environments at budget tier.
 
-CogVideoX: Spatial precision — list exact text content, size, font feel, position.
+PixVerse: Spatial precision — list exact text content, size, font feel, position.
 Hierarchical spatial descriptions. Include exact wording of any signage.
 
 LTX-2.3: Keep concise 20-40 words. Lead with mood: "Neon-soaked cyberpunk street, 1980s Tokyo".
@@ -109,7 +109,7 @@ Return ONLY this JSON:
     "x": 0.0-1.0, "y": 0.0-1.0, "width": 0.0-1.0, "height": 0.0-1.0,
     "start_time": seconds, "end_time": seconds,
     "repair_prompt": "specific prompt to fix this",
-    "suggested_repair_model": "seedance_2_0|veo_3_1|kling_3_0|cogvideox"
+    "suggested_repair_model": "seedance_2_0|veo_3_1|kling_3_0|pixverse"
   }],
   "accept": boolean
 }

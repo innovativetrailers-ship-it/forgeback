@@ -1,0 +1,32 @@
+---
+description: Build-prompt index BP-00. One BP per session. Ties SPEC-01–10 to BP-01–13. Do not start a BP until the user feeds that prompt.
+alwaysApply: true
+---
+
+# Build prompts (BP-00)
+
+Full text: `docs/spec-references/BP-00-INDEX-and-rules.md`. Control contracts: `SPEC-00` through `SPEC-10` in the same folder. Map of both: `INDEX-and-feed-list.md`.
+
+A SPEC is the contract. A BP is the only permission to change code for that contract. Feed one BP per session. BP-01 through BP-13 are not in the repo until the user feeds each file. If the prompt's file:line does not match the code, stop and report the mismatch.
+
+`spec-reconciliation-overlay.md` still wins on conflict. Build-0 through build-6 stay the layer program. This queue does not replace them and does not lift `GENERATION_PAUSED`.
+
+## Order
+
+- Tier 0, before any pause lift: BP-01 gate ungated paid paths. BP-02 idempotency, draft-swap kill, HappyHorse hard-fail.
+- Tier 1: BP-03 silent-drop. BP-04 UI-only lies. BP-05 false claims.
+- Tier 2: BP-06 mount unmounted UI. BP-07 expose frozen params. BP-08 precision and parity.
+- Tier 3, on demand: BP-09 OverlayEngine first, then BP-10 color/lighting, BP-11 moat, BP-12 audio depth, BP-13 the rest.
+
+## Invariants every BP inherits
+
+1. Paid calls go through `providerSubmit` / `submitToFal` / `claudeCall`. They assert pause, carry `source`, and log. Interactive is the only pause exception, and only for a real user action.
+2. Timeline clip writes go through the one store.
+3. Model payload params come from the live schema via `buildPayload`. A missing field hides the control.
+4. Honest UI. No control that renders and does nothing. No count or format the code cannot back.
+5. No silent substitution. `resolveModel` throws. The selected model is the submitted model. A downgrade is explicit and visible.
+6. Camera, style, character, and overlay intent are stored as data and rendered to a prompt.
+7. Schema changes are additive `migrate deploy` only. Never `migrate dev`. Never reset. Keep auth tables.
+8. Shared logic lives in `@cinema/core`. A fix on one host notes the other. Heavy features stay desktop-only.
+
+On a paid-API task, run `node scripts/check-chokepoints.mjs` and report it. Do not touch files outside the fed prompt.

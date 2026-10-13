@@ -1,0 +1,56 @@
+---
+description: Cinematic Forge build program — feed order, gates, and which spec wins. Do not start a layer until the user feeds that prompt.
+alwaysApply: true
+---
+
+# Forge build program
+
+Canonical copies: `docs/spec-references/`. Read them before any Forge build. Do not implement a layer until the user feeds that build prompt.
+
+## Which doc wins
+
+All paths are under `docs/spec-references/`. Call them by the filename in `INDEX-and-feed-list.md`.
+
+1. `spec-reconciliation-overlay.md` — current repo vs target. Wins on conflict.
+2. Tier 2 specs — target contracts for the layer being built (table below).
+3. `cinematic-forge-architecture.md` — spine, stages, pool, chokepoints.
+4. `INDEX-and-feed-list.md` — document map and feed order with gates.
+5. `SPEC-00-INDEX-and-conventions.md` through `SPEC-10-llm-intelligence.md` — per-control contracts. Read the matching file when changing that system. Overlay still wins.
+6. `BP-00-INDEX-and-rules.md` — the execution queue for those control specs (BP-01 through BP-13). Feed one BP per session, only after the user feeds that prompt. It does not replace build-0 through build-6.
+7. `TR-00-INDEX.md` — Training Studio (TR-01 through TR-06). After MP-01..12. Feed one TR per session, only after the user feeds that prompt. Overlay still wins. It does not lift `GENERATION_PAUSED`.
+8. `WF-00-INDEX.md` — Workflow parity (WF-01 through WF-03). Phase 2 after MP + OR + moat demo. Feed one WF per session, only after the user feeds that prompt. Overlay still wins. It does not lift `GENERATION_PAUSED`.
+
+When a layer finishes, its overlay correction becomes true.
+
+## Tier 2 specs (read the one the index names for that build)
+
+| File | Read for |
+|---|---|
+| `spec-1-data-contracts.md` | build-2 — entities, adapters, state ownership |
+| `spec-2-pipeline-stages.md` | build-3, build-4, build-5 — stages and FAL/Runway/Grok wiring |
+| `spec-3-cognitive-moe.md` | build-5 — Director, MoE, memory, RLAIF (finish-and-connect, not greenfield) |
+| `spec-4-character-system.md` | build-4 — character creation through director, identity persistence |
+| `spec-5-ui-surface-and-location.md` | build-4, build-6 — UI map and location→generation |
+| `spec-6-integration-index.md` | build-0, build-6 — chokepoints, pro tools, wiring index |
+
+## Feed order (do not skip a gate)
+
+Keep `GENERATION_PAUSED=true` until Gate 0 passes. No billable generation except the single confirm shot a gate explicitly allows.
+
+0. Safety (build-0) — Gate 0: every paid call through `submitToFal` / `providerSubmit` and `claudeCall`; eval harness cannot auto-run; CI grep; 15 min zero dashboard calls; then one manual shot.
+1. Unify stores (build-1) — Gate 1: one timeline store; a Simple shot appears in Ultimate.
+2. Shared core `@cinema/core` (build-2) — raised by the overlay. Defer only if the user explicitly chooses momentum over maintainability. Revert any step that breaks web.
+3. Generation patches (build-3) — Gate 3: Veo silent, registry ids match real endpoints, named play() error guards.
+4. Character / location (build-4) — Gate 4: 3-shot face consistency + a located shot.
+5. Moat + audio (build-5) — audio (Part B) before cognition wiring (Part A).
+6. Pro tools (build-6) — per tool, not one gate.
+
+Minimum demo = Gates 0, 1, 3, 4 + build-5 Part B.
+
+## Already done — do not rebuild
+
+`resolveModel` throws (no model swap). `dispatch.ts` provider switch. OpenAPI payload clamp. Kling/PixVerse audio-off. `reconcileTimeline` maps `videoUrl` → `sourceUrl`. `addClip` rejects missing `sourceUrl`. R2 mirror on completion. `canPlaySrc`. Auth tables + additive migrations only (never reset).
+
+## Name map
+
+Spec Shot = `StudioClip`. Spec Character = `VaultCharacter`. Spec Clip = timeline clip. `videoUrl` matches. Add spec columns only when the active layer needs them (`falRequestId`, `characterIds`, `locationId`, seed, `voiceId` on the character).

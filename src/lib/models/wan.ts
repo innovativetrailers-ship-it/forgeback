@@ -1,63 +1,64 @@
-import { fal } from '../fal/client'
+import { WAN_I2V, WAN_T2V } from '@/lib/fal/wanEndpoints'
+import { buildPayload } from '@/lib/fal/videoPayloads'
+import {
+  extractVideoUrl,
+  runFal,
+  serializeFalSubmission,
+  submitToFal,
+} from '../fal/client'
+import { falPollJob } from '@/lib/fal/modelQueue'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
-const T2V_MODEL = 'fal-ai/wan/v2.2/t2v'
-const I2V_MODEL = 'fal-ai/wan/v2.2/i2v'
+export const WAN_T2V_MODEL = WAN_T2V
+export const WAN_I2V_MODEL = WAN_I2V
+
+export async function buildWan26Input(
+  input: GenerateVideoInput & { quality?: string },
+): Promise<Record<string, unknown>> {
+  const model = input.startFrameUrl ? WAN_I2V_MODEL : WAN_T2V_MODEL
+  return buildPayload(model, 'wan-2.6', {
+    prompt: input.prompt,
+    duration: input.duration,
+    aspectRatio: input.aspectRatio ?? '16:9',
+    imageUrl: input.startFrameUrl,
+    negativePrompt: input.negativePrompt,
+    quality: input.quality,
+    seed: input.seed,
+  })
+}
 
 export async function generateVideo(
-  input: GenerateVideoInput
+  input: GenerateVideoInput & { quality?: string },
 ): Promise<GenerateVideoOutput> {
-  const model = input.startFrameUrl ? I2V_MODEL : T2V_MODEL
-
-  interface FalResult {
-    request_id: string
-    status?: string
+  const model = input.startFrameUrl ? WAN_I2V_MODEL : WAN_T2V_MODEL
+  const submission = await submitToFal(model, await buildWan26Input(input), 'model:wan')
+  return {
+    jobId: submission.requestId,
+    status: 'pending',
+    pollUrl: serializeFalSubmission(submission),
   }
+}
 
-  const result = await fal.queue.submit(model, {
-    input: {
-      prompt: input.prompt,
-      ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
-      ...(input.startFrameUrl && { image_url: input.startFrameUrl }),
-      num_frames: Math.round(input.duration * 16),
-      ...(input.seed !== undefined && { seed: input.seed }),
-    },
-  }) as FalResult
-
-  return { jobId: result.request_id, status: 'pending' }
+/** Blocking generate — used by swarm barrel. */
+export async function generateVideoSync(
+  input: GenerateVideoInput & { quality?: string },
+): Promise<string> {
+  const model = input.startFrameUrl ? WAN_I2V_MODEL : WAN_T2V_MODEL
+  const data = await runFal(model, await buildWan26Input(input))
+  const url = extractVideoUrl(data)
+  if (!url) throw new Error('Wan returned no video URL')
+  return url
 }
 
 export async function pollStatus(
   externalJobId: string,
-  model: string = T2V_MODEL
+  _model?: string,
+  pollUrl?: string,
 ): Promise<GenerateVideoOutput> {
-  interface FalQueueStatus {
-    status: string
+  if (pollUrl) return falPollJob(pollUrl)
+  return {
+    jobId: externalJobId,
+    status: 'failed',
+    error: 'Missing FAL pollUrl — cannot poll Wan without status_url from submit',
   }
-
-  const status = await fal.queue.status(model, {
-    requestId: externalJobId,
-    logs: false,
-  }) as FalQueueStatus
-
-  if (status.status === 'COMPLETED') {
-    interface FalQueueResult {
-      video?: { url: string }
-    }
-    const result = await fal.queue.result(model, {
-      requestId: externalJobId,
-    }) as FalQueueResult
-
-    return {
-      jobId: externalJobId,
-      status: 'complete',
-      videoUrl: result.video?.url,
-    }
-  }
-
-  if (status.status === 'FAILED') {
-    return { jobId: externalJobId, status: 'failed', error: 'Wan 2.2 generation failed' }
-  }
-
-  return { jobId: externalJobId, status: 'processing' }
 }

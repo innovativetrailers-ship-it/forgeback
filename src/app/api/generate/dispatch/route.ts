@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 import { z } from 'zod'
 import { dispatchClip } from '@/lib/routing/MediaDispatcher'
 import { blendMultiEngineClip } from '@/lib/routing/SeamlessBlender'
 import { checkAndDeductCredits } from '@/lib/credits'
 import type { SceneSegment } from '@/lib/routing/types'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const segmentSchema = z.object({
   segmentId:          z.string(),
@@ -26,7 +28,7 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
@@ -43,6 +45,8 @@ export async function POST(req: NextRequest) {
     const unitsOfWan = Math.max(1, Math.ceil(totalCredits / 2))
     await checkAndDeductCredits(userId, 'generate_wan', unitsOfWan)
   } catch (err) {
+    console.warn("[caught] src/app/api/generate/dispatch/route.ts:46", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -57,12 +61,14 @@ export async function POST(req: NextRequest) {
       segments: results.map((r) => ({
         segmentId: r.segmentId,
         videoUrl: r.videoUrl,
-        engineId: segments.find((s) => s.segmentId === r.segmentId)?.engineId ?? 'wan',
+        engineId: segments.find((s) => s.segmentId === r.segmentId)?.engineId ?? refuseSilentModelSwap(r.segmentId, 'wan'),
       })),
     })
 
     return NextResponse.json({ results, blendedUrl })
   } catch (err) {
+    console.warn("[caught] src/app/api/generate/dispatch/route.ts:66", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }

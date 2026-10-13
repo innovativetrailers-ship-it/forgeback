@@ -1,14 +1,15 @@
+import { buildWhisperSttInput, falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAndDeductCredits, refundCredits, OPERATION_COSTS } from '../../../../lib/credits'
-import { fal } from '../../../../lib/fal/client'
+import { fal , falSubscribeBound} from '../../../../lib/fal/client'
+import { requireUser } from '@/lib/auth/requireUser'
+const falSubscribe = falSubscribeBound('app.api.highlights.extract.route')
 import { uploadToR2 } from '../../../../lib/storage/r2'
-import Anthropic from '@anthropic-ai/sdk'
-import { execSync } from 'child_process'
-import { mkdirSync, rmSync, existsSync } from 'fs'
+import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
+import { mkdirSync, rmSync, existsSync, readFileSync } from 'fs'
+import { runArgv } from '@/lib/shell/argv'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 interface HighlightClip {
   rank: number
@@ -23,13 +24,15 @@ interface HighlightClip {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: { videoUrl: string; targetCount?: number; maxDuration?: number; platform?: string }
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/highlights/extract/route.ts:31", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -38,6 +41,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'highlight_extract')
   } catch (e) {
+    console.warn("[caught] src/app/api/highlights/extract/route.ts:39", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     return NextResponse.json({ error: (e as Error).message }, { status: 402 })
   }
 
@@ -47,8 +52,8 @@ export async function POST(req: NextRequest) {
 
   try {
     // 1. Whisper transcription
-    const transcriptResult = await fal.subscribe('fal-ai/whisper', {
-      input: { audio_url: videoUrl, task: 'transcribe' },
+    const transcriptResult = await falSubscribe(falEndpoint('whisper'), {
+      input: buildWhisperSttInput({ audioUrl: videoUrl, chunkLevel: 'word' }),
     }) as unknown as {
       text: string
       chunks: Array<{ text: string; timestamp: [number, number] }>
@@ -56,7 +61,7 @@ export async function POST(req: NextRequest) {
 
     // Get video duration
     const totalDur = parseFloat(
-      execSync(`ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${videoUrl}"`).toString().trim()
+      runArgv('ffprobe', ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', videoUrl]).toString().trim()
     )
 
     // Group chunks into 30-90s segments
@@ -83,7 +88,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Model 1 scores every segment
-    const scoringResp = await anthropic.messages.create({
+    const scoringResp = await claudeCall({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
       messages: [
@@ -104,9 +109,9 @@ Return ONLY valid JSON array:
 [{ "segmentIndex": 0, "viralityScore": 85, "reason": "why this is viral", "hookStrength": 90, "quotability": 80 }]`,
         },
       ],
-    })
+    }, { source: 'highlights' })
 
-    const scoreText = scoringResp.content[0].type === 'text' ? scoringResp.content[0].text : '[]'
+    const scoreText = claudeText(scoringResp) || '[]'
     const jsonMatch = scoreText.match(/\[[\s\S]*\]/)
     const scores = jsonMatch ? (JSON.parse(jsonMatch[0]) as Array<{
       segmentIndex: number
@@ -128,10 +133,8 @@ Return ONLY valid JSON array:
 
       const clipPath = join(tmpDir, `highlight_${rank}.mp4`)
       try {
-        execSync(
-          `ffmpeg -i "${videoUrl}" -ss ${seg.start} -t ${seg.end - seg.start} -c copy "${clipPath}" -y 2>/dev/null`
-        )
-        const buffer = execSync(`cat "${clipPath}"`)
+        runArgv('ffmpeg', ['-i', videoUrl, '-ss', String(seg.start), '-t', String(seg.end - seg.start), '-c', 'copy', clipPath, '-y'])
+        const buffer = readFileSync(clipPath)
         const clipUrl = await uploadToR2(buffer, `highlights/${jobId}_${rank}.mp4`, 'video/mp4')
 
         highlights.push({
@@ -143,13 +146,17 @@ Return ONLY valid JSON array:
           reason: score.reason,
           clipUrl,
         })
-      } catch {
+      } catch (err) {
+        console.warn("[caught] src/app/api/highlights/extract/route.ts:145", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         // Skip clips that fail to extract
       }
     }
 
     return NextResponse.json({ highlights })
   } catch (e) {
+    console.warn("[caught] src/app/api/highlights/extract/route.ts:151", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     await refundCredits(userId, OPERATION_COSTS['highlight_extract'] ?? 5, 'Highlight extraction failed')
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   } finally {

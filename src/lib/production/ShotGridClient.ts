@@ -32,7 +32,9 @@ export async function testShotGridConnection(config: ShotGridConfig): Promise<bo
   try {
     const result = await callService<{ connected: boolean }>('test', config)
     return result.connected
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/production/ShotGridClient.ts:35", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return false
   }
 }
@@ -107,7 +109,9 @@ export async function checkShotGridHealth(): Promise<boolean> {
   try {
     const res = await fetch(`${SHOTGRID_SERVICE}/health`, { signal: AbortSignal.timeout(3000) })
     return res.ok
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/production/ShotGridClient.ts:110", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return false
   }
 }

@@ -1,9 +1,10 @@
 import { stripe, PLATFORM_FEE_RATE, usdCentsToCredits } from '@/lib/payments/stripe'
 import { getOrCreateStripeCustomer }                     from '@/lib/payments/stripeCustomer'
 import { db }                                            from '@/lib/db'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: Request) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { amountUSD } = await req.json() as { amountUSD: number }

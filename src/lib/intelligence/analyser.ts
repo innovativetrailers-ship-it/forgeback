@@ -6,8 +6,9 @@
  * structured intelligence reports stored in the intelligence domain.
  */
 
-import { fal } from '../fal/client'
+
 import { intelligenceDb, callDomainLLM, pushIntelligenceSignal } from '../firewall/domain-guard'
+import { assertIntelligenceProbesAllowed } from './guards'
 import type { ProbeSet, RawProbeResult, RawProbeResults, ModelIntelligenceReport } from './report-schema'
 import { OUTPUT_ASSESSMENT_PROMPT, buildReportPrompt } from './crew'
 import {
@@ -17,7 +18,6 @@ import {
   generateRunway,
   generateSkyReels,
   generateLTXSwarm,
-  generateCogVideoXSwarm,
   generateWan22,
   generateMochi,
 } from '../models/index'
@@ -33,7 +33,6 @@ const MODEL_DISPATCH: Record<string, (p: ProbePayload) => Promise<string>> = {
   runway_gen4_5:  (p) => generateRunway(p),
   skyreels_v1:    (p) => generateSkyReels({ prompt: p.prompt, duration: p.duration, aspectRatio: p.aspectRatio }),
   ltx_2_3:        (p) => generateLTXSwarm(p),
-  cogvideox_5b:   (p) => generateCogVideoXSwarm(p),
   wan_2_6:        (p) => generateWan22(p),
   mochi_1:        (p) => generateMochi(p),
 }
@@ -46,6 +45,7 @@ export class ModelIntelligenceAnalyser {
     probeSet: ProbeSet[]
     tier: OutcomeTier
   }): Promise<RawProbeResults> {
+    assertIntelligenceProbesAllowed(`probeModel:${params.modelId}`)
     const results: RawProbeResult[] = []
     const generateFn = MODEL_DISPATCH[params.modelId]
 
@@ -115,6 +115,8 @@ export class ModelIntelligenceAnalyser {
     const groupedByCategory = this.groupResults(results)
 
     const rawReport = await callDomainLLM('intelligence', {
+      source: 'intelligence:probe:writeReport',
+      billableClass: 'eval',
       systemPrompt: `You are a machine learning research analyst writing internal competitive intelligence reports.
 Write precise, factual, technical reports based on benchmark probe results.
 Focus on: failure patterns, prompt sensitivity, capability boundaries.
@@ -147,12 +149,11 @@ Return structured JSON only.`,
 
   private async extractKeyFrames(videoUrl: string): Promise<string[]> {
     try {
-      const result = await fal.subscribe('fal-ai/video-frame-extractor', {
-        input: { video_url: videoUrl, num_frames: 3 },
-      }) as unknown as { frames?: Array<{ url: string }> }
+      const { extractVideoFrameSamples } = await import('@/lib/fal/frameExtract')
+      return await extractVideoFrameSamples(videoUrl, 3)
+    } catch (err) {
+      console.warn("[caught] src/lib/intelligence/analyser.ts:154", err instanceof Error ? { name: err.name, message: err.message } : err)
 
-      return result.frames?.map(f => f.url).filter(Boolean) ?? [videoUrl]
-    } catch {
       return [videoUrl]
     }
   }
@@ -167,6 +168,8 @@ Return structured JSON only.`,
 
     try {
       const raw = await callDomainLLM('intelligence', {
+        source: 'intelligence:probe:assessOutput',
+        billableClass: 'eval',
         systemPrompt: OUTPUT_ASSESSMENT_PROMPT,
         userMessage: `Probe ID: ${params.probe.id}
 Probe prompt: "${params.probe.prompt}"
@@ -185,7 +188,9 @@ Assess this probe result.`,
         strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
         notes: String(parsed.notes ?? ''),
       }
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/intelligence/analyser.ts:189", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       return { quality_score: 5, issues: ['Assessment failed'], strengths: [], notes: '' }
     }
   }

@@ -1,9 +1,20 @@
 'use client'
 
-import { useState } from 'react'
-import { RefreshCw, ChevronDown, ChevronRight, Sun, Sliders, Wand2 } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { RefreshCw, ChevronDown, ChevronRight, Sun, Sliders, Wand2, Sparkles } from 'lucide-react'
 import type { Clip, TimelineRecipe } from '@/lib/timeline/schema'
 import { EFFECT_PRESETS } from './constants'
+import { isColourGradeSuggestion, suggestionToClipGrade, type ColourMood } from '@/lib/color/colourGradeShape'
+import { GradePreviewBar } from './GradePreviewBar'
+import { BeforeAfterToggle } from './BeforeAfterToggle'
+
+const AI_MOODS: Array<{ value: ColourMood; label: string }> = [
+  { value: 'cinematic', label: 'Cinematic' },
+  { value: 'warm',      label: 'Warm' },
+  { value: 'cool',      label: 'Cool' },
+  { value: 'vintage',   label: 'Vintage' },
+  { value: 'moody',     label: 'Moody' },
+]
 
 interface Props {
   selectedClip: Clip | null
@@ -48,6 +59,46 @@ function Slider({ label, value, min, max, step = 0.01, onChange, unit = '' }: {
 
 export function PropertiesPanel({ selectedClip, recipe, onOpenRepaint, onClipUpdate }: Props) {
   const [activeEffectAdd, setActiveEffectAdd] = useState(false)
+  const [aiGradeMood, setAiGradeMood] = useState<ColourMood>('cinematic')
+  const [aiGradeLoading, setAiGradeLoading] = useState(false)
+  const [aiGradeError, setAiGradeError] = useState<string | null>(null)
+  const [aiGradeReasoning, setAiGradeReasoning] = useState<string | null>(null)
+  const [frameUrl, setFrameUrl] = useState('')
+
+  const handleAiGrade = useCallback(async (clip: Clip) => {
+    if (!frameUrl.trim()) {
+      setAiGradeError('Paste a frame image URL first')
+      return
+    }
+    setAiGradeLoading(true)
+    setAiGradeError(null)
+    setAiGradeReasoning(null)
+    try {
+      const res = await fetch('/api/color/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clipId: clip.id, frameUrl: frameUrl.trim(), mood: aiGradeMood }),
+      })
+      const data = (await res.json()) as Record<string, unknown>
+      if (!res.ok) {
+        setAiGradeError(typeof data.error === 'string' ? data.error : `HTTP ${res.status}`)
+        return
+      }
+      if (!isColourGradeSuggestion(data.grade)) {
+        setAiGradeError('Unexpected response from AI')
+        return
+      }
+      const clipGrade = suggestionToClipGrade(data.grade)
+      onClipUpdate(clip.id, { colourGrade: clipGrade })
+      setAiGradeReasoning(data.grade.reasoning)
+    } catch (e: unknown) {
+      console.warn("[caught] src/components/editor/PropertiesPanel.tsx:94", e instanceof Error ? { name: e.name, message: e.message } : e)
+
+      setAiGradeError(e instanceof Error ? e.message : 'Unknown error')
+    } finally {
+      setAiGradeLoading(false)
+    }
+  }, [frameUrl, aiGradeMood, onClipUpdate])
 
   if (!selectedClip) {
     // Project settings when nothing selected
@@ -200,6 +251,11 @@ export function PropertiesPanel({ selectedClip, recipe, onOpenRepaint, onClipUpd
 
       {/* Colour Grade */}
       <Section title="Colour Grade" defaultOpen={false}>
+        {/* Tone curve preview + before/after toggle */}
+        <div className="mb-2 space-y-1.5">
+          <GradePreviewBar clipId={clip.id} />
+          <BeforeAfterToggle clipId={clip.id} />
+        </div>
         <div className="space-y-1">
           <Slider label="Shadows" value={clip.colourGrade?.shadows ?? 0} min={-100} max={100}
             onChange={(v) => onClipUpdate(clip.id, { colourGrade: { ...(clip.colourGrade ?? {}), shadows: v } as never })} unit="%" />
@@ -212,6 +268,59 @@ export function PropertiesPanel({ selectedClip, recipe, onOpenRepaint, onClipUpd
           <Slider label="Tint" value={clip.colourGrade?.tint ?? 0} min={-100} max={100}
             onChange={(v) => onClipUpdate(clip.id, { colourGrade: { ...(clip.colourGrade ?? {}), tint: v } as never })} />
         </div>
+
+        {/* AI Suggest */}
+        <div className="mt-3 border-t border-white/6 pt-3 space-y-2">
+          <p className="text-[9px] font-semibold text-white/30 uppercase tracking-wider flex items-center gap-1">
+            <Sparkles className="w-3 h-3" /> AI Suggest
+          </p>
+          <input
+            type="url" value={frameUrl} onChange={(e) => setFrameUrl(e.target.value)}
+            placeholder="Paste frame image URL…"
+            className="w-full bg-[#0d1117] border border-white/10 rounded px-2 py-1 text-[10px] text-white/70 placeholder-white/20 outline-none focus:border-[#00e5c8]/40"
+          />
+          <div className="flex flex-wrap gap-1">
+            {AI_MOODS.map((m) => (
+              <button key={m.value} onClick={() => setAiGradeMood(m.value)}
+                className={`text-[9px] px-2 py-0.5 rounded-full border transition ${
+                  aiGradeMood === m.value
+                    ? 'border-[#00e5c8] bg-[#00e5c8]/10 text-[#00e5c8]'
+                    : 'border-white/10 text-white/40 hover:text-white/60'
+                }`}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => handleAiGrade(clip)}
+            disabled={aiGradeLoading || !frameUrl.trim()}
+            className="w-full py-1.5 text-[10px] font-semibold rounded bg-[#00e5c8] text-black disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#00e5c8]/90 transition flex items-center justify-center gap-1"
+          >
+            {aiGradeLoading ? (
+              <><RefreshCw className="w-3 h-3 animate-spin" /> Analysing…</>
+            ) : (
+              <><Sparkles className="w-3 h-3" /> Suggest Grade (3 credits)</>
+            )}
+          </button>
+          {aiGradeError && (
+            <p className="text-[9px] text-red-400">{aiGradeError}</p>
+          )}
+          {aiGradeReasoning && (
+            <p className="text-[9px] text-white/40 leading-relaxed">{aiGradeReasoning}</p>
+          )}
+        </div>
+
+        {/* Batch apply grade to all clips */}
+        {clip.colourGrade && Object.keys(clip.colourGrade).length > 0 && (
+          <div className="mt-2 pt-2 border-t border-white/6">
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('copy-grade', { detail: { clipId: clip.id } }))}
+              className="w-full text-[9px] py-1 rounded border border-white/10 text-white/40 hover:border-white/20 hover:text-white/60 transition"
+            >
+              Copy grade to all clips
+            </button>
+          </div>
+        )}
       </Section>
 
       {/* Transform */}
@@ -235,14 +344,18 @@ export function PropertiesPanel({ selectedClip, recipe, onOpenRepaint, onClipUpd
             className="w-full bg-[#12121a] border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] text-white/60 focus:outline-none"
           >
             <option value="cut">Cut</option>
+            <option value="match">Match cut</option>
             <option value="dissolve">Dissolve</option>
             <option value="fade">Fade</option>
+            <option value="fade-in">Fade in</option>
+            <option value="fade-out">Fade out</option>
+            <option value="flash">Flash</option>
             <option value="film_burn">Film Burn</option>
             <option value="wipe">Wipe</option>
             <option value="zoom">Zoom</option>
             <option value="glitch">Glitch</option>
           </select>
-          {clip.transition && clip.transition.type !== 'cut' && (
+          {clip.transition && clip.transition.type !== 'cut' && clip.transition.type !== 'match' && (
             <Slider label="Duration" value={clip.transition.duration} min={0.1} max={2}
               onChange={(v) => onClipUpdate(clip.id, { transition: { ...clip.transition!, duration: v } })} unit="s" />
           )}

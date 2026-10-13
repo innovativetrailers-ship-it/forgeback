@@ -12,37 +12,9 @@
 
 import { db } from '../db'
 import { redis } from '../redis'
-import Anthropic from '@anthropic-ai/sdk'
+import { claudeCall, claudeText, type ClaudeBillableClass } from '@/lib/llm/anthropicClient'
 
-// ── Domain-specific Anthropic clients ────────────────────────
-// All fall back to the shared key; separate keys can be injected via env
-const marketingClient = new Anthropic({
-  apiKey: process.env.MARKETING_AI_KEY ?? process.env.ANTHROPIC_API_KEY,
-})
-const productClient = new Anthropic({
-  apiKey: process.env.PRODUCT_AI_KEY ?? process.env.ANTHROPIC_API_KEY,
-})
-const technicalClient = new Anthropic({
-  apiKey: process.env.TECHNICAL_AI_KEY ?? process.env.ANTHROPIC_API_KEY,
-})
-const intelligenceClient = new Anthropic({
-  apiKey: process.env.INTELLIGENCE_AI_KEY ?? process.env.ANTHROPIC_API_KEY,
-})
-
-export const DOMAIN_CLIENTS = {
-  marketing:    marketingClient,
-  product:      productClient,
-  technical:    technicalClient,
-  intelligence: intelligenceClient,
-} as const
-
-// Named API key map — each domain has its own key; all fall back to shared key
-export const DOMAIN_API_KEYS = {
-  marketing:    process.env.MARKETING_AI_KEY    ?? process.env.ANTHROPIC_API_KEY,
-  product:      process.env.PRODUCT_AI_KEY      ?? process.env.ANTHROPIC_API_KEY,
-  technical:    process.env.TECHNICAL_AI_KEY    ?? process.env.ANTHROPIC_API_KEY,
-  intelligence: process.env.INTELLIGENCE_AI_KEY ?? process.env.ANTHROPIC_API_KEY,
-} as const
+export type KnowledgeDomain = 'marketing' | 'product' | 'technical' | 'intelligence'
 
 // ── Redis namespace helpers ───────────────────────────────────
 // Prefixed keys enforce domain isolation on shared Redis
@@ -222,33 +194,36 @@ export function sanitiseForProduct(content: string): string {
 
 // ── Domain-aware LLM call ─────────────────────────────────────
 export async function callDomainLLM(
-  domain: keyof typeof DOMAIN_CLIENTS,
+  domain: KnowledgeDomain,
   params: {
+    source: string
+    billableClass?: ClaudeBillableClass
     systemPrompt: string
     userMessage: string
     requireJSON?: boolean
     model?: string
-  }
+  },
 ): Promise<string> {
-  const client = DOMAIN_CLIENTS[domain]
-
-  // Domain-appropriate model selection (cheapest that's capable)
-  const modelMap: Record<keyof typeof DOMAIN_CLIENTS, string> = {
+  const modelMap: Record<KnowledgeDomain, string> = {
     marketing:    'claude-haiku-4-5',
     product:      'claude-sonnet-4-5',
     technical:    'claude-sonnet-4-5',
-    intelligence: 'claude-haiku-4-5',  // cheap crew — Haiku for report writing
+    intelligence: 'claude-haiku-4-5',
   }
   const model = params.model ?? modelMap[domain]
+  const billableClass = params.billableClass ?? (domain === 'intelligence' ? 'eval' : 'background')
 
-  const msg = await client.messages.create({
-    model,
-    max_tokens: 4096,
-    system: params.systemPrompt,
-    messages: [{ role: 'user', content: params.userMessage }],
-  })
+  const msg = await claudeCall(
+    {
+      model,
+      max_tokens: 4096,
+      system: params.systemPrompt,
+      messages: [{ role: 'user', content: params.userMessage }],
+    },
+    { source: params.source, billableClass },
+  )
 
-  const raw = msg.content.find(b => b.type === 'text')?.text ?? ''
+  const raw = claudeText(msg)
   return params.requireJSON
     ? raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
     : raw

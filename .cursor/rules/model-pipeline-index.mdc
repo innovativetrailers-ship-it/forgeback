@@ -1,0 +1,26 @@
+---
+description: Model-pipeline index MP-00. One family per session. Verify the OpenAPI schema before wiring an endpoint. Do not start an MP until the user feeds that prompt.
+alwaysApply: true
+---
+
+# Model pipeline (MP-00)
+
+Full text: `docs/spec-references/MP-00-INDEX-and-rules.md`. Family docs are not in the repo until the user feeds each file.
+
+An MP is the only permission to change model-family wiring. Feed one MP per session. MP-01 through MP-12 are not started from this index. `spec-reconciliation-overlay.md` still wins on conflict. This queue does not replace build-0 through build-6 or BP-01 through BP-13, and it does not lift `GENERATION_PAUSED`.
+
+## Order
+
+MP-01 scaffolding (no family data). MP-02 Seedance with MP-02b composition and the tool matrix. Then Kling, Veo, Wan, MiniMax/Hailuo, Grok, PixVerse, HappyHorse, LTX, image models, tool connection, then MP-13 chained continuity. MP-14 Gemini Omni Flash 1.1 is wired. MP-15 ElevenLabs audio is wired on FAL. One family passes every mode before the next family starts.
+
+## Every family inherits
+
+1. Verify before wire. `GET https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<id>` first. 200 means the schema is ground truth. 404 means find the real id before any registry string is written. No endpoint string ships without that 200.
+2. FamilyFieldMap, `buildPayload`, and `composePrompt` use the schema's fields, enums, and required set. The family doc is the map. If they disagree, stop and report. The schema wins.
+3. Wire only the fed family. Payload includes only fields that schema lists. A missing field hides the control.
+4. INV-1 through INV-8 from BP-00 still apply. Paid calls stay on `providerSubmit` / `submitToFal` / `claudeCall`.
+5. The one real generation per mode in a family prompt is the user's. Do not run it while `GENERATION_PAUSED` is on.
+6. HappyHorse stays benched until MP-09 is fed. Seedance 2.5, H3 Max, and Kling 2.6 are evaluate-only until a later fed prompt adopts them. Gemini Omni Flash 1.1 is wired (MP-14).
+7. `shotMode` reference is the default for a recurring subject in a new composition. An anchor chain or a faithful keyframe uses first frame. No subject to condition on uses text. Seedance reference-to-video is the preferred reference route once MP-02b is fed.
+
+On a paid-API task, run `node scripts/check-chokepoints.mjs` and report it. Do not touch files outside the fed prompt.

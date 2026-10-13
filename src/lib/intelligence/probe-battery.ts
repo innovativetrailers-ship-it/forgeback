@@ -1,8 +1,8 @@
 import type { ProbeSet } from './report-schema'
 
-// 120 standardised test prompts across 12 capability categories.
-// Each probe isolates ONE specific capability.
-// Run against every model on the same day, same resolution, same seed where possible.
+// 118 standardised CONSISTENCY BENCHMARK prompts — model-eval harness ONLY.
+// Never auto-run in production. Requires triple-gate via intelligence/guards.ts.
+// Trigger: intelligence-cron worker (DISABLED by default) or manual admin API.
 export const PROBE_BATTERY: ProbeSet[] = [
   {
     category: 'physics_rigid_body',

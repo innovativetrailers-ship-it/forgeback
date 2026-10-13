@@ -1,6 +1,14 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { subscribeJobStream } from '@/lib/jobs/subscribeJobStream'
+import { jobPlaybackPath } from '@/lib/media/jobPlayback'
+import { ensureEditorProject, hydrateTimelineFromShots } from '@/lib/projects/loadProject'
+import { buildDefaultRecipe } from '@/lib/timeline/defaultRecipe'
+import { usePlaybackStore } from '@/store/playbackStore'
+import { useSimpleClipsStore } from '@/store/simpleClipsStore'
+import { useJobStore } from '@/store/jobStore'
 import { useSession } from 'next-auth/react'
 import { TextToVideoTab } from '@/components/simple/TextToVideoTab'
 import { ImageToVideoTab } from '@/components/simple/ImageToVideoTab'
@@ -10,7 +18,18 @@ import { ResultsGallery } from '@/components/simple/ResultsGallery'
 import { TopBar } from '@/components/layout/TopBar'
 import { useCredits } from '@/hooks/useCredits'
 import type { GeneratedClip, SimpleTab } from '@/components/simple/types'
+import { fireRewardSignal } from '@/lib/feedback/signal'
+import { placeFinishedClip } from '@/lib/library/placeFinishedClip'
 import { nanoid } from 'nanoid'
+
+async function placeInLibrary(clip: GeneratedClip) {
+  if (!jobPlaybackPath(clip.jobId) && !clip.videoUrl) return
+  try {
+    await placeFinishedClip(clip)
+  } catch (err) {
+    console.warn('[library] placeInLibrary', err instanceof Error ? err.message : err)
+  }
+}
 
 const TABS: Array<{ id: SimpleTab; label: string; icon: string }> = [
   { id: 'text', label: 'Text to Video', icon: '✦' },
@@ -20,26 +39,88 @@ const TABS: Array<{ id: SimpleTab; label: string; icon: string }> = [
 ]
 
 export default function SimplePage() {
+  const router = useRouter()
   const { data: session } = useSession()
   const { balance: creditBalance } = useCredits()
   const [activeTab, setActiveTab] = useState<SimpleTab>('text')
-  const [clips, setClips] = useState<GeneratedClip[]>([])
+  const clips = useSimpleClipsStore((s) => s.clips)
+  const upsertClip = useSimpleClipsStore((s) => s.upsertClip)
+  const removeClip = useSimpleClipsStore((s) => s.removeClip)
+  const removeFailedClips = useSimpleClipsStore((s) => s.removeFailedClips)
 
   const userRole = (session?.user as { role?: string })?.role ?? 'FREE'
 
-  const handleGenerated = useCallback((clip: GeneratedClip) => {
-    setClips((prev) => {
-      const exists = prev.findIndex((c) => c.id === clip.id)
-      if (exists >= 0) {
-        const updated = [...prev]
-        updated[exists] = clip
-        return updated
-      }
-      return [clip, ...prev]
+  const resumedJobsRef = useRef(new Set<string>())
+
+  useEffect(() => {
+    const { projectId, recipe } = usePlaybackStore.getState()
+    if (!projectId) return
+    const base = recipe ?? buildDefaultRecipe(projectId)
+    void hydrateTimelineFromShots(projectId, base).catch((err) => {
+      console.warn("[caught] src/app/(editor)/simple/page.tsx:66", err instanceof Error ? { name: err.name, message: err.message } : err)
+      console.error(err)
     })
   }, [])
 
+  useEffect(() => {
+    const staleMs = 30 * 60 * 1000
+    const { activeJobs, removeJob } = useJobStore.getState()
+
+    for (const job of activeJobs) {
+      if (job.mode !== 'simple') continue
+      if (Date.now() - job.startedAt > staleMs) {
+        removeJob(job.jobId)
+        continue
+      }
+      if (resumedJobsRef.current.has(job.jobId)) continue
+      const clip = clips.find((c) => c.jobId === job.jobId)
+      if (!clip || clip.status === 'complete' || clip.status === 'failed') continue
+
+      resumedJobsRef.current.add(job.jobId)
+      subscribeJobStream(job.jobId, {
+        onProgress: (data) => {
+          upsertClip({
+            ...clip,
+            status: 'processing',
+            progress: data.progress ?? clip.progress,
+            progressMessage: data.userMessage ?? data.message,
+            userMessage: data.userMessage,
+          })
+        },
+        onComplete: (outputUrl) => {
+          const done = { ...clip, status: 'complete' as const, videoUrl: outputUrl, progress: 100 }
+          upsertClip(done)
+          void placeInLibrary(done)
+          removeJob(job.jobId)
+        },
+        onFailed: (error, data) => {
+          upsertClip({ ...clip, status: 'failed', error: data.userMessage ?? error, userMessage: data.userMessage })
+          removeJob(job.jobId)
+        },
+      })
+    }
+  }, [clips, upsertClip])
+
+  const handleGenerated = useCallback((clip: GeneratedClip) => {
+    upsertClip(clip)
+    if (clip.status === 'complete') void placeInLibrary(clip)
+    // Only track real server jobs — never phantom client nanoids from optimistic UI.
+    if (clip.status === 'processing' && clip.jobId.length >= 20) {
+      useJobStore.getState().addJob({
+        jobId: clip.jobId,
+        prompt: clip.prompt,
+        mode: 'simple',
+        startedAt: Date.now(),
+      })
+    }
+    if (clip.status === 'complete' || clip.status === 'failed') {
+      useJobStore.getState().removeJob(clip.jobId)
+    }
+  }, [upsertClip])
+
   const handleRegenerate = useCallback((clip: GeneratedClip) => {
+    // Redoing a render is a strong negative reward for the models that made it.
+    fireRewardSignal(clip.jobId, 'regenerate')
     // Re-add the clip as a new generation with same params
     const newClip: GeneratedClip = {
       ...clip,
@@ -66,35 +147,37 @@ export default function SimplePage() {
         handleGenerated({ ...newClip, id: jobId, jobId, status: 'processing' })
         const sse = new EventSource(`/api/jobs/${jobId}/stream`)
         sse.onmessage = (e) => {
-          const data = JSON.parse(e.data) as { status: string; progress?: number; outputUrl?: string; error?: string; message?: string }
+          const data = JSON.parse(e.data) as { status: string; progress?: number; outputUrl?: string; error?: string; message?: string; userMessage?: string }
           if (data.status === 'complete' && data.outputUrl) {
             handleGenerated({ ...newClip, id: jobId, jobId, status: 'complete', videoUrl: data.outputUrl, progress: 100 })
             sse.close()
           } else if (data.status === 'failed') {
-            handleGenerated({ ...newClip, id: jobId, jobId, status: 'failed', error: data.error ?? 'Failed' })
+            handleGenerated({ ...newClip, id: jobId, jobId, status: 'failed', error: data.userMessage ?? data.error ?? 'Failed', userMessage: data.userMessage })
             sse.close()
           } else {
-            handleGenerated({ ...newClip, id: jobId, jobId, status: 'processing', progress: data.progress, progressMessage: data.message })
+            handleGenerated({ ...newClip, id: jobId, jobId, status: 'processing', progress: data.progress, progressMessage: data.userMessage ?? data.message, userMessage: data.userMessage })
           }
         }
         sse.onerror = () => sse.close()
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn("[caught] src/app/(editor)/simple/page.tsx:166", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         handleGenerated({ ...newClip, status: 'failed', error: 'Failed to create job' })
       })
   }, [handleGenerated])
 
   const handleAddToTimeline = useCallback((clip: GeneratedClip) => {
-    // Persist clip to the editor store for the Advanced timeline
-    if (typeof window !== 'undefined') {
-      const pending = JSON.parse(localStorage.getItem('cinema:timeline:pending') ?? '[]') as GeneratedClip[]
-      localStorage.setItem('cinema:timeline:pending', JSON.stringify([...pending, clip]))
-    }
+    fireRewardSignal(clip.jobId, 'export')
   }, [])
 
+  const handleOpenEditor = useCallback(() => {
+    router.push('/advanced')
+  }, [router])
+
   const handleDelete = useCallback((id: string) => {
-    setClips((prev) => prev.filter((c) => c.id !== id))
-  }, [])
+    removeClip(id)
+  }, [removeClip])
 
   return (
     <div className="flex flex-col h-screen bg-[var(--bg-base)] text-[var(--text-primary)] overflow-hidden">
@@ -181,7 +264,9 @@ export default function SimplePage() {
               clips={clips}
               onRegenerate={handleRegenerate}
               onAddToTimeline={handleAddToTimeline}
+              onOpenEditor={handleOpenEditor}
               onDelete={handleDelete}
+              onClearFailed={removeFailedClips}
             />
           </div>
         </div>

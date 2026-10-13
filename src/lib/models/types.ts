@@ -3,6 +3,8 @@ export interface GenerateVideoInput {
   negativePrompt?: string
   duration: number // seconds
   aspectRatio: '16:9' | '9:16' | '1:1' | '4:3' | '21:9'
+  /** UI tier label or id — mapped to FAL resolution (720p/1080p) for Wan 2.6 */
+  quality?: string
   startFrameUrl?: string
   endFrameUrl?: string
   characterRefs?: string[]
@@ -21,7 +23,7 @@ export interface GenerateVideoOutput {
   error?: string
 }
 
-export type QualityTier = 'draft' | 'standard' | 'premium' | 'cinematic' | 'film'
+export type QualityTier = 'draft' | 'standard' | 'premium' | 'cinematic' | 'film' | 'film_grade'
 export type SceneType =
   | 'action'
   | 'dialogue'
@@ -45,7 +47,11 @@ export type VideoModel =
   | 'skyreels'
   | 'ltx'
   | 'pixverse'
-  | 'cogvideox'
+  | 'hunyuan'
+  | 'happyhorse'
+  | 'hailuo'
+  | 'grok_video'
+  | 'sora'
 
 export interface ModelRouterInput {
   quality: QualityTier

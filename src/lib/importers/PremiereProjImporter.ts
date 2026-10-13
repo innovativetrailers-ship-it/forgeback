@@ -9,7 +9,9 @@ export async function importPremiereProject(fileBuffer: Buffer): Promise<Importe
   let xmlBuffer: Buffer
   try {
     xmlBuffer = await gunzip(fileBuffer)
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/importers/PremiereProjImporter.ts:12", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     xmlBuffer = fileBuffer
   }
 
@@ -26,7 +28,7 @@ export async function importPremiereProject(fileBuffer: Buffer): Promise<Importe
   }
 
   return {
-    projectName: root?.Name?.[0] ?? 'Imported Premiere Project',
+    projectName: root?.Name?.[0] ?? 'Imported project',
     sequences,
     bins,
     mediaItems,

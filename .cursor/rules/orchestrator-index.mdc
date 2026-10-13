@@ -1,0 +1,26 @@
+---
+description: Orchestrator index OR-00. One orchestrator prompt per session. Do not start an OR until the user feeds that prompt.
+alwaysApply: true
+---
+
+# Orchestrator (OR-00)
+
+Full text: `docs/spec-references/OR-00-INDEX.md`. Contract: `docs/spec-references/SPEC-orchestrator-the-director-brain.md`. Rating spec is not in the repo until the user feeds it.
+
+An OR is the only permission to change the director-brain. Feed one OR per session. OR-01 through OR-06 are not started from this index. `spec-reconciliation-overlay.md` still wins on conflict. This queue does not replace build-0 through build-6, BP-01 through BP-13, MP-01 through MP-15, TR-01 through TR-06, or WF-01 through WF-03, and it does not lift `GENERATION_PAUSED`.
+
+## Order
+
+OR-01 interpret (premise lock and grounded expansion). OR-02 model-knowledge RAG. OR-03 delegate by purpose. OR-04 learn from outcomes. OR-05 shot ratings. OR-06 the unified run. OR-01 can be fed before the later jobs. OR-02 through OR-05 sit on the model pipeline and the tool matrix.
+
+## Every OR inherits
+
+1. LLM calls go through `claudeCall`, pause-aware, with source and tier. Premise lock and structure are hard or creative. Grounding check and extraction are mechanical.
+2. A manual model choice is never silently replaced.
+3. Model knowledge is indexed data. Do not add a hardcoded table as the live source.
+4. Ratings and the taste profile are the user's data.
+5. Additive `migrate deploy` only. Never `migrate dev`. Never reset.
+6. HappyHorse stays out of the council until one clean generation. Seedance 2.5, H3 Max, and Kling 2.6 stay evaluate-only until a fed prompt adopts them. Gemini Omni Flash 1.1 is wired (MP-14). Wan 3.0 stays out of the default council. Kling v3 has no `voice_id`.
+7. The one real generation in a prompt is the user's. Do not run it while `GENERATION_PAUSED` is on.
+
+On a paid-API task, run `node scripts/check-chokepoints.mjs` and report it. Do not touch files outside the fed prompt.

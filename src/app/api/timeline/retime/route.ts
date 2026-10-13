@@ -3,6 +3,7 @@ import { auth }                       from '@/lib/auth'
 import { checkAndDeductCredits,
          refundCredits }              from '@/lib/credits'
 import { opticalFlowRetime }         from '@/lib/timeline/retime'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const SPEED_TO_FPS: Record<string, number> = {
   '25':   12,   // 0.25x (slow-mo 4x) → 12fps input → 48fps interpolated
@@ -14,7 +15,7 @@ const SPEED_TO_FPS: Record<string, number> = {
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId  = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId  = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {

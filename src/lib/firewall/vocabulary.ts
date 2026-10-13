@@ -19,7 +19,6 @@ export const ENGINE_ID_TO_DISPLAY: Record<string, string> = {
   luma:           'Landscape processing engine',
   wan:            'Balanced processing engine',
   wan_2_2:        'Balanced processing engine',
-  cogvideox:      'Text-aware processing engine',
   ltx:            'Fast processing engine',
   ltx_2_3:        'Fast processing engine',
   pika:           'Style processing engine',
@@ -53,7 +52,7 @@ export function sanitiseForUser(text: string): string {
     .replace(/\bmulti-agent\b/gi, 'multi-engine')
     .replace(/\bswarm\b/gi, 'processing pipeline')
     .replace(/\bAgenticLoop\b/gi, 'ReasoningLoop')
-    .replace(/\bSwarmRouter\b/gi, 'MediaRouter')
+    .replace(/\bSwarmRouter\b/gi, 'Router')
 }
 
 export function engineIdToDisplay(engineId: string): string {

@@ -1,7 +1,8 @@
-// Seedance now routes through FAL — no direct Seedance API key needed
+import { runFal, extractVideoUrl, fal, falQueueBound} from '@/lib/fal/client'
+const falQueueOps = falQueueBound('lib.models.seedance')
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
-const FAL_MODEL = 'fal-ai/seedance-video-lite'
+const FAL_MODEL = 'bytedance/seedance-2.0/text-to-video'
 
 export interface SeedanceInput extends GenerateVideoInput {
   referenceImageUrls?: string[]
@@ -23,38 +24,33 @@ export async function generateVideo(
   if (input.startFrameUrl)     falInput.image_url        = input.startFrameUrl
   if (input.seed !== undefined) falInput.seed             = input.seed
 
-  const res = await fetch(`https://fal.run/${FAL_MODEL}`, {
-    method:  'POST',
-    headers: { Authorization: `Key ${process.env.FAL_API_KEY}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ input: falInput }),
-  })
-  if (!res.ok) throw new Error(`Seedance FAL error ${res.status}: ${await res.text()}`)
-
-  const data = await res.json() as { request_id?: string; video?: { url?: string }; video_url?: string }
-  const jobId    = data.request_id ?? `seedance_${Date.now()}`
-  const videoUrl = data.video?.url ?? data.video_url
+  const data = await runFal(FAL_MODEL, falInput)
+  const videoUrl = extractVideoUrl(data)
+  const jobId    = `seedance_${Date.now()}`
 
   return {
     jobId,
-    status:  videoUrl ? 'complete' : 'pending',
+    status:  videoUrl ? 'complete' : 'failed',
     videoUrl,
-    pollUrl: videoUrl ? undefined : `https://queue.fal.run/${FAL_MODEL}/requests/${jobId}`,
+    error:   videoUrl ? undefined : 'Seedance returned no video',
   }
 }
 
 export async function pollStatus(requestId: string): Promise<GenerateVideoOutput> {
-  const res = await fetch(
-    `https://queue.fal.run/${FAL_MODEL}/requests/${requestId}`,
-    { headers: { Authorization: `Key ${process.env.FAL_API_KEY}` } }
-  )
-  if (!res.ok) throw new Error(`Seedance poll error ${res.status}`)
+  try {
+    const status = await falQueueOps.status(FAL_MODEL, { requestId, logs: false }) as { status: string }
+    if (status.status !== 'COMPLETED') {
+      if (status.status === 'FAILED') {
+        return { jobId: requestId, status: 'failed', error: 'Seedance generation failed' }
+      }
+      return { jobId: requestId, status: 'processing' }
+    }
+    const result = await falQueueOps.result(FAL_MODEL, { requestId }) as { data: unknown }
+    const videoUrl = extractVideoUrl(result.data)
+    return { jobId: requestId, status: 'complete', videoUrl }
+  } catch (err) {
+    console.warn("[caught] src/lib/models/seedance.ts:51", err instanceof Error ? { name: err.name, message: err.message } : err)
 
-  const data = await res.json() as { status?: string; video?: { url?: string }; video_url?: string; error?: string }
-  if (data.status === 'COMPLETED' || data.video?.url || data.video_url) {
-    return { jobId: requestId, status: 'complete', videoUrl: data.video?.url ?? data.video_url }
+    return { jobId: requestId, status: 'processing' }
   }
-  if (data.status === 'FAILED') {
-    return { jobId: requestId, status: 'failed', error: data.error ?? 'Seedance generation failed' }
-  }
-  return { jobId: requestId, status: 'processing' }
 }

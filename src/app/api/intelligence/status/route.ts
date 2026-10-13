@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/requireUser'
 /**
  * Intelligence pipeline status API.
  * GET /api/intelligence/status
@@ -10,7 +11,7 @@ import { MODEL_VERSIONS } from '@/lib/intelligence/update-watcher'
 import { ALL_CATEGORIES } from '@/lib/intelligence/probe-battery'
 
 export async function GET(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const [

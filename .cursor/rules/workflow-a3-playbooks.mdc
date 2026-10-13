@@ -1,0 +1,11 @@
+---
+description: SPEC-A3 playbooks. Read before adding standing style/generation/language rules or orchestrator defaults.
+globs: ["packages/core/src/logic/playbook.ts", "packages/core/src/logic/delegate.ts", "packages/core/src/logic/genrePresets.ts", "packages/core/src/logic/ratings.ts", "src/lib/playbook/**", "src/lib/orchestration/**", "src/app/api/playbooks/**"]
+alwaysApply: false
+---
+
+# Playbooks (WF-02)
+
+Contract: `docs/spec-references/SPEC-A3-playbooks.md`. Prompt: `docs/spec-references/WF-02-playbooks.md`. Inherits WF-00.
+
+A Playbook is overridable defaults (style, generation, language, do/don't rules), project-scoped or user-global. Precedence: explicit action > shot need > Playbook > system default. Hard rules filter the plan; soft rules inject into composePrompt. Taste profile may suggest additions (user confirms). A Playbook cannot disable safety, billing, pause, or honest flagging. Manual model choice still wins. Do not start WF-03 from this rule.

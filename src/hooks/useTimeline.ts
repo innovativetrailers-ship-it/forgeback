@@ -1,6 +1,7 @@
 'use client'
 
 import { useEditorStore, type Clip, type TimelineRecipe, type Track } from '@/store/editor'
+import { useEditorRecipeView } from '@/lib/timeline/to-editor-recipe'
 import { useCallback } from 'react'
 import { nanoid } from 'nanoid'
 
@@ -43,7 +44,6 @@ const emptyClip = (
 
 export function useTimeline() {
   const {
-    timeline,
     selectedClipId,
     playheadTime,
     isPlaying,
@@ -60,6 +60,7 @@ export function useTimeline() {
     removeClip,
     reorderTracks,
   } = useEditorStore()
+  const timeline = useEditorRecipeView()
 
   const initTimeline = useCallback(
     (fps: number = 24, resolution: string = '1920x1080') => {

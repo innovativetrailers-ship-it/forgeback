@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { checkAndDeductCredits, refundOperationCredits } from '@/lib/credits'
 import { FilmDirector } from '@/lib/film/FilmDirector'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const director = new FilmDirector()
 
@@ -11,7 +12,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id: filmProjectId } = await params
@@ -35,6 +36,8 @@ export async function POST(
   try {
     await checkAndDeductCredits(userId, creditKey as Parameters<typeof checkAndDeductCredits>[1])
   } catch (err) {
+    console.warn("[caught] src/app/api/film/[id]/produce/route.ts:37", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -71,6 +74,8 @@ export async function POST(
         send({ status: 'complete', outputUrl })
         controller.close()
       } catch (err) {
+        console.warn("[caught] src/app/api/film/[id]/produce/route.ts:73", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         await refundOperationCredits(userId, creditKey)
         send({ status: 'error', error: err instanceof Error ? err.message : 'Production failed' })
         controller.close()

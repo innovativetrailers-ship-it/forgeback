@@ -1,5 +1,6 @@
 // Re-export canonical blending utilities from the swarm implementation.
 // New code should import from here; the swarm location is considered legacy.
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 export { SeamlessBlender } from '../swarm/SeamlessBlender'
 export type { BlendJob } from '../swarm/SeamlessBlender'
 
@@ -14,7 +15,7 @@ export async function blendMultiEngineClip(params: {
 }): Promise<{ blendedUrl: string }> {
   const results: SwarmResult[] = params.segments.map((seg) => ({
     shot_id: seg.segmentId,
-    model_used: (seg.engineId || 'wan_2_2') as ModelId,
+    model_used: (seg.engineId || refuseSilentModelSwap(seg.segmentId, 'wan_2_2')) as ModelId,
     output_url: seg.videoUrl,
     proxy_url: seg.videoUrl,
     generation_ms: 0,
@@ -48,7 +49,7 @@ export async function blendMultiEngineClip(params: {
     shot_type: 'MS' as Shot['shot_type'],
     camera_motion: 'static',
     mood: 'neutral',
-    assigned_model: (seg.engineId || 'wan_2_2') as ModelId,
+    assigned_model: (seg.engineId || refuseSilentModelSwap(seg.segmentId, 'wan_2_2')) as ModelId,
     estimated_cost_credits: 0,
     requires_post_lipsync: false,
     requires_face_enhance: false,

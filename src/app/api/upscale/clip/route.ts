@@ -5,15 +5,18 @@ import { upscaleClip } from '../../../../lib/upscale/clip'
 import { routeUpscaleEngine, engineCreditKey } from '../../../../lib/upscale/router'
 import type { UpscaleJob } from '../../../../lib/upscale/router'
 import { db } from '../../../../lib/db'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: { videoUrl: string; job: UpscaleJob; clipId?: string }
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/upscale/clip/route.ts:16", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -30,6 +33,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, creditKey)
   } catch (e) {
+    console.warn("[caught] src/app/api/upscale/clip/route.ts:32", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     return NextResponse.json({ error: (e as Error).message }, { status: 402 })
   }
 
@@ -38,6 +43,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ upscaledUrl, resolutionOut, clipId })
   } catch (e) {
+    console.warn("[caught] src/app/api/upscale/clip/route.ts:40", e instanceof Error ? { name: e.name, message: e.message } : e)
+
     await refundCredits(userId, OPERATION_COSTS[creditKey] ?? 0, 'Upscale clip failed')
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }

@@ -9,6 +9,7 @@ export function SignupStep1() {
   const { name, email, password, agreedToTerms, setField, setAgreedToTerms, setStep, setUserId } = useSignupStore()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
 
   const handleGoogleSignup = async () => {
     console.log('Google signup clicked!')
@@ -33,13 +34,15 @@ export function SignupStep1() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, dateOfBirth }),
       })
       const data = await res.json()
       if (!res.ok) { setError(typeof data.error === 'string' ? data.error : 'Registration failed'); return }
       setUserId(data.user?.id ?? data.userId)
       setStep(2)
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/components/auth/SignupStep1.tsx:42", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError('Network error, please try again')
     } finally {
       setLoading(false)
@@ -85,6 +88,15 @@ export function SignupStep1() {
           placeholder="Email"
           value={email}
           onChange={e => setField('email', e.target.value)}
+          required
+          className="w-full bg-[#1a1f2e] border border-[#2a3040] rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:border-[#00e5c8]/50 focus:outline-none"
+        />
+        <input
+          type="date"
+          name="dateOfBirth"
+          aria-label="Date of birth"
+          value={dateOfBirth}
+          onChange={e => setDateOfBirth(e.target.value)}
           required
           className="w-full bg-[#1a1f2e] border border-[#2a3040] rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-600 focus:border-[#00e5c8]/50 focus:outline-none"
         />

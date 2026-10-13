@@ -1,8 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+import { BRAIN_ROUTES, llmModelForTask, llmModelForTier, type BrainTask, type LlmTier } from '@cinema/core'
+import { claudeCall, claudeText, llmCall } from '@/lib/llm/anthropicClient'
 
 export type LLMModel =
+  | 'claude-opus'
   | 'claude-sonnet'
   | 'claude-haiku'
   | 'groq-llama'
@@ -10,19 +10,11 @@ export type LLMModel =
   | 'kimi-k2'
   | 'qwen-max'
 
-const OPENROUTER_IDS: Record<string, string> = {
-  'groq-llama': 'groq/llama-3.3-70b-versatile',
-  'xai-grok':   'x-ai/grok-3',
-  'kimi-k2':    'moonshotai/kimi-k2-0905',
-  'qwen-max':   'qwen/qwen3-7b-max',
-}
-
-interface FalOpenRouterResponse {
-  output?: {
-    choices?: Array<{
-      message?: { content?: string }
-    }>
-  }
+const ROUTER_TASK: Record<string, BrainTask> = {
+  'groq-llama': 'mechanical',
+  'xai-grok': 'character',
+  'kimi-k2': 'premise',
+  'qwen-max': 'asset',
 }
 
 export async function callLLM(params: {
@@ -30,50 +22,53 @@ export async function callLLM(params: {
   system?:    string
   messages:   Array<{ role: 'user' | 'assistant'; content: string }>
   maxTokens?: number
+  source?:    string
 }): Promise<{ content: string; model: string }> {
+  const source = params.source ?? 'llm:callLLM'
 
-  if (params.model === 'claude-sonnet' || params.model === 'claude-haiku') {
-    const modelId = params.model === 'claude-sonnet'
-      ? 'claude-sonnet-4-6'
-      : 'claude-haiku-4-5'
+  if (
+    params.model === 'claude-opus' ||
+    params.model === 'claude-sonnet' ||
+    params.model === 'claude-haiku'
+  ) {
+    const tier: LlmTier =
+      params.model === 'claude-opus' ? 'hard' :
+      params.model === 'claude-haiku' ? 'mechanical' :
+      'creative'
+    const modelId = llmModelForTier(tier)
 
-    const response = await anthropic.messages.create({
-      model:      modelId,
-      max_tokens: params.maxTokens ?? 1024,
-      system:     params.system,
-      messages:   params.messages,
-    })
+    const response = await claudeCall(
+      {
+        model:      modelId,
+        max_tokens: params.maxTokens ?? 1024,
+        system:     params.system,
+        messages:   params.messages,
+      },
+      { source, billableClass: 'background', tier },
+    )
 
-    const text = response.content
-      .filter(b => b.type === 'text')
-      .map(b => (b as Anthropic.TextBlock).text)
-      .join('')
+    const text = claudeText(response)
 
     return { content: text, model: modelId }
   }
 
-  const openrouterModel = OPENROUTER_IDS[params.model]
-  if (!openrouterModel) throw new Error(`Unknown LLM: ${params.model}`)
+  const task = ROUTER_TASK[params.model]
+  if (!task) throw new Error(`Unknown LLM: ${params.model}`)
+  const openrouterModel = params.model === 'xai-grok'
+    ? BRAIN_ROUTES.character.fallbacks[0]
+    : llmModelForTask(task).model
 
-  const result = await fetch('https://fal.run/openrouter/router', {
-    method:  'POST',
-    headers: {
-      Authorization:  `Key ${process.env.FAL_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      input: {
-        model:      openrouterModel,
-        messages:   params.system
-          ? [{ role: 'system', content: params.system }, ...params.messages]
-          : params.messages,
-        max_tokens: params.maxTokens ?? 1024,
-      },
-    }),
-  }).then(r => r.json()) as FalOpenRouterResponse
+  const result = await llmCall({
+    model: openrouterModel,
+    maxTokens: params.maxTokens ?? 1024,
+    source,
+    messages: params.system
+      ? [{ role: 'system', content: params.system }, ...params.messages]
+      : params.messages,
+  })
 
   return {
-    content: result.output?.choices?.[0]?.message?.content ?? '',
+    content: result.content,
     model:   openrouterModel,
   }
 }

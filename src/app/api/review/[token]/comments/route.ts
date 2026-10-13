@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { z } from 'zod'
+import { openReviewLink, reviewPinFrom } from '@/lib/review/gate'
 
 const commentSchema = z.object({
   text: z.string().min(1),
@@ -12,20 +13,23 @@ const commentSchema = z.object({
 })
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params
+  const opened = await openReviewLink(token, reviewPinFrom(req))
+  if (!opened.ok) return NextResponse.json({ error: opened.error }, { status: opened.status })
 
-  const link = await db.reviewLink.findUnique({ where: { token } })
-  if (!link) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const comments = await db.reviewComment.findMany({
-    where: { reviewLinkId: link.id },
-    orderBy: { createdAt: 'asc' },
+  return NextResponse.json({
+    comments: opened.link.comments.map((comment) => ({
+      id: comment.id,
+      authorName: comment.authorName,
+      timecode: comment.timecode,
+      text: comment.text,
+      resolved: comment.resolved,
+      createdAt: comment.createdAt.toISOString(),
+    })),
   })
-
-  return NextResponse.json({ comments })
 }
 
 export async function POST(
@@ -33,12 +37,9 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params
-
-  const link = await db.reviewLink.findUnique({ where: { token } })
-  if (!link) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (link.expiresAt && link.expiresAt < new Date()) {
-    return NextResponse.json({ error: 'Link expired' }, { status: 410 })
-  }
+  const opened = await openReviewLink(token, reviewPinFrom(req))
+  if (!opened.ok) return NextResponse.json({ error: opened.error }, { status: opened.status })
+  const link = opened.link
 
   const body = await req.json()
   const parsed = commentSchema.safeParse(body)
@@ -55,6 +56,9 @@ export async function POST(
       annotationData: (parsed.data.annotationData ?? null) as never,
     },
   })
+
+  const { broadcastCollab } = await import('@/lib/collab/hub')
+  broadcastCollab(link.projectId, { type: 'review_comment', comment, projectId: link.projectId })
 
   return NextResponse.json({ comment }, { status: 201 })
 }

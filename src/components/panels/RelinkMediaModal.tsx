@@ -31,7 +31,9 @@ export function RelinkMediaModal({ offlineMedia, onRelinked, onClose }: RelinkMe
         const { url } = JSON.parse(xhr.responseText) as { url: string }
         setRelinks((r) => ({ ...r, [offlinePath]: url }))
         setUploadProgress((p) => ({ ...p, [offlinePath]: 100 }))
-      } catch {
+      } catch (err) {
+        console.warn("[caught] src/components/panels/RelinkMediaModal.tsx:34", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         setUploadProgress((p) => ({ ...p, [offlinePath]: -1 }))
       }
     }

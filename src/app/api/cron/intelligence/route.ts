@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/requireUser'
 /**
  * Intelligence pipeline cron trigger.
  * Called by Vercel cron or an external scheduler.
@@ -8,12 +9,23 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { ModelUpdateWatcher, generateCrossModelComparisonReport, suggestRoutingMatrixUpdates } from '@/lib/intelligence/update-watcher'
+import { intelligenceProbesEnabled } from '@/lib/intelligence/guards'
 import { getIntelligenceQueueLength, pushIntelligenceSignal } from '@/lib/firewall/domain-guard'
 import { denyUnlessCron } from '@/lib/cron-guard'
 
 type CronMode = 'update_detection' | 'weekly_probes' | 'monthly_comparison' | 'queue_check' | 'all'
 
 export async function GET(req: NextRequest) {
+  if (!intelligenceProbesEnabled()) {
+    return NextResponse.json(
+      {
+        error:
+          'Intelligence cron disabled. Requires RUN_MODEL_EVAL=true, ALLOW_BILLABLE_EVAL=true, ENABLE_INTELLIGENCE_PROBES=true, NODE_ENV≠production, and GENERATION_PAUSED=false.',
+      },
+      { status: 403 },
+    )
+  }
+
   const denied = denyUnlessCron(req)
   if (denied) return denied
 
@@ -30,8 +42,14 @@ export async function GET(req: NextRequest) {
       log.push(`Detected ${updates.length} model update(s)`)
 
       for (const update of updates) {
-        await watcher.handleUpdate(update)
-        log.push(`Handled update: ${update.model_id} ${update.previous_version} → ${update.new_version}`)
+        if (intelligenceProbesEnabled()) {
+          await watcher.handleUpdate(update)
+          log.push(`Handled update: ${update.model_id} ${update.previous_version} → ${update.new_version}`)
+        } else {
+          log.push(
+            `Detected update (probes skipped): ${update.model_id} ${update.previous_version} → ${update.new_version}`,
+          )
+        }
       }
     }
 
@@ -63,6 +81,8 @@ export async function GET(req: NextRequest) {
       log,
     })
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/cron/intelligence/route.ts:82", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Intelligence cron failed'
     return NextResponse.json({ error: msg, log }, { status: 500 })
   }
@@ -70,7 +90,7 @@ export async function GET(req: NextRequest) {
 
 // Also accept POST for manual admin triggers
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   const auth = req.headers.get('authorization')
   const isWorker = auth === `Bearer ${process.env.CRON_SECRET}`
   if (!isWorker && !userId) {
@@ -80,7 +100,9 @@ export async function POST(req: NextRequest) {
   let body: { mode?: CronMode }
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/cron/intelligence/route.ts:100", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     body = {}
   }
 

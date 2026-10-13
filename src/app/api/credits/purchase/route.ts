@@ -1,57 +1,74 @@
+import { CREDIT_PACKS } from '@cinema/core'
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const getStripe = () => new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-04-22.dahlia',
 })
 
-const CREDIT_PACKS = [
-  { credits: 100, price: 500, label: '100 Credits' },
-  { credits: 500, price: 2000, label: '500 Credits' },
-  { credits: 2000, price: 6500, label: '2,000 Credits' },
-  { credits: 10000, price: 25000, label: '10,000 Credits' },
-]
-
 export async function GET() {
   return NextResponse.json({ packs: CREDIT_PACKS })
 }
 
-export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { packIndex } = await request.json()
-  const pack = CREDIT_PACKS[packIndex]
+  // Guard — Stripe not configured: return 503 instead of crashing with 500
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return NextResponse.json(
+      { error: 'Payments not configured. Add Stripe keys to Vercel environment variables.' },
+      { status: 503 },
+    )
+  }
 
+  let body: Record<string, unknown>
+  try {
+    body = (await request.json()) as Record<string, unknown>
+  } catch (err) {
+    console.warn("[caught] src/app/api/credits/purchase/route.ts:36", err instanceof Error ? { name: err.name, message: err.message } : err)
+
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+
+  const packIndex = typeof body.packIndex === 'number' ? body.packIndex : -1
+  const pack = CREDIT_PACKS[packIndex]
   if (!pack) {
     return NextResponse.json({ error: 'Invalid pack' }, { status: 400 })
   }
 
-  const session = await getStripe().checkout.sessions.create({
-    payment_method_types: ['card'],
-    line_items: [
-      {
-        price_data: {
-          currency: 'usd',
-          product_data: {
-            name: `CINÉMA — ${pack.label}`,
-            description: `${pack.credits} credits for CINÉMA AI video production`,
+  try {
+    const session = await getStripe().checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'aud',
+            product_data: {
+              name: `CINÉMA — ${pack.label}`,
+              description: `${pack.credits} credits for CINÉMA AI video production`,
+            },
+            unit_amount: pack.priceAudCents,
           },
-          unit_amount: pack.price,
+          quantity: 1,
         },
-        quantity: 1,
+      ],
+      mode: 'payment',
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/simple?purchase=success`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/simple?purchase=cancelled`,
+      metadata: {
+        userId,
+        credits: pack.credits.toString(),
       },
-    ],
-    mode: 'payment',
-    success_url: `${process.env.NEXT_PUBLIC_APP_URL}/simple?purchase=success`,
-    cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/simple?purchase=cancelled`,
-    metadata: {
-      userId,
-      credits: pack.credits.toString(),
-    },
-  })
+    })
 
-  return NextResponse.json({ url: session.url })
+    return NextResponse.json({ url: session.url })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Stripe checkout session creation failed'
+    console.error('[credits/purchase]', message)
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
 }

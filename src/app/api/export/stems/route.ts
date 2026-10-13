@@ -3,11 +3,12 @@ import { auth }                       from '@/lib/auth'
 import { checkAndDeductCredits,
          refundCredits }              from '@/lib/credits'
 import { uploadToR2 }                from '@/lib/storage/r2'
-import { execSync }                  from 'child_process'
+import { runArgv } from '@/lib/shell/argv'
 import { mkdirSync, rmSync,
          readFileSync }              from 'fs'
 import { join }                      from 'path'
 import { randomUUID }                from 'crypto'
+import { requireUser } from '@/lib/auth/requireUser'
 
 interface StemBus {
   name:   'dialogue' | 'music' | 'sfx'
@@ -16,7 +17,7 @@ interface StemBus {
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId  = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId  = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { buses } = await req.json() as { buses: StemBus[] }
@@ -36,15 +37,12 @@ export async function POST(req: NextRequest) {
       const outFile = join(tmpDir, `${bus.name}.wav`)
 
       // Build amix filter for this bus
-      const inputs = bus.tracks.map(url => `-i "${url}"`).join(' ')
-      const filter = bus.tracks.length > 1
-        ? `-filter_complex "amix=inputs=${bus.tracks.length}[out]" -map "[out]"`
-        : `-map 0:a`
-
-      execSync(
-        `ffmpeg ${inputs} ${filter} -ar 48000 -sample_fmt s32 -acodec pcm_s24le "${outFile}" -y 2>/dev/null`,
-        { timeout: 120_000 },
-      )
+      const args = ['-y']
+      for (const url of bus.tracks) args.push('-i', url)
+      if (bus.tracks.length > 1) args.push('-filter_complex', `amix=inputs=${bus.tracks.length}[out]`, '-map', '[out]')
+      else args.push('-map', '0:a')
+      args.push('-ar', '48000', '-sample_fmt', 's32', '-acodec', 'pcm_s24le', outFile)
+      runArgv('ffmpeg', args)
 
       const buffer = readFileSync(outFile)
       const key    = `export/stems/${randomUUID()}-${bus.name}.wav`

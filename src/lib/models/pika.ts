@@ -1,21 +1,28 @@
-import { fal } from '../fal/client'
+import { fal, falSubscribeBound} from '../fal/client'
+const falSubscribe = falSubscribeBound('lib.models.pika')
+import { buildPayload } from '@/lib/fal/videoPayloads'
+import { resolvePikaEndpoint } from '@/lib/fal/pikaEndpoints'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
 export async function generateVideo(
   input: GenerateVideoInput
 ): Promise<GenerateVideoOutput> {
-  const endpoint = 'fal-ai/pika'
+  const isI2V = Boolean(input.startFrameUrl)
+  const model = resolvePikaEndpoint(isI2V)
+
+  const falInput = await buildPayload(model, 'pika-2.5', {
+    prompt: input.prompt,
+    duration: input.duration ?? 5,
+    aspectRatio: input.aspectRatio ?? '16:9',
+    imageUrl: input.startFrameUrl,
+    negativePrompt: input.negativePrompt,
+    quality: input.quality,
+  })
+  if (input.seed !== undefined) falInput.seed = input.seed
 
   try {
-    const result = await fal.subscribe(endpoint, {
-      input: {
-        prompt: input.prompt,
-        ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
-        ...(input.startFrameUrl && { image_url: input.startFrameUrl }),
-        aspect_ratio: input.aspectRatio,
-        duration: Math.min(input.duration, 10),
-        ...(input.seed !== undefined && { seed: input.seed }),
-      },
+    const result = await falSubscribe(model, {
+      input: falInput,
       pollInterval: 3000,
     }) as unknown as { video: { url: string } }
 
@@ -25,6 +32,8 @@ export async function generateVideo(
       videoUrl: result.video.url,
     }
   } catch (err) {
+    console.warn("[caught] src/lib/models/pika.ts:34", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return {
       jobId: 'fal-' + Date.now(),
       status: 'failed',
@@ -36,7 +45,5 @@ export async function generateVideo(
 export async function pollStatus(
   externalJobId: string
 ): Promise<GenerateVideoOutput> {
-  // Since we use fal.subscribe which waits for completion,
-  // this is mostly a fallback if we switched to async queues.
   return { jobId: externalJobId, status: 'processing' }
 }

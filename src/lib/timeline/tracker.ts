@@ -1,7 +1,6 @@
-import { fal } from '../fal/client'
+import { runArgv } from '../shell/argv'
 import { uploadToR2 } from '../storage/r2'
-import { execSync } from 'child_process'
-import { existsSync, mkdirSync, rmSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 
@@ -22,39 +21,24 @@ export async function trackPlanarRegion(params: {
   videoUrl: string
   regionOfInterest: { x: number; y: number; width: number; height: number }
   trackingMethod: 'translation' | 'affine' | 'perspective'
-}): Promise<{ trackData: TrackData }> {
-  const { videoUrl, regionOfInterest: roi, trackingMethod } = params
-
-  // Use fal.ai CoTracker for robust point tracking
-  const result = await fal.subscribe('fal-ai/cotracker', {
-    input: {
-      video_url: videoUrl,
-      points: [
-        [roi.x, roi.y],
-        [roi.x + roi.width, roi.y],
-        [roi.x + roi.width, roi.y + roi.height],
-        [roi.x, roi.y + roi.height],
-      ],
-      tracking_method: trackingMethod,
-    },
-  }) as unknown as {
-    tracks: Array<{
-      frame: number
-      points: Array<[number, number]>
-      confidences: number[]
-    }>
+}): Promise<{ trackData: TrackData; held: true }> {
+  void params.videoUrl
+  void params.trackingMethod
+  const { x, y, width, height } = params.regionOfInterest
+  console.warn('[planar] point tracker is not on the gateway (OpenAPI 404). Holding the selected region. Nothing submitted.')
+  const corners: [Point, Point, Point, Point] = [
+    { x, y },
+    { x: x + width, y },
+    { x: x + width, y: y + height },
+    { x, y: y + height },
+  ]
+  return {
+    held: true,
+    trackData: [
+      { frame: 0, corners, confidence: 1 },
+      { frame: 30 * 60, corners, confidence: 1 },
+    ],
   }
-
-  const trackData: TrackData = result.tracks.map((t) => ({
-    frame: t.frame,
-    corners: t.points.map((p, i) => ({
-      x: p[0],
-      y: p[1],
-    })) as [Point, Point, Point, Point],
-    confidence: Math.min(...t.confidences),
-  }))
-
-  return { trackData }
 }
 
 export async function replaceTrackedSurface(params: {
@@ -73,7 +57,7 @@ export async function replaceTrackedSurface(params: {
 
   try {
     // Extract frames
-    execSync(`ffmpeg -i "${videoUrl}" "${framesDir}/frame%06d.png" -y 2>/dev/null`)
+    runArgv("ffmpeg", ["-i", videoUrl, `${framesDir}/frame%06d.png`, "-y"])
 
     // Download replacement image
     const replBuf = Buffer.from(await (await fetch(replacementImageUrl)).arrayBuffer())
@@ -93,9 +77,7 @@ export async function replaceTrackedSurface(params: {
       const srcPoints = `0:0:100:0:100:100:0:100`
       const dstPoints = `${tl.x}:${tl.y}:${tr.x}:${tr.y}:${br.x}:${br.y}:${bl.x}:${bl.y}`
 
-      execSync(
-        `ffmpeg -i "${framePath}" -i "${replPath}" -filter_complex "[1:v]perspective=x0=${tl.x}:y0=${tl.y}:x1=${tr.x}:y1=${tr.y}:x2=${bl.x}:y2=${bl.y}:x3=${br.x}:y3=${br.y}[warped];[0:v][warped]overlay=x=0:y=0" "${outFramePath}" -y 2>/dev/null`
-      )
+      runArgv('ffmpeg', ['-i', framePath, '-i', replPath, '-filter_complex', `[1:v]perspective=x0=${tl.x}:y0=${tl.y}:x1=${tr.x}:y1=${tr.y}:x2=${bl.x}:y2=${bl.y}:x3=${br.x}:y3=${br.y}[warped];[0:v][warped]overlay=x=0:y=0`, outFramePath, '-y'])
 
       void srcPoints
       void dstPoints
@@ -103,15 +85,15 @@ export async function replaceTrackedSurface(params: {
     }
 
     // Copy any frames not in trackData
-    execSync(`cp "${framesDir}"/*.png "${outputDir}"/ 2>/dev/null || true`)
+    for (const name of readdirSync(framesDir)) {
+      if (name.endsWith('.png') && !existsSync(join(outputDir, name))) copyFileSync(join(framesDir, name), join(outputDir, name))
+    }
 
     // Reassemble video
     const outputPath = join(tmpDir, 'composited.mp4')
-    execSync(
-      `ffmpeg -framerate 24 -i "${outputDir}/frame%06d.png" -i "${videoUrl}" -map 0:v -map 1:a? -c:v libx264 -crf 18 -c:a copy "${outputPath}" -y 2>/dev/null`
-    )
+    runArgv("ffmpeg", ["-framerate", "24", "-i", `${outputDir}/frame%06d.png`, "-i", videoUrl, "-map", "0:v", "-map", "1:a?", "-c:v", "libx264", "-crf", "18", "-c:a", "copy", outputPath, "-y"])
 
-    const buffer = execSync(`cat "${outputPath}"`)
+    const buffer = readFileSync(outputPath)
     const compositedUrl = await uploadToR2(buffer, `surface-replace/${jobId}.mp4`, 'video/mp4')
     return { compositedUrl }
   } finally {

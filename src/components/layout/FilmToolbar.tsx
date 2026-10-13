@@ -1,6 +1,7 @@
 'use client'
 
 import { useUIStore, type FilmToolbarTab, type PanelId, type RightPanelId } from '@/store/ui'
+import type { WorkspaceName } from '@/lib/editor/foundation'
 
 const FILM_TABS: Array<{ id: FilmToolbarTab; label: string }> = [
   { id: 'script',      label: 'Script' },
@@ -35,9 +36,21 @@ const RIGHT_PANEL_MAP: Partial<Record<FilmToolbarTab, RightPanelId>> = {
 }
 
 export function FilmToolbar() {
-  const { activeFilmTab, setActiveFilmTab, setActivePanel, setActiveRightPanel } = useUIStore()
+  const { activeFilmTab, setActiveFilmTab, setActivePanel, setActiveRightPanel, setWorkspace } = useUIStore()
 
   const handleTabClick = (tab: FilmToolbarTab) => {
+    const workspaceFor: Partial<Record<FilmToolbarTab, WorkspaceName>> = {
+      colour: 'Colour',
+      vfx_mix: 'Compositor',
+      audio_mix: 'Audio',
+      greenscreen: 'Look-dev',
+      sfx_makeup: 'Look-dev',
+    }
+    if (workspaceFor[tab]) {
+      setWorkspace(workspaceFor[tab]!, tab === 'greenscreen' ? 'greenscreen' : tab === 'sfx_makeup' ? 'makeup' : undefined)
+      setActiveFilmTab(tab)
+      return
+    }
     const next = activeFilmTab === tab ? null : tab
     setActiveFilmTab(next)
     if (next && LEFT_PANEL_MAP[next]) setActivePanel(LEFT_PANEL_MAP[next]!)

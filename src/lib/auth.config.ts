@@ -1,31 +1,26 @@
+// Edge Runtime-compatible auth config (no Prisma adapter, no db import)
 import type { NextAuthConfig } from 'next-auth'
-import Google from 'next-auth/providers/google'
+import { authSecret } from './auth/requiredEnv'
 
-/**
- * Edge-compatible auth config — no Prisma, no bcrypt, no Node.js-only modules.
- * Used by middleware (which runs on the Edge Runtime).
- * Full config with PrismaAdapter + Credentials is in auth.ts.
- */
-export const authConfig: NextAuthConfig = {
-  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
-  pages: { signIn: '/login' },
+export const authConfig = {
+  secret:  authSecret(),
+  session: { strategy: 'jwt' as const },
+  pages:   { signIn: '/login' },
   trustHost: true,
-  providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-    }),
-  ],
+  providers: [],   // providers not needed for middleware JWT reading
   callbacks: {
-    jwt({ token, user }) {
-      if (user?.id) token.id = user.id
-      if ((user as { role?: string })?.role) token.role = (user as { role?: string }).role
-      return token
+    authorized({ auth }) {
+      // Allow all requests; individual routes enforce their own auth
+      return true
     },
     session({ session, token }) {
-      if (token.id) session.user.id = token.id as string
-      if (token.role) (session.user as { role?: string }).role = token.role as string
+      if (token && session.user) {
+        session.user.id = (token.id ?? token.sub) as string
+        ;(session.user as any).role               = token.role ?? 'FREE'
+        ;(session.user as any).creditBalance      = token.creditBalance ?? 0
+        ;(session.user as any).subscriptionStatus = token.subscriptionStatus ?? 'trial'
+      }
       return session
     },
   },
-}
+} satisfies NextAuthConfig

@@ -22,7 +22,10 @@ async function downloadToTemp(url: string): Promise<string> {
         return
       }
       const writer = createWriteStream(tempPath)
-      pipeline(res, writer).then(resolve).catch(reject)
+      pipeline(res, writer).then(resolve).catch((err) => {
+        console.warn("[caught] src/lib/audio/beats.ts:25", err instanceof Error ? { name: err.name, message: err.message } : err)
+        reject(err)
+      })
     }).on('error', reject)
   })
 
@@ -65,7 +68,9 @@ export async function detectBeats(audioUrl: string): Promise<BeatAnalysis> {
     const downbeats = beats.filter((_, i) => i % 4 === 0)
 
     return { beats, bpm, downbeats }
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/lib/audio/beats.ts:68", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     // Fallback: return estimated beats at 120 BPM
     const bpm = 120
     const beatInterval = 60 / bpm
@@ -73,7 +78,9 @@ export async function detectBeats(audioUrl: string): Promise<BeatAnalysis> {
     return { beats, bpm, downbeats: beats.filter((_, i) => i % 4 === 0) }
   } finally {
     if (tempPath) {
-      try { unlinkSync(tempPath) } catch { /* ignore */ }
+      try { unlinkSync(tempPath) } catch (err) {
+        console.warn("[caught] src/lib/audio/beats.ts:76", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* ignore */ }
     }
   }
 }

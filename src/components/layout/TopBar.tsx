@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { useCredits } from '@/hooks/useCredits'
-import { useStudioStore, type AppMode, type OutcomeTier } from '@/store/editor'
+import { useUserTier } from '@/hooks/useUserTier'
+import { useStudioStore, useEditorStore, type AppMode, type OutcomeTier } from '@/store/editor'
 import { useUIStore, type FilmToolbarTab, type EditTool } from '@/store/ui'
 import { CreditPurchaseModal } from '@/components/ui/CreditPurchaseModal'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -14,13 +15,39 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { JobProgressBadge } from '@/components/ui/JobProgressBadge'
+import { BrandLogo } from '@/components/brand/BrandLogo'
 import { cn } from '@/lib/utils'
+import { TIER_POLICY } from '@/lib/orchestration/tierPolicy'
+import { usePlaybackStore } from '@/store/playbackStore'
 import {
   Hexagon, LogOut, Settings, CreditCard, Loader2, Share2,
   Download, Undo2, Redo2, ZoomIn, ZoomOut, Maximize2,
   MousePointer2, Scissors, Paintbrush, Wind, Type,
-  Save, AlertCircle,
+  Save, AlertCircle, Monitor, Lock,
 } from 'lucide-react'
+
+// Forge Extreme (V3 desktop) — always links to /download (page handles tier gating).
+function ForgeExtremeButton() {
+  const { canDownload } = useUserTier()
+
+  return (
+    <Link
+      href="/download"
+      className={cn(
+        'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide transition-all border',
+        canDownload
+          ? 'bg-gradient-to-r from-[#00e5c8] to-[#00b8a0] text-black hover:from-[#00f0d5] hover:to-[#00c8ae] border-[#00e5c8]/30'
+          : 'border-white/15 text-white/60 hover:border-[#00e5c8]/40 hover:text-white/80',
+      )}
+    >
+      <Monitor className="w-3.5 h-3.5" />
+      Download
+      {canDownload
+        ? <Download className="w-3 h-3 opacity-70" />
+        : <Lock className="w-3 h-3 opacity-50" />}
+    </Link>
+  )
+}
 
 // ── Mode switcher ────────────────────────────────────────────
 const MODES: Array<{ label: string; href: string; mode: AppMode }> = [
@@ -29,19 +56,33 @@ const MODES: Array<{ label: string; href: string; mode: AppMode }> = [
   { label: 'Ultimate', href: '/ultimate', mode: 'ultimate' },
 ]
 
+const APP_NAV: Array<{ label: string; href: string; mode?: AppMode }> = [
+  ...MODES,
+  { label: 'Download', href: '/download' },
+]
+
 const TIERS: Array<{ label: string; value: OutcomeTier }> = [
   { label: 'Draft',       value: 'Draft' },
   { label: 'Studio',      value: 'Studio' },
   { label: 'Blockbuster', value: 'Blockbuster' },
 ]
 
-const FILM_TABS: Array<{ id: FilmToolbarTab; label: string }> = [
-  { id: 'script',      label: 'Script' },
-  { id: 'storyboard',  label: 'Storyboard' },
-  { id: 'ai_director', label: 'AI Director' },
-  { id: 'continuity',  label: 'Continuity' },
-  { id: 'cast',        label: 'Cast' },
-  { id: 'locations',   label: 'Locations' },
+const WORKSPACE_TABS: Array<{ key: string; id: FilmToolbarTab; label: string; workspace: import('@/lib/editor/foundation').WorkspaceName; look?: 'makeup' | 'greenscreen' | 'location'; divider?: boolean }> = [
+  { key: 'script', id: 'script', label: 'Script', workspace: 'Creator' },
+  { key: 'storyboard', id: 'storyboard', label: 'Storyboard', workspace: 'Director' },
+  { key: 'director', id: 'ai_director', label: 'AI Director', workspace: 'Director' },
+  { key: 'continuity', id: 'continuity', label: 'Continuity', workspace: 'Director' },
+  { key: 'cast', id: 'cast', label: 'Cast', workspace: 'Creator' },
+  { key: 'locations', id: 'locations', label: 'Locations', workspace: 'Look-dev', look: 'location' },
+  { key: 'edit', id: 'edit', label: 'Edit', workspace: 'Editor', divider: true },
+  { key: 'colour', id: 'colour', label: 'Colour Grade', workspace: 'Colour', divider: true },
+  { key: 'vfx', id: 'vfx_mix', label: 'VFX Mix', workspace: 'Compositor' },
+  { key: 'audio', id: 'audio_mix', label: 'Audio Mix', workspace: 'Audio' },
+  { key: 'green', id: 'greenscreen', label: 'Green Screen', workspace: 'Look-dev', look: 'greenscreen' },
+  { key: 'makeup', id: 'sfx_makeup', label: 'SFX Makeup', workspace: 'Look-dev', look: 'makeup' },
+  { key: 'cgi', id: 'cgi', label: 'CGI', workspace: 'Compositor' },
+  { key: 'motion', id: 'motion', label: 'Motion & Camera', workspace: 'Motion' },
+  { key: 'review', id: 'review', label: 'Review', workspace: 'Review', divider: true },
 ]
 
 // Maps film toolbar tabs → left panel IDs
@@ -72,11 +113,11 @@ export function TopBar() {
   const pathname = usePathname()
   const router = useRouter()
   const { data: session, status } = useSession()
-  const { balance, isLoading: creditsLoading } = useCredits()
+  const { balance, isAdmin, unlimited, isLoading: creditsLoading } = useCredits()
   const [purchaseOpen, setPurchaseOpen] = useState(false)
 
   const { mode, setMode, activeTier, setTier, zoom, setZoom, isPlaying, setIsPlaying } = useStudioStore()
-  const { filmToolbarTab, setFilmToolbarTab, editTool, setEditTool, projectName, setProjectName, autoSaveStatus, setActivePanel, addToast } = useUIStore()
+  const { filmToolbarTab, setFilmToolbarTab, editTool, setEditTool, projectName, setProjectName, autoSaveStatus, setActivePanel, addToast, workspace, setWorkspace, lookDev } = useUIStore()
 
   const isAdvancedOrUltimate = mode === 'advanced' || mode === 'ultimate'
   const isUltimate = mode === 'ultimate'
@@ -105,9 +146,70 @@ export function TopBar() {
   // Global keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-    const map: Record<string, EditTool> = { v: 'select', c: 'razor', r: 'repaint', m: 'motion_brush', t: 'text' }
-    if (map[e.key.toLowerCase()]) { activateTool(map[e.key.toLowerCase() as keyof typeof map]); return }
-    if (e.code === 'Space') { e.preventDefault(); setIsPlaying(!isPlaying) }
+
+    const meta = e.metaKey || e.ctrlKey
+    const key  = e.key.toLowerCase()
+
+    // ── Tool shortcuts ──────────────────────────────────────────
+    const toolMap: Record<string, EditTool> = {
+      v: 'select', c: 'razor', r: 'repaint', m: 'motion_brush', t: 'text',
+    }
+    if (!meta && toolMap[key]) { activateTool(toolMap[key]); return }
+
+    // ── Playback ────────────────────────────────────────────────
+    if (e.code === 'Space') { e.preventDefault(); setIsPlaying(!isPlaying); return }
+
+    // ── Undo / Redo ─────────────────────────────────────────────
+    if (meta && key === 'z' && !e.shiftKey) {
+      e.preventDefault()
+      usePlaybackStore.getState().undo()
+      return
+    }
+    if (meta && (key === 'y' || (key === 'z' && e.shiftKey))) {
+      e.preventDefault()
+      usePlaybackStore.getState().redo()
+      return
+    }
+
+    // ── Save ────────────────────────────────────────────────────
+    if (meta && key === 's') {
+      e.preventDefault()
+      window.dispatchEvent(new CustomEvent('editor:save'))
+      return
+    }
+
+    // ── Delete selected clip ────────────────────────────────────
+    if (key === 'delete' || key === 'backspace') {
+      const { selectedClipId: cid, removeClip } = useEditorStore.getState()
+      if (cid) { e.preventDefault(); removeClip(cid) }
+      return
+    }
+
+    // ── Nudge playhead (arrow keys, 1-frame ≈ 1/24s) ───────────
+    if (key === 'arrowleft' && !meta) {
+      e.preventDefault()
+      const { playheadTime, setPlayheadTime } = useEditorStore.getState()
+      setPlayheadTime(Math.max(0, playheadTime - (e.shiftKey ? 1 : 1 / 24)))
+      return
+    }
+    if (key === 'arrowright' && !meta) {
+      e.preventDefault()
+      const { playheadTime, setPlayheadTime } = useEditorStore.getState()
+      setPlayheadTime(playheadTime + (e.shiftKey ? 1 : 1 / 24))
+      return
+    }
+
+    // ── JKL playback controls (editing keyboard standard) ───────
+    if (key === 'j') { e.preventDefault(); setIsPlaying(false); return }
+    if (key === 'k') { e.preventDefault(); setIsPlaying(false); return }
+    if (key === 'l') { e.preventDefault(); setIsPlaying(true);  return }
+
+    // ── Generate shortcut (Cmd/Ctrl + G) ────────────────────────
+    if (meta && key === 'g') {
+      e.preventDefault()
+      useUIStore.getState().setActivePanel('generate')
+      return
+    }
   }, [isPlaying, setIsPlaying, activateTool])
 
   useEffect(() => {
@@ -126,9 +228,7 @@ export function TopBar() {
       <div className="flex items-center gap-3 px-3 h-[42px] border-b border-[var(--border)] bg-[var(--bg-elevated)]">
         {/* Logo + project name */}
         <div className="flex items-center gap-2 shrink-0">
-          <Link href="/simple" className="text-sm font-bold tracking-[0.18em] text-[var(--teal-bright)] hover:opacity-80 transition-opacity">
-            CINÉMA
-          </Link>
+          <BrandLogo href="/simple" size={28} wordmark="CINÉMA" />
           <span className="text-[var(--text-tertiary)]">·</span>
           <input
             value={projectName}
@@ -139,13 +239,13 @@ export function TopBar() {
 
         {/* Mode switcher + tier */}
         <nav className="flex items-center gap-0.5 flex-1 justify-center">
-          {MODES.map((m) => {
-            const active = mode === m.mode
+          {APP_NAV.map((m) => {
+            const active = m.mode ? mode === m.mode : pathname.startsWith(m.href)
             return (
               <Link
                 key={m.href}
                 href={m.href}
-                onClick={() => setMode(m.mode)}
+                onClick={() => { if (m.mode) setMode(m.mode) }}
                 className={cn(
                   'relative px-4 py-1 rounded-md text-xs font-medium transition-all',
                   active
@@ -164,6 +264,7 @@ export function TopBar() {
                 <button
                   key={t.value}
                   onClick={() => setTier(t.value)}
+                  title={TIER_POLICY[t.value].label}
                   className={cn(
                     'px-3 py-1 rounded-md text-xs font-medium transition-all',
                     activeTier === t.value
@@ -174,6 +275,9 @@ export function TopBar() {
                   {t.label}
                 </button>
               ))}
+              <span className="ml-2 max-w-[16rem] truncate text-[10px] text-[var(--text-tertiary)]" title={TIER_POLICY[activeTier].label}>
+                {TIER_POLICY[activeTier].label}
+              </span>
             </div>
           )}
         </nav>
@@ -190,7 +294,9 @@ export function TopBar() {
               <Hexagon className="w-3 h-3 text-[var(--teal-bright)]" />
               {creditsLoading
                 ? <Loader2 className="w-3 h-3 animate-spin text-[var(--teal-bright)]" />
-                : <span className="text-[11px] font-semibold text-[var(--teal-bright)] tabular-nums">{balance.toLocaleString()}</span>
+                : (isAdmin || unlimited)
+                  ? <span className="text-[10px] font-semibold text-[var(--teal-bright)]">DEV</span>
+                  : <span className={`text-[11px] font-semibold tabular-nums ${balance < 50 ? 'text-amber-400' : 'text-[var(--teal-bright)]'}`}>{balance.toLocaleString()}</span>
               }
             </button>
           )}
@@ -211,6 +317,8 @@ export function TopBar() {
             <Download size={12} />
             Export Film
           </button>
+
+          <ForgeExtremeButton />
 
           {status === 'authenticated' && user ? (
             <DropdownMenu>
@@ -235,7 +343,16 @@ export function TopBar() {
                 <DropdownMenuItem onClick={() => setPurchaseOpen(true)} className="gap-2 text-[12px] cursor-pointer text-[var(--text-secondary)]">
                   <CreditCard className="w-3.5 h-3.5" /> Buy credits
                 </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-[12px] cursor-pointer text-[var(--text-secondary)]">
+                <DropdownMenuItem
+                  onClick={() => router.push('/download')}
+                  className="gap-2 text-[12px] cursor-pointer text-[var(--text-secondary)]"
+                >
+                  <Download className="w-3.5 h-3.5" /> Forge Extreme Download
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setActivePanel('settings')}
+                  className="gap-2 text-[12px] cursor-pointer text-[var(--text-secondary)]"
+                >
                   <Settings className="w-3.5 h-3.5" /> Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-[var(--border)]" />
@@ -255,36 +372,48 @@ export function TopBar() {
 
       {/* ── ROW 2 — Film toolbar (Ultimate only, 34px) ── */}
       {isUltimate && (
-        <div className="flex items-center gap-1 px-3 h-[34px] border-b border-[var(--border)] bg-[var(--bg-elevated)]">
-          <span className="text-[9px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider mr-2">Film</span>
-          {FILM_TABS.map((tab) => (
+        <div className="flex items-center gap-1 px-3 h-[34px] border-b border-[var(--border)] bg-[var(--bg-elevated)] overflow-x-auto">
+          {WORKSPACE_TABS.map((tab) => (
             <button
-              key={tab.id}
+              key={tab.key}
+              title={tab.label}
               onClick={() => {
-                const next = filmToolbarTab === tab.id ? null : tab.id
-                setFilmToolbarTab(next)
-                const panel = next ? FILM_TAB_TO_PANEL[next] : undefined
-                if (panel) setActivePanel(panel)
+                setWorkspace(tab.workspace, tab.look)
+                setFilmToolbarTab(tab.id)
+                const panel = FILM_TAB_TO_PANEL[tab.id]
+                if (panel && (tab.workspace === 'Creator' || tab.workspace === 'Director')) setActivePanel(panel)
+                else setActivePanel(null)
               }}
               className={cn(
-                'px-3 py-1 rounded text-[11px] font-medium transition-all',
-                filmToolbarTab === tab.id
-                  ? 'bg-[var(--teal-glow)] border border-[var(--teal-border)] text-[var(--teal-bright)]'
-                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                'shrink-0 px-2 py-1 rounded text-[11px] font-medium',
+                (() => {
+                  if (workspace !== tab.workspace) return false
+                  if (tab.look && lookDev !== tab.look) return false
+                  const twins = WORKSPACE_TABS.filter((other) => other.workspace === tab.workspace && other.look === tab.look)
+                  return twins.length < 2 || filmToolbarTab === tab.id
+                })()
+                  ? 'bg-[var(--teal-glow)] text-[var(--teal-bright)]'
+                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]',
+                tab.divider && 'ml-2 border-l border-[var(--border)] pl-2'
               )}
             >
               {tab.label}
             </button>
           ))}
+          <div className="ml-auto flex items-center gap-0.5">
+            {(workspace === 'Editor' || workspace === 'Creator') && EDIT_TOOLS.map((tool) => (
+              <button key={tool.id} type="button" title={`${tool.label} (${tool.key})`} onClick={() => activateTool(tool.id)} className="px-1 text-[10px] text-[var(--text-tertiary)]">{tool.label}</button>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* ── ROW 3 — Edit toolbar (Advanced + Ultimate, 30px) ── */}
-      {isAdvancedOrUltimate && (
+      {/* Edit tools sit on the film row in Ultimate. This row is only the advanced editor. */}
+      {isAdvancedOrUltimate && !isUltimate && (
         <div className="flex items-center gap-1 px-3 h-[30px] border-b border-[var(--border)] bg-[var(--bg-elevated)]">
           {/* Edit tools */}
           <div className="flex items-center gap-0.5">
-          {EDIT_TOOLS.map((tool) => (
+          {(workspace === 'Editor' || workspace === 'Creator') && EDIT_TOOLS.map((tool) => (
                 <button
                   key={tool.id}
                   title={`${tool.label} (${tool.key})`}
@@ -305,10 +434,10 @@ export function TopBar() {
           <div className="w-px h-4 bg-[var(--border)] mx-1.5" />
 
           {/* Undo/Redo */}
-          <button title="Undo (Cmd+Z)" className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
+          <button type="button" title="Undo (Cmd+Z)" onClick={() => usePlaybackStore.getState().undo()} className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
             <Undo2 size={12} />
           </button>
-          <button title="Redo (Cmd+Shift+Z)" className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
+          <button type="button" title="Redo (Cmd+Shift+Z)" onClick={() => usePlaybackStore.getState().redo()} className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors">
             <Redo2 size={12} />
           </button>
 

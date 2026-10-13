@@ -1,9 +1,8 @@
 /**
- * Worker entry point — imports all background workers.
- * Run with: tsx src/workers/index.ts
+ * The render queue has one consumer: `npm run worker:render`
+ * (`src/lib/queue/workers/render.worker.ts`).
+ * This file used to start a second Worker on the same queue, which marked
+ * jobs complete without rendering. It must not start another one.
  */
-import './training-pipeline'
-import './distillation'
-import './das-pull'
-import './intelligence-cron'
-// quality-gate is triggered on-demand by the training cluster, not on a timer
+console.error('[workers] Refusing to start a second render consumer. Use npm run worker:render.')
+process.exit(1)

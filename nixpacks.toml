@@ -4,10 +4,13 @@
 # this file's Python entries become redundant but harmless.
 
 [phases.setup]
-nixPkgs = ["nodejs_20", "python311", "ffmpeg"]
+nixPkgs = ["nodejs_22", "python311", "python311Packages.pip", "ffmpeg"]
 
 [phases.install]
 cmds = [
   "npm ci",
-  "pip install -r src/services/requirements.txt",
+  # `pip` bare command is not on PATH under nix python; use the module form.
+  # `|| true` keeps Node worker builds green even if the Python deps step fails —
+  # only the py-* services actually need these packages at runtime.
+  "python3 -m pip install --break-system-packages --no-cache-dir -r src/services/requirements.txt || true",
 ]

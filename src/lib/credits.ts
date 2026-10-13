@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MODEL_COSTS, TIER_ENGINE_MAP } from './routing/engineRegistry'
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
+// deductUserCredits is the single source of truth for credit deduction.
+// deductCredits below is kept for backward compatibility and additionally performs Stripe sync.
+export { deductUserCredits } from '@/lib/access/guard'
 
 export class CreditError extends Error {
   constructor(message: string) {
@@ -8,17 +12,72 @@ export class CreditError extends Error {
   }
 }
 
-export function calculateGenerationCost(model: string, durationSeconds: number): number {
-  const ratePerFiveSeconds = MODEL_COSTS[model]
-  if (!ratePerFiveSeconds) {
-    console.warn(`[credits] Unknown model "${model}", defaulting to ltx-2.3-fast`)
-    return Math.ceil((MODEL_COSTS['ltx-2.3-fast'] / 5) * durationSeconds)
+export class MissingPriceError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MissingPriceError'
   }
-  return Math.ceil((ratePerFiveSeconds / 5) * durationSeconds)
+}
+
+function asPositive(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n) || n <= 0) return null
+  return n
+}
+
+/** Duration used for both the displayed estimate and the credit hold. */
+export function resolveListedDurations(
+  shots: Array<{ duration?: unknown; startSeconds?: unknown; endSeconds?: unknown }>,
+  filmSeconds?: number,
+): number[] {
+  const own = shots.map((shot) =>
+    asPositive(shot.duration) ?? asPositive(Number(shot.endSeconds) - Number(shot.startSeconds)),
+  )
+  const film = asPositive(filmSeconds)
+  const missing = own.filter((n) => n == null).length
+  const share = missing > 0 && missing === shots.length && film != null ? film / shots.length : null
+  return own.map((seconds, index) => {
+    if (seconds != null) return seconds
+    if (share != null) {
+      console.log('[cost_inputs]', JSON.stringify({ shot: index + 1, durationSeconds: share, source: 'film' }))
+      return share
+    }
+    throw new MissingPriceError(`duration unresolved for shot ${index + 1}`)
+  })
+}
+
+export function calculateGenerationCost(
+  model: string,
+  durationSeconds: number,
+  shotNumber?: number,
+): number {
+  const ratePerFiveSeconds = MODEL_COSTS[model]
+  const seconds = asPositive(durationSeconds)
+  console.log('[cost_inputs]', JSON.stringify({
+    model,
+    durationSeconds,
+    ratePerFiveSeconds,
+    shot: shotNumber ?? null,
+  }))
+  if (typeof ratePerFiveSeconds !== 'number' || !Number.isFinite(ratePerFiveSeconds) || ratePerFiveSeconds <= 0) {
+    throw new MissingPriceError(`no price for model ${model}`)
+  }
+  if (seconds == null) {
+    throw new MissingPriceError(
+      shotNumber == null
+        ? `duration unresolved for shot priced with ${model}`
+        : `duration unresolved for shot ${shotNumber}`,
+    )
+  }
+  const credits = Math.ceil((ratePerFiveSeconds / 5) * seconds)
+  if (!Number.isFinite(credits) || credits <= 0) {
+    throw new MissingPriceError(`no price for model ${model}`)
+  }
+  return credits
 }
 
 export function calculateSimpleCost(tier: string, durationSeconds: number): number {
-  const engine = TIER_ENGINE_MAP[tier] ?? 'ltx-2.3-fast'
+  const engine = TIER_ENGINE_MAP[tier] ?? refuseSilentModelSwap(tier, 'ltx-2.3-fast')
   return calculateGenerationCost(engine, durationSeconds)
 }
 
@@ -31,6 +90,25 @@ export function calculateOrchestrationCost(
 }
 
 export const OPERATION_COSTS: Record<string, number> = {
+  // Video generation (per unit — jobs/create + worker billing)
+  generate_veo3:            35,
+  generate_kling_pro:       25,
+  generate_sora:            30,
+  generate_grok_video:      20,
+  generate_runway:          20,
+  generate_happyhorse:      15,
+  generate_luma:            15,
+  generate_seedance:        12,
+  generate_hailuo:          10,
+  generate_minimax:         10,
+  generate_kling_standard:   8,
+  generate_pika:             8,
+  generate_skyreels:         8,
+  generate_hunyuan:          7,
+  generate_pixverse:         5,
+  generate_wan:              2,
+  generate_ltx:              1,
+  generate_animatediff:      1,
   'grok-imagine-video':            20,  // $0.05/s xAI API → 20cr/5s
   'nano-banana-2':                  2,
   'nano-banana-pro':                5,
@@ -44,6 +122,7 @@ export const OPERATION_COSTS: Record<string, number> = {
   'mapillary_search':               0,
   'cesium_aerial_path':             0,
   'pexels_stock':                   0,
+  'branching_export':               5,
   'llm_claude_sonnet':              3,
   'llm_claude_haiku':               1,
   'llm_groq':                       1,
@@ -72,8 +151,19 @@ export const OPERATION_COSTS: Record<string, number> = {
   'mogrt_apply_template':           2,
   'mogrt_ai_generate':             15,
   'storyboard_per_scene':           3,
+  'storyboard':                     15,
+  'storyboard_gen':                 20,
+  'ai_director':                    25,
+  'lora_training':                  50,
+  'export_1080p':                   10,
+  'proxy_draft':                     0,
   'slides_to_video_per_slide':      2,
   'brand_kit_apply':                0,
+  'character_wardrobe':            12,
+  'character_appearance_bake':      8,
+  'character_mocap':               18,
+  'character_anime':               15,
+  'character_roto':                20,
 }
 
 export async function deductCredits(
@@ -84,20 +174,16 @@ export async function deductCredits(
   vendor?:     string,
   vendorCostUSD?: number,
 ): Promise<void> {
-  const user = await db.user.findUnique({
-    where:  { id: userId },
-    select: { creditBalance: true, role: true },
-  })
-
-  if (user?.role === 'ADMIN') return
-
-  if ((user?.creditBalance ?? 0) < credits) {
-    throw new Error(`Insufficient credits: need ${credits}, have ${user?.creditBalance ?? 0}`)
-  }
-
-  const newBalance = user!.creditBalance - credits
-
   await db.$transaction(async (tx: any) => {
+    const user = await tx.user.findUnique({
+      where:  { id: userId },
+      select: { creditBalance: true, role: true },
+    })
+    if (user?.role === 'ADMIN') return
+    if ((user?.creditBalance ?? 0) < credits) {
+      throw new CreditError(`Insufficient credits: need ${credits}, have ${user?.creditBalance ?? 0}`)
+    }
+    const newBalance = user.creditBalance - credits
     await tx.user.update({ where: { id: userId }, data: { creditBalance: { decrement: credits } } })
     await tx.creditTransaction.create({
       data: { userId, amount: -credits, description, balanceAfter: newBalance },
@@ -108,25 +194,38 @@ export async function deductCredits(
       })
     }
   })
+}
 
-  // Best-effort Stripe balance sync
-  try {
-    const stripeCustomer = await db.stripeCustomer?.findUnique({ where: { userId } })
-    if (stripeCustomer?.stripeCustomerId) {
-      const { stripe, creditsToUSDCents } = await import('./payments/stripe')
-      const debitCents = creditsToUSDCents(credits)
-      await stripe.customers.createBalanceTransaction(
-        stripeCustomer.stripeCustomerId,
-        { amount: debitCents, currency: 'usd', description: `Usage: ${description}` }
-      )
-      await db.stripeCustomer.update({
-        where: { userId },
-        data:  { stripeBalanceCents: { decrement: debitCents } },
-      })
-    }
-  } catch (err: unknown) {
-    console.error('[credits] Stripe balance sync failed:', err instanceof Error ? err.message : err)
-  }
+/** The only way credits are added. The same provider + external id is a no-op. */
+export async function grantCredits(
+  db: { $transaction: (fn: (tx: any) => Promise<unknown>) => Promise<unknown> },
+  userId: string,
+  provider: string,
+  externalId: string,
+  amount: number,
+  source: string,
+): Promise<{ granted: boolean; balanceAfter: number }> {
+  const stripeId = `${provider}:${externalId}`
+  return db.$transaction(async (tx: any) => {
+    const existing = await tx.creditTransaction.findFirst({ where: { stripeId } })
+    if (existing) return { granted: false, balanceAfter: existing.balanceAfter as number }
+    const updated = await tx.user.update({
+      where: { id: userId },
+      data: { creditBalance: { increment: amount } },
+      select: { creditBalance: true },
+    })
+    await tx.creditTransaction.create({
+      data: {
+        userId,
+        amount,
+        type: source,
+        description: source,
+        stripeId,
+        balanceAfter: updated.creditBalance,
+      },
+    })
+    return { granted: true, balanceAfter: updated.creditBalance as number }
+  }) as Promise<{ granted: boolean; balanceAfter: number }>
 }
 
 export async function refundCredits(
@@ -165,7 +264,10 @@ export async function checkAndDeductCredits(
     const { db } = await import('./db')
     const userId       = dbOrUserId
     const operationKey = userIdOrOperationKey
-    const cost         = OPERATION_COSTS[operationKey] ?? 0
+    if (!(operationKey in OPERATION_COSTS)) {
+      throw new CreditError(`Unknown operation: ${operationKey}`)
+    }
+    const cost = OPERATION_COSTS[operationKey]
     if (cost === 0) return
     return deductCredits(db, userId, cost, operationKey)
   }

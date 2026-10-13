@@ -11,9 +11,9 @@ const base: ModelRouterInput = {
 }
 
 describe('routeToModel', () => {
-  it('routes FREE + draft to animatediff', () => {
+  it('routes FREE + draft to ltx', () => {
     const model = routeToModel({ ...base, quality: 'draft' })
-    expect(model).toBe('animatediff')
+    expect(model).toBe('ltx')
   })
 
   it('routes film + STUDIO to veo3', () => {

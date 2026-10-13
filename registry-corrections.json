@@ -1,0 +1,489 @@
+{
+  "probedAt": "2026-06-13T09:00:01.048Z",
+  "existence": [
+    {
+      "id": "alibaba/happy-horse/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "alibaba/happy-horse/text-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "bytedance/seedance-2.0/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "bytedance/seedance-2.0/text-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/birefnet/v2/video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/ffmpeg-api/extract-frame",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/flux-pro",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/flux-pro/v1.1-ultra",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/flux-pro/v1/fill",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/gemini-25-flash-image",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/gemini-3-pro-image-preview",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/hunyuan-video",
+      "alive": true,
+      "status": "EXISTS",
+      "detail": "TIMEOUT"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/pro/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/pro/text-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/kling-video/v1.6/standard/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/kling-video/v1.6/standard/text-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/pro/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/pro/text-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/latentsync",
+      "alive": true,
+      "status": "EXISTS",
+      "detail": "TIMEOUT"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/text-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/text-to-video/fast",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/luma-dream-machine/ray-2",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/luma-dream-machine/ray-2/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3/pro/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3/pro/text-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3/standard/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3/standard/text-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/pika/v2.2/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/pika/v2.2/text-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/pixverse/v4.5/text-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/pixverse/v4/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/pixverse/v5.5/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/pixverse/v5.5/text-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/sync-lipsync",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/sync-lipsync/v2/pro",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/veo3",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/veo3/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "fal-ai/wan-vace-14b/inpainting",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "wan/v2.6/image-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    },
+    {
+      "id": "wan/v2.6/text-to-video",
+      "alive": true,
+      "http": 422,
+      "status": "EXISTS",
+      "detail": "completed with result"
+    }
+  ],
+  "schemas": [
+    {
+      "id": "alibaba/happy-horse/image-to-video",
+      "registryKey": "happyhorse-1.0",
+      "status": "OK"
+    },
+    {
+      "id": "alibaba/happy-horse/text-to-video",
+      "registryKey": "happyhorse-1.0",
+      "status": "OK"
+    },
+    {
+      "id": "bytedance/seedance-2.0/image-to-video",
+      "registryKey": "seedance-2.0",
+      "status": "OK"
+    },
+    {
+      "id": "bytedance/seedance-2.0/text-to-video",
+      "registryKey": "seedance-2.0",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/birefnet/v2/video",
+      "status": "SKIP"
+    },
+    {
+      "id": "fal-ai/ffmpeg-api/extract-frame",
+      "status": "SKIP"
+    },
+    {
+      "id": "fal-ai/flux-pro",
+      "status": "SKIP"
+    },
+    {
+      "id": "fal-ai/flux-pro/v1.1-ultra",
+      "status": "SKIP"
+    },
+    {
+      "id": "fal-ai/flux-pro/v1/fill",
+      "status": "SKIP"
+    },
+    {
+      "id": "fal-ai/gemini-25-flash-image",
+      "status": "SKIP"
+    },
+    {
+      "id": "fal-ai/gemini-3-pro-image-preview",
+      "status": "SKIP"
+    },
+    {
+      "id": "fal-ai/hunyuan-video",
+      "status": "SKIP"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/pro/image-to-video",
+      "registryKey": "kling-o3",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/pro/text-to-video",
+      "registryKey": "kling-o3",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/kling-video/v1.6/standard/image-to-video",
+      "registryKey": "kling-standard",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/kling-video/v1.6/standard/text-to-video",
+      "registryKey": "kling-standard",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/pro/image-to-video",
+      "registryKey": "kling-3.0",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/pro/text-to-video",
+      "registryKey": "kling-3.0",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/latentsync",
+      "status": "SKIP"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/image-to-video",
+      "registryKey": "ltx-2.3",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/text-to-video",
+      "registryKey": "ltx-2.3",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/text-to-video/fast",
+      "registryKey": "ltx-2.3-fast",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/luma-dream-machine/ray-2",
+      "registryKey": "luma-ray3",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/luma-dream-machine/ray-2/image-to-video",
+      "registryKey": "luma-ray3",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3/pro/image-to-video",
+      "registryKey": "minimax-2.3",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3/pro/text-to-video",
+      "registryKey": "minimax-2.3",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3/standard/image-to-video",
+      "registryKey": "hailuo-2.3",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3/standard/text-to-video",
+      "registryKey": "hailuo-2.3",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/pika/v2.2/image-to-video",
+      "registryKey": "pika-2.5",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/pika/v2.2/text-to-video",
+      "registryKey": "pika-2.5",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/pixverse/v4.5/text-to-video",
+      "registryKey": "pixverse-v6",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/pixverse/v4/image-to-video",
+      "registryKey": "pixverse-v6",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/pixverse/v5.5/image-to-video",
+      "registryKey": "pixverse-c1",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/pixverse/v5.5/text-to-video",
+      "registryKey": "pixverse-c1",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/sync-lipsync",
+      "status": "SKIP"
+    },
+    {
+      "id": "fal-ai/sync-lipsync/v2/pro",
+      "status": "SKIP"
+    },
+    {
+      "id": "fal-ai/veo3",
+      "status": "SKIP"
+    },
+    {
+      "id": "fal-ai/veo3/image-to-video",
+      "registryKey": "veo-3.1",
+      "status": "OK"
+    },
+    {
+      "id": "fal-ai/wan-vace-14b/inpainting",
+      "status": "SKIP"
+    },
+    {
+      "id": "wan/v2.6/image-to-video",
+      "registryKey": "wan-2.6",
+      "status": "OK"
+    },
+    {
+      "id": "wan/v2.6/text-to-video",
+      "registryKey": "wan-2.6",
+      "status": "OK"
+    }
+  ],
+  "summary": {
+    "alive": 41,
+    "dead": 0,
+    "payloadIssues": 0
+  }
+}

@@ -44,16 +44,29 @@ vercel link
 - **Fluid Compute:** Enable for long API routes (generate, jobs stream, timeline render)
 - **Cron jobs:** Enabled (Pro plan) — paths in `vercel.json`
 
-## 4. GitHub Actions secrets (optional CI deploy)
+## 4. GitHub Actions secrets
+
+Sync from `.env.local` (after `gh auth login`):
+
+```bash
+./scripts/sync-github-secrets.sh
+```
 
 | Secret | Source |
 |--------|--------|
+| `FAL_KEY` | fal.ai — **required** for `verify-fal` CI job |
+| `R2_ACCOUNT_ID` | Cloudflare |
+| `R2_ACCESS_KEY_ID` | R2 API token |
+| `R2_SECRET_ACCESS_KEY` | R2 API token secret |
+| `R2_RELEASES_BUCKET` | e.g. `forge` |
+| `R2_RELEASES_PREFIX` | e.g. `releases` |
 | `VERCEL_TOKEN` | vercel.com/account/tokens |
-| `VERCEL_ORG_ID` | `.vercel/project.json` → `orgId` |
-| `VERCEL_PROJECT_ID` | `.vercel/project.json` → `projectId` |
+| `VERCEL_ORG_ID` | `.vercel/repo.json` → `orgId` |
+| `VERCEL_PROJECT_ID` | `.vercel/repo.json` → `projects[0].id` |
 | `DATABASE_URL` | Production Neon URL (migrations job) |
+| `APPLE_*`, `CSC_*`, `WIN_CSC_*` | Desktop signing (tag releases only) |
 
-Workflow: `.github/workflows/ci.yml` → `deploy-production` on push to `main`.
+Workflows: `.github/workflows/ci.yml` (verify-fal + deploy) · `desktop-release.yml` (tag `v*`).
 
 ## 5. Post-deploy verification
 

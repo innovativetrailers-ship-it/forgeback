@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import type { UserRole } from '@/generated/prisma/client'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const ROLE_MAP: Record<string, UserRole> = {
   free: 'FREE',
@@ -17,7 +18,7 @@ const CREDITS_MAP: Record<string, number> = {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   const body = await req.json()
   const { userId: bodyUserId, planId, paymentProvider, externalPaymentId } = body
 
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (!planId || !ROLE_MAP[planId]) return NextResponse.json({ error: 'invalid planId' }, { status: 400 })
 
   // For paid plans, the webhook will have already verified payment
-  // This endpoint is called after Stripe/PayPal webhook confirms, or directly for free plan
+  // This endpoint is called after Stripe webhook confirms, or directly for free plan
   await db.user.update({
     where: { id: uid },
     data: {

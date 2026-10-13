@@ -1,0 +1,24 @@
+{
+  "name": "@cinema/core",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "@fal-ai/client": "^1.10.1"
+  },
+  "description": "Host-agnostic contracts and pure spine for Cinematic Forge web and desktop.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./endpoints": {
+      "types": "./dist/logic/endpointCatalog.d.ts",
+      "default": "./dist/logic/endpointCatalog.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

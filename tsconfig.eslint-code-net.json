@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "src/lib/diagnostics/boundary.ts",
+    "src/lib/diagnostics/captureCode.ts",
+    "src/lib/diagnostics/codeGuards.ts",
+    "src/lib/diagnostics/capture.ts",
+    "src/lib/diagnostics/correlation.ts",
+    "src/lib/diagnostics/interpret.ts",
+    "src/components/diagnostics/CodeErrorBridge.tsx",
+    "src/app/api/dev/code/route.ts",
+    "src/__tests__/code-net.test.ts",
+    "next-env.d.ts"
+  ],
+  "exclude": ["node_modules", "cinematic-forge-v3", "packages"]
+}

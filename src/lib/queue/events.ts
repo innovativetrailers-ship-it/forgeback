@@ -5,6 +5,7 @@ export interface JobEvent {
   status: 'queued' | 'processing' | 'complete' | 'failed' | 'cancelled'
   progress?: number
   message?: string
+  userMessage?: string
   outputUrl?: string
   outputUrls?: string[]
   error?: string
@@ -38,7 +39,9 @@ export function subscribeToJob(
         subscriber.quit()
         onClose()
       }
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/queue/events.ts:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // Ignore malformed messages
     }
   })

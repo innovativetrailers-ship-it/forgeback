@@ -1,26 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { resolveReviewVideoUrl } from '@/lib/review'
+import { openReviewLink, reviewPinFrom } from '@/lib/review/gate'
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params
-
-  const link = await db.reviewLink.findUnique({ where: { token } })
-  if (!link) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (link.expiresAt && link.expiresAt < new Date()) {
-    return NextResponse.json({ error: 'Link expired' }, { status: 410 })
+  const opened = await openReviewLink(token, reviewPinFrom(req))
+  if (!opened.ok) return NextResponse.json({ error: opened.error }, { status: opened.status })
+  if (!opened.link.proxyUrl) {
+    return NextResponse.json({ error: 'This review has no proxy yet.' }, { status: 404 })
   }
-
-  const videoUrl = await resolveReviewVideoUrl(link.projectId)
-  if (!videoUrl) {
-    return NextResponse.json(
-      { error: 'No exported video yet. Export the project first.' },
-      { status: 404 },
-    )
-  }
-
-  return NextResponse.redirect(videoUrl, { status: 302 })
+  return NextResponse.redirect(opened.link.proxyUrl, { status: 302 })
 }

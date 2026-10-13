@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { checkAndDeductCredits, OPERATION_COSTS } from '@/lib/credits'
 import { renderStemPackage, exportProToolsSessionXML, exportOMF } from '@/lib/audio/ProToolsExport'
 import type { StemRenderParams } from '@/lib/audio/ProToolsExport'
+import { requireUser } from '@/lib/auth/requireUser'
 
 type StemAction = 'render_stems' | 'export_pt_xml' | 'export_omf'
 
@@ -18,13 +19,15 @@ interface StemsRequestBody {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: StemsRequestBody
   try {
     body = await req.json()
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/audio/stems/route.ts:27", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
@@ -57,6 +60,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, costKey)
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/audio/stems/route.ts:59", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Insufficient credits'
     return NextResponse.json({ error: msg }, { status: 402 })
   }
@@ -89,6 +94,8 @@ export async function POST(req: NextRequest) {
     const stems = await renderStemPackage(stemParams)
     return NextResponse.json({ stems })
   } catch (err: unknown) {
+    console.warn("[caught] src/app/api/audio/stems/route.ts:91", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     const msg = err instanceof Error ? err.message : 'Stem render failed'
     return NextResponse.json({ error: msg }, { status: 500 })
   }

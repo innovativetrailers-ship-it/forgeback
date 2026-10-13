@@ -1,15 +1,22 @@
 'use client'
 
+
+import { logCaught } from '@/lib/diagnostics/caught'
 import { useEffect, useRef, useState } from 'react'
 import { Download, RefreshCw, Plus, Play, X, Loader2 } from 'lucide-react'
 import type { GeneratedClip } from './types'
 import { MODEL_FAMILY_COLOURS } from './types'
+import { jobPlaybackPath } from '@/lib/media/jobPlayback'
+import { humanStatusText } from '@/lib/jobs/humanStatus'
+import { placeFinishedClip } from '@/lib/library/placeFinishedClip'
+import { toast } from '@/lib/toast'
 
 interface Props {
   clip: GeneratedClip
   onRegenerate: (clip: GeneratedClip) => void
-  onAddToTimeline: (clip: GeneratedClip) => void
+  onAddToTimeline?: (clip: GeneratedClip) => void
   onExpand: (clip: GeneratedClip) => void
+  onOpenEditor?: () => void
 }
 
 function ProgressRing({ progress }: { progress: number }) {
@@ -37,32 +44,59 @@ function ProgressRing({ progress }: { progress: number }) {
   )
 }
 
-export function GenerationCard({ clip, onRegenerate, onAddToTimeline, onExpand }: Props) {
+function downloadFilename(clip: GeneratedClip): string {
+  const slug = (clip.prompt ?? 'forge')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, 40)
+  return `${slug}-${clip.jobId}.mp4`
+}
+
+export function GenerationCard({
+  clip,
+  onRegenerate,
+  onAddToTimeline,
+  onExpand,
+}: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isHovered, setIsHovered] = useState(false)
+  const [adding, setAdding] = useState(false)
   const modelColour = MODEL_FAMILY_COLOURS[clip.model] ?? '#6b7280'
 
   const isGenerating = clip.status === 'queued' || clip.status === 'processing'
   const isFailed = clip.status === 'failed'
   const isDone = clip.status === 'complete'
+  const playSrc = jobPlaybackPath(clip.jobId)
 
   useEffect(() => {
     if (isHovered && videoRef.current && isDone) {
-      videoRef.current.play().catch(() => {})
+      videoRef.current.play().catch((err) => logCaught('components/simple/GenerationCard', err))
     } else if (!isHovered && videoRef.current) {
       videoRef.current.pause()
       videoRef.current.currentTime = 0
     }
   }, [isHovered, isDone])
 
-  const handleDownload = async (e: React.MouseEvent) => {
+  async function handleAddToLibrary(e: React.MouseEvent) {
     e.stopPropagation()
-    if (!clip.videoUrl) return
-    const a = document.createElement('a')
-    a.href = clip.videoUrl
-    a.download = `cinema_${clip.jobId}.mp4`
-    a.click()
+    if (!playSrc && !clip.videoUrl) {
+      toast.error('This result has no video to add')
+      return
+    }
+    setAdding(true)
+    try {
+      await placeFinishedClip(clip)
+      onAddToTimeline?.(clip)
+      toast.success('Added to the library')
+    } catch (err) {
+      console.warn('[library] placement failed', err instanceof Error ? err.message : err)
+      toast.error(err instanceof Error ? err.message : 'Could not add to the library')
+    } finally {
+      setAdding(false)
+    }
   }
+
+  const downloadHref = `/api/download/${clip.jobId}`
 
   return (
     <div
@@ -77,12 +111,11 @@ export function GenerationCard({ clip, onRegenerate, onAddToTimeline, onExpand }
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => isDone && onExpand(clip)}
     >
-      {/* Thumbnail / Video */}
       <div className="relative aspect-video bg-[#0c0c14]">
-        {isDone && clip.videoUrl && (
+        {isDone && playSrc && (
           <video
             ref={videoRef}
-            src={clip.videoUrl}
+            src={playSrc}
             className="w-full h-full object-cover"
             muted
             loop
@@ -98,19 +131,23 @@ export function GenerationCard({ clip, onRegenerate, onAddToTimeline, onExpand }
               <Loader2 className="absolute inset-0 m-auto w-5 h-5 text-[#00e5c8] animate-spin" />
             </div>
             <p className="text-xs text-white/50 text-center px-3">
-              {clip.progressMessage ?? 'Generating…'}
+              {humanStatusText(clip.userMessage, clip.progressMessage) ?? 'Generating…'}
             </p>
+            {clip.etaSeconds != null && clip.etaSeconds > 0 && (
+              <p className="text-[10px] text-white/30">
+                ~{clip.etaSeconds < 60 ? `${clip.etaSeconds}s` : `${Math.ceil(clip.etaSeconds / 60)} min`} left
+              </p>
+            )}
           </div>
         )}
 
         {isFailed && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
             <X className="w-8 h-8 text-red-400" />
-            <p className="text-xs text-red-400 text-center px-3">{clip.error ?? 'Generation failed'}</p>
+            <p className="text-xs text-red-400 text-center px-3">{humanStatusText(clip.userMessage, clip.error) ?? 'Generation failed'}</p>
           </div>
         )}
 
-        {/* Hover overlay for done clips */}
         {isDone && (
           <div className={`
             absolute inset-0 bg-black/60 flex items-center justify-center
@@ -121,7 +158,6 @@ export function GenerationCard({ clip, onRegenerate, onAddToTimeline, onExpand }
           </div>
         )}
 
-        {/* Model badge */}
         <div
           className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-medium text-white"
           style={{ backgroundColor: modelColour }}
@@ -129,13 +165,11 @@ export function GenerationCard({ clip, onRegenerate, onAddToTimeline, onExpand }
           {clip.model.replace('_', ' ').toUpperCase()}
         </div>
 
-        {/* Credits badge */}
         <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/60 text-[10px] text-[#00e5c8] font-medium">
           ⬡ {clip.creditsUsed}
         </div>
       </div>
 
-      {/* Card footer */}
       <div className="p-3">
         <p className="text-xs text-white/70 line-clamp-2 mb-3 leading-relaxed">
           {clip.prompt}
@@ -143,6 +177,7 @@ export function GenerationCard({ clip, onRegenerate, onAddToTimeline, onExpand }
 
         <div className="flex items-center gap-1.5">
           <button
+            type="button"
             onClick={(e) => { e.stopPropagation(); onRegenerate(clip) }}
             className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg
               bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-xs transition-colors"
@@ -153,26 +188,30 @@ export function GenerationCard({ clip, onRegenerate, onAddToTimeline, onExpand }
           </button>
 
           <button
-            onClick={(e) => { e.stopPropagation(); onAddToTimeline(clip) }}
-            disabled={!isDone}
+            type="button"
+            onClick={handleAddToLibrary}
+            disabled={!isDone || adding}
             className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg
               bg-white/5 hover:bg-[#00e5c8]/20 text-white/60 hover:text-[#00e5c8] text-xs
               disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            title="Add to timeline"
+            title="Add to library"
           >
             <Plus className="w-3 h-3" />
-            Timeline
+            {adding ? 'Adding…' : 'Library'}
           </button>
 
-          <button
-            onClick={handleDownload}
-            disabled={!isDone}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white
-              disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          <a
+            href={downloadHref}
+            download={downloadFilename(clip)}
+            onClick={(e) => e.stopPropagation()}
+            className={`p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white
+              transition-colors inline-flex items-center justify-center
+              ${!isDone ? 'pointer-events-none opacity-30' : ''}`}
             title="Download"
+            aria-disabled={!isDone}
           >
             <Download className="w-3.5 h-3.5" />
-          </button>
+          </a>
         </div>
       </div>
     </div>

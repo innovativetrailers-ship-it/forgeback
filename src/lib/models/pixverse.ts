@@ -1,40 +1,37 @@
-import { fal } from '../fal/client'
+import { buildPayload } from '@/lib/fal/videoPayloads'
+import { resolvePixverseEndpoint } from '@/lib/fal/pixverseEndpoints'
+import { falGenerateJob, falPollJob } from '@/lib/fal/modelQueue'
 import type { GenerateVideoInput, GenerateVideoOutput } from './types'
 
+export type PixverseRegistryKey = 'pixverse-c1' | 'pixverse-v6'
+
 export async function generateVideo(
-  input: GenerateVideoInput
+  input: GenerateVideoInput,
+  registryKey: PixverseRegistryKey = 'pixverse-v6',
 ): Promise<GenerateVideoOutput> {
-  const endpoint = input.startFrameUrl ? 'fal-ai/pixverse/v3/image-to-video' : 'fal-ai/pixverse/v3/text-to-video'
+  const prompt = input.prompt?.trim()
+  if (!prompt) throw new Error('Prompt is required for PixVerse generation')
 
-  try {
-    const result = await fal.subscribe(endpoint, {
-      input: {
-        prompt: input.prompt,
-        ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
-        ...(input.startFrameUrl && { image_url: input.startFrameUrl }),
-        aspect_ratio: input.aspectRatio,
-        duration: Math.min(input.duration, 10),
-        ...(input.seed !== undefined && { seed: input.seed }),
-      },
-      pollInterval: 3000,
-    }) as unknown as { video: { url: string } }
+  const isI2V = Boolean(input.startFrameUrl)
+  const model = resolvePixverseEndpoint(registryKey, isI2V)
 
-    return {
-      jobId: 'fal-' + Date.now(),
-      status: 'complete',
-      videoUrl: result.video.url,
-    }
-  } catch (err) {
-    return {
-      jobId: 'fal-' + Date.now(),
-      status: 'failed',
-      error: err instanceof Error ? err.message : 'Pixverse generation failed',
-    }
-  }
+  const falInput = await buildPayload(model, registryKey, {
+    prompt,
+    duration: input.duration ?? 5,
+    aspectRatio: input.aspectRatio ?? '16:9',
+    imageUrl: input.startFrameUrl,
+    negativePrompt: input.negativePrompt,
+  })
+  if (input.seed !== undefined) falInput.seed = input.seed
+
+  return falGenerateJob(model, falInput)
 }
 
 export async function pollStatus(
-  externalJobId: string
+  _requestId: string,
+  _registryKey: PixverseRegistryKey = 'pixverse-v6',
+  _isImageToVideo = false,
+  pollUrl?: string,
 ): Promise<GenerateVideoOutput> {
-  return { jobId: externalJobId, status: 'processing' }
+  return falPollJob(pollUrl)
 }

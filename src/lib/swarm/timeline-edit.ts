@@ -1,7 +1,8 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { runModel1 } from '../brain/model1'
 import { EDIT_ANALYST_PROMPT, ART_DIRECTOR_PROMPT, QA_INSPECTOR_PROMPT } from './brain-prompts'
 import { SwarmRouter } from './SwarmRouter'
-import { fal } from '../fal/client'
+import { runFal } from '../fal/client'
 import { uploadToR2 } from '../storage/r2'
 import ffmpeg from 'fluent-ffmpeg'
 import fs from 'fs/promises'
@@ -78,7 +79,7 @@ export async function executeTimelineEdit(req: TimelineEditRequest): Promise<{
   // 5. Optional CodeFormer face pass
   let finalRepaintedUrl = repaintedUrl
   if (analysis.requires_face_enhance) {
-    const enhanced = await fal.run('fal-ai/codeformer', { input: { image_url: repaintedUrl, fidelity: 0.75 } }) as { image?: { url: string } }
+    const enhanced = await runFal(falEndpoint('codeformer'), { image_url: repaintedUrl, fidelity: 0.75 }) as { image?: { url: string } }
     finalRepaintedUrl = enhanced.image?.url ?? repaintedUrl
   }
 
@@ -171,8 +172,14 @@ async function stitchSegment(
 }
 
 async function extractFrame(videoUrl: string, timestamp: number): Promise<string> {
-  const r = await fal.run('fal-ai/video-frame-extractor', { input: { video_url: videoUrl, timestamp } }) as unknown as { image_url?: string }
-  return r.image_url ?? videoUrl
+  const { extractVideoFrame } = await import('@/lib/fal/frameExtract')
+  try {
+    return await extractVideoFrame(videoUrl, { timestamp })
+  } catch (err) {
+    console.warn("[caught] src/lib/swarm/timeline-edit.ts:177", err instanceof Error ? { name: err.name, message: err.message } : err)
+
+    return videoUrl
+  }
 }
 
 async function downloadFile(url: string, dest: string): Promise<void> {

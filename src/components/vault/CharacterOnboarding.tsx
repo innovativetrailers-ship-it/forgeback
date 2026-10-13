@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { primaryCastTrainer, trainingCostUsd } from '@cinema/core'
 import { cn } from '@/lib/utils'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -10,11 +11,13 @@ import {
 
 export interface CharacterOnboardingData {
   name: string
+  description: string
   referenceImages: File[]
   modelFamily: 'kling' | 'seedance' | 'veo3' | 'any'
   triggerWord: string
   trainLora: boolean
   loraJobId?: string
+  characterId?: string
 }
 
 interface Props {
@@ -45,6 +48,7 @@ const MODEL_OPTIONS = [
 export function CharacterOnboarding({ open, onOpenChange, onComplete, projectId }: Props) {
   const [step, setStep] = useState<Step>(1)
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
   const [images, setImages] = useState<File[]>([])
   const [previews, setPreviews] = useState<string[]>([])
   const [modelFamily, setModelFamily] = useState<CharacterOnboardingData['modelFamily']>('any')
@@ -53,6 +57,7 @@ export function CharacterOnboarding({ open, onOpenChange, onComplete, projectId 
   const [isTraining, setIsTraining] = useState(false)
   const [trainingProgress, setTrainingProgress] = useState(0)
   const [loraJobId, setLoraJobId] = useState<string | undefined>()
+  const [characterId, setCharacterId] = useState<string | undefined>()
   const [trainingError, setTrainingError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -69,25 +74,40 @@ export function CharacterOnboarding({ open, onOpenChange, onComplete, projectId 
     setPreviews((prev) => prev.filter((_, i) => i !== idx))
   }
 
-  const startTraining = async () => {
-    if (!trainLora || images.length === 0) { setStep(6); return }
-    setIsTraining(true)
+  const submitCharacter = async () => {
+    if (images.length === 0 && description.trim().length < 12) {
+      setTrainingError('Add a description (step 1) or upload reference photos.')
+      setStep(6)
+      return
+    }
+    setIsTraining(trainLora)
     setTrainingProgress(0)
     setTrainingError(null)
     try {
       const formData = new FormData()
       formData.append('name', name)
+      if (description.trim()) formData.append('description', description.trim())
       formData.append('triggerWord', triggerWord || name.toLowerCase().replace(/\s+/g, '_'))
       formData.append('projectId', projectId)
+      formData.append('modelFamily', modelFamily)
+      formData.append('trainLora', trainLora ? 'true' : 'false')
+      if (trainLora) {
+        formData.append('confirmedCostUsd', String(trainingCostUsd(primaryCastTrainer(), 1000)))
+        formData.append('subjectConsent', 'true')
+      }
       images.forEach((img) => formData.append('images', img))
 
-      const res = await fetch('/api/vault/character/create', { method: 'POST', body: formData })
-      const json = await res.json() as { jobId?: string; error?: string }
-      if (!res.ok || json.error) throw new Error(json.error ?? 'Training failed')
+      const res = await fetch('/api/vault/character/create', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      })
+      const json = await res.json() as { id?: string; jobId?: string; error?: string }
+      if (!res.ok || json.error) throw new Error(json.error ?? 'Character creation failed')
+      if (json.id) setCharacterId(json.id)
       setLoraJobId(json.jobId)
 
-      // Poll via SSE
-      if (json.jobId) {
+      if (trainLora && json.jobId) {
         const sse = new EventSource(`/api/jobs/${json.jobId}/stream`)
         sse.onmessage = (e) => {
           const data = JSON.parse(e.data) as { status: string; progress?: number }
@@ -115,7 +135,9 @@ export function CharacterOnboarding({ open, onOpenChange, onComplete, projectId 
         setStep(6)
       }
     } catch (err) {
-      setTrainingError(err instanceof Error ? err.message : 'Training failed')
+      console.warn("[caught] src/components/vault/CharacterOnboarding.tsx:137", err instanceof Error ? { name: err.name, message: err.message } : err)
+
+      setTrainingError(err instanceof Error ? err.message : 'Character creation failed')
       setIsTraining(false)
       setStep(6)
     }
@@ -124,7 +146,7 @@ export function CharacterOnboarding({ open, onOpenChange, onComplete, projectId 
   const handleNext = async () => {
     if (step === 4) {
       setStep(5)
-      await startTraining()
+      await submitCharacter()
       return
     }
     if (step < 6) setStep((s) => (s + 1) as Step)
@@ -137,23 +159,25 @@ export function CharacterOnboarding({ open, onOpenChange, onComplete, projectId 
   const handleFinish = () => {
     onComplete({
       name,
+      description,
       referenceImages: images,
       modelFamily,
       triggerWord: triggerWord || name.toLowerCase().replace(/\s+/g, '_'),
       trainLora,
       loraJobId,
+      characterId,
     })
     onOpenChange(false)
     // Reset
-    setStep(1); setName(''); setImages([]); setPreviews([])
+    setStep(1); setName(''); setDescription(''); setImages([]); setPreviews([])
     setModelFamily('any'); setTriggerWord(''); setTrainLora(true)
-    setIsTraining(false); setTrainingProgress(0); setLoraJobId(undefined)
+    setIsTraining(false); setTrainingProgress(0); setLoraJobId(undefined); setCharacterId(undefined)
     setTrainingError(null)
   }
 
   const canNext = (() => {
-    if (step === 1) return name.trim().length > 0
-    if (step === 2) return images.length >= 3
+    if (step === 1) return name.trim().length > 0 && description.trim().length >= 12
+    if (step === 2) return images.length >= 3 || description.trim().length >= 12
     return true
   })()
 
@@ -190,7 +214,7 @@ export function CharacterOnboarding({ open, onOpenChange, onComplete, projectId 
         {/* Step content */}
         <div className="px-5 py-4 min-h-[280px] flex flex-col">
           {step === 1 && (
-            <StepName name={name} onChange={setName} />
+            <StepName name={name} description={description} onNameChange={setName} onDescriptionChange={setDescription} />
           )}
           {step === 2 && (
             <StepPhotos
@@ -257,18 +281,40 @@ export function CharacterOnboarding({ open, onOpenChange, onComplete, projectId 
 
 // ── Step sub-components ─────────────────────────────────────────────
 
-function StepName({ name, onChange }: { name: string; onChange: (v: string) => void }) {
+function StepName({
+  name, description, onNameChange, onDescriptionChange,
+}: {
+  name: string
+  description: string
+  onNameChange: (v: string) => void
+  onDescriptionChange: (v: string) => void
+}) {
   return (
-    <div>
-      <p className="text-sm font-medium text-[var(--text-primary)] mb-1">Character Name</p>
-      <p className="text-[11px] text-[var(--text-tertiary)] mb-4">Give this character a unique name. It will be used for LoRA trigger words and vault organisation.</p>
-      <input
-        autoFocus
-        value={name}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="e.g. Detective Chen, Aria, The Stranger…"
-        className="cinema-input"
-      />
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm font-medium text-[var(--text-primary)] mb-1">Character Name</p>
+        <p className="text-[11px] text-[var(--text-tertiary)] mb-3">Used for LoRA trigger words and vault organisation.</p>
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => onNameChange(e.target.value)}
+          placeholder="e.g. Detective Chen, Aria, The Stranger…"
+          className="cinema-input"
+        />
+      </div>
+      <div>
+        <p className="text-sm font-medium text-[var(--text-primary)] mb-1">Appearance Description</p>
+        <p className="text-[11px] text-[var(--text-tertiary)] mb-3">
+          Describe look, age, wardrobe, and vibe. Required for text-born characters; improves photo-based casting.
+        </p>
+        <textarea
+          value={description}
+          onChange={(e) => onDescriptionChange(e.target.value)}
+          placeholder="e.g. Woman in her 30s, sharp jawline, dark bob haircut, leather jacket, weary detective energy…"
+          rows={4}
+          className="cinema-input resize-none"
+        />
+      </div>
     </div>
   )
 }
@@ -284,7 +330,9 @@ function StepPhotos({
   return (
     <div>
       <p className="text-sm font-medium text-[var(--text-primary)] mb-1">Reference Photos</p>
-      <p className="text-[11px] text-[var(--text-tertiary)] mb-3">Upload 3–20 high-quality photos. Different angles and expressions improve LoRA quality.</p>
+      <p className="text-[11px] text-[var(--text-tertiary)] mb-3">
+        Upload 3–20 photos for best LoRA quality — or skip if you described the character on step 1 (we generate a reference plate).
+      </p>
 
       <input
         ref={fileRef} type="file" accept="image/*" multiple className="hidden"
@@ -368,8 +416,10 @@ function StepLoRA({
 
       <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border)] mb-3">
         <div>
-          <p className="text-[12px] font-medium text-[var(--text-primary)]">Train LoRA fine-tune</p>
-          <p className="text-[10px] text-[var(--text-tertiary)]">Uses ~500 credits · ~15 min</p>
+          <p className="text-[12px] font-medium text-[var(--text-primary)]">Train character LoRA</p>
+          <p className="text-[10px] text-[var(--text-tertiary)]">
+            ${trainingCostUsd(primaryCastTrainer(), 1000).toFixed(2)} FAL + 50 credits. Needs 10 reference images. Turning this on confirms the subject consents.
+          </p>
         </div>
         <button
           onClick={() => onTrainChange(!trainLora)}

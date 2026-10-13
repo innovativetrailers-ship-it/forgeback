@@ -1,3 +1,4 @@
+import { logCaught } from '@/lib/diagnostics/caught'
 import type { NextRequest } from 'next/server'
 import { auth } from '@/lib/auth'
 import { createRedisConnection, channelKey } from '@/lib/redis'
@@ -20,8 +21,8 @@ export async function generationProgressStream(
       const sub = createRedisConnection()
 
       const cleanup = () => {
-        sub.unsubscribe(channel).catch(() => {})
-        sub.quit().catch(() => {})
+        sub.unsubscribe(channel).catch((err) => logCaught('lib/routing/generation-stream', err))
+        sub.quit().catch((err) => logCaught('lib/routing/generation-stream', err))
       }
 
       req.signal.addEventListener('abort', cleanup)
@@ -41,7 +42,9 @@ export async function generationProgressStream(
             cleanup()
             controller.close()
           }
-        } catch {
+        } catch (err) {
+          console.warn("[caught] src/lib/routing/generation-stream.ts:45", err instanceof Error ? { name: err.name, message: err.message } : err)
+
           // ignore malformed messages
         }
       })

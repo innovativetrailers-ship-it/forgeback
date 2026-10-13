@@ -1,0 +1,10 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm install && npx prisma generate && node scripts/verify-static.mjs"
+
+# NOTE: no startCommand here — each service sets its own (worker:render,
+# worker:export, worker:training, worker:das, worker:intelligence, py-*).
+# A project-wide startCommand would force every service to run the same process.
+[deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

@@ -1,11 +1,14 @@
 'use client'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useUIStore } from '@/store/ui'
+import { loadProject } from '@/lib/projects/loadProject'
+import { toast } from '@/lib/toast'
 import { ImportProjectPanel } from './ImportProjectPanel'
-import { FolderOpen, Film, Music, Image, Search } from 'lucide-react'
+import { MediaBin } from './MediaBin'
+import { usePlaybackStore } from '@/store/playbackStore'
+import { FolderOpen, Film, Music, Image, Search, Loader2 } from 'lucide-react'
 
-type LibraryTab = 'projects' | 'media' | 'audio' | 'stock'
+type LibraryTab = 'projects' | 'media' | 'audio'
 
 interface Project {
   id: string
@@ -18,7 +21,8 @@ export function LibraryPanel() {
   const [activeTab, setActiveTab] = useState<LibraryTab>('projects')
   const [search, setSearch] = useState('')
   const [showImport, setShowImport] = useState(false)
-  const { openModal } = useUIStore()
+  const [loadingId, setLoadingId] = useState<string | null>(null)
+  const projectId = usePlaybackStore((state) => state.projectId) ?? ''
 
   const { data: projectsData } = useQuery<{ projects: Project[] }>({
     queryKey: ['projects'],
@@ -30,11 +34,24 @@ export function LibraryPanel() {
     p.name.toLowerCase().includes(search.toLowerCase())
   )
 
+  async function handleOpenProject(projectId: string, projectName: string) {
+    setLoadingId(projectId)
+    try {
+      const { project } = await loadProject(projectId)
+      toast.success(`Opened ${project.name ?? projectName ?? 'project'}`)
+    } catch (err) {
+      console.warn("[caught] src/components/panels/LibraryPanel.tsx:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+
+      toast.error(err instanceof Error ? err.message : 'Failed to open project')
+    } finally {
+      setLoadingId(null)
+    }
+  }
+
   const TABS: { id: LibraryTab; label: string; icon: React.ReactNode }[] = [
     { id: 'projects', label: 'Projects', icon: <Film size={13} /> },
     { id: 'media', label: 'Media', icon: <Image size={13} /> },
     { id: 'audio', label: 'Audio', icon: <Music size={13} /> },
-    { id: 'stock', label: 'Stock', icon: <Search size={13} /> },
   ]
 
   return (
@@ -93,10 +110,17 @@ export function LibraryPanel() {
               projects.map((project) => (
                 <button
                   key={project.id}
-                  className="w-full text-left p-2.5 rounded-lg hover:bg-[#1a1f2e] border border-transparent hover:border-[#2a3040] transition group"
+                  type="button"
+                  onClick={() => void handleOpenProject(project.id, project.name)}
+                  disabled={loadingId === project.id}
+                  className="w-full text-left p-2.5 rounded-lg hover:bg-[#1a1f2e] border border-transparent hover:border-[#2a3040] transition group disabled:opacity-50"
                 >
                   <div className="flex items-center gap-2">
-                    <Film size={13} className="text-[#00e5c8] flex-shrink-0" />
+                    {loadingId === project.id ? (
+                      <Loader2 size={13} className="text-[#00e5c8] flex-shrink-0 animate-spin" />
+                    ) : (
+                      <Film size={13} className="text-[#00e5c8] flex-shrink-0" />
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="text-white text-xs font-medium truncate">{project.name}</div>
                       <div className="text-gray-500 text-[10px]">
@@ -113,22 +137,10 @@ export function LibraryPanel() {
           </div>
         )}
 
-        {activeTab === 'media' && (
-          <div className="text-gray-500 text-xs text-center py-8">
-            Upload media via drag & drop to the timeline
-          </div>
-        )}
-
-        {activeTab === 'audio' && (
-          <div className="text-gray-500 text-xs text-center py-8">
-            Generate audio using the Audio panel
-          </div>
-        )}
-
-        {activeTab === 'stock' && (
-          <div className="text-gray-500 text-xs text-center py-8">
-            Stock library — coming soon
-          </div>
+        {(activeTab === 'media' || activeTab === 'audio') && (
+          projectId
+            ? <MediaBin projectId={projectId} />
+            : <div className="text-gray-500 text-xs text-center py-8">Open a project to see its library.</div>
         )}
       </div>
 

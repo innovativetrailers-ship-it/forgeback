@@ -1,6 +1,6 @@
+import { runArgv } from '../shell/argv'
 import { uploadToR2 } from './r2'
-import { execSync } from 'child_process'
-import { existsSync, mkdirSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, rmSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 
@@ -42,9 +42,7 @@ export async function ingestRAWFile(filePath: string): Promise<{
     const metadata: CameraMetadata = {}
 
     try {
-      const probeJson = execSync(
-        `ffprobe -v quiet -print_format json -show_streams -show_format "${filePath}" 2>/dev/null`
-      ).toString()
+      const probeJson = runArgv("ffprobe", ["-v", "quiet", "-print_format", "json", "-show_streams", "-show_format", filePath]).toString()
       const probe = JSON.parse(probeJson) as {
         format?: { tags?: Record<string, string>; duration?: string }
         streams?: Array<{
@@ -92,18 +90,19 @@ export async function ingestRAWFile(filePath: string): Promise<{
         metadata.make = probe.format.tags['com.apple.quicktime.make']
         metadata.model = probe.format.tags['com.apple.quicktime.model']
       }
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/storage/raw-ingest.ts:95", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       // Probe failed — use defaults
     }
 
     // Generate low-res proxy for timeline scrubbing
     const proxyPath = join(tmpDir, 'proxy.mp4')
-    const colorFilter = buildOCIOFilter(colorProfile)
-    execSync(
-      `ffmpeg -i "${filePath}" ${colorFilter} -vf "scale=960:540" -c:v libx264 -crf 23 -preset fast -c:a aac "${proxyPath}" -y 2>/dev/null`
-    )
+    const colour = colourExpr(colorProfile)
+    const vf = colour ? `${colour},scale=960:540` : 'scale=960:540'
+    runArgv('ffmpeg', ['-i', filePath, '-vf', vf, '-c:v', 'libx264', '-crf', '23', '-preset', 'fast', '-c:a', 'aac', proxyPath, '-y'])
 
-    const buffer = execSync(`cat "${proxyPath}"`)
+    const buffer = readFileSync(proxyPath)
     const proxiedVideoUrl = await uploadToR2(buffer, `raw-proxy/${jobId}.mp4`, 'video/mp4')
 
     return { proxiedVideoUrl, colorProfile, ocioTransform, metadata }
@@ -112,18 +111,16 @@ export async function ingestRAWFile(filePath: string): Promise<{
   }
 }
 
-function buildOCIOFilter(colorProfile: string): string {
-  // Build FFmpeg colour transform filter based on detected profile
+function colourExpr(colorProfile: string): string | null {
   switch (colorProfile) {
     case 'arri_logc':
-      return '-vf "colorspace=all=bt709:trc=bt709:primaries=bt709:matrixin=bt709"'
+      return 'colorspace=all=bt709:trc=bt709:primaries=bt709:matrixin=bt709'
     case 'sony_slog3':
-      return '-vf "curves=all=\'0/0 0.1/0.05 0.5/0.5 0.9/0.95 1/1\'"'
+      return "curves=all='0/0 0.1/0.05 0.5/0.5 0.9/0.95 1/1'"
     case 'hlg':
-      return '-vf "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"'
     case 'hdr_pq':
-      return '-vf "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"'
+      return 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable,zscale=t=bt709:m=bt709:r=tv,format=yuv420p'
     default:
-      return ''
+      return null
   }
 }

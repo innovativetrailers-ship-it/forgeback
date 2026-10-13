@@ -7,7 +7,7 @@ const FEATURES = [
   {
     icon: Sparkles,
     title: 'Multi-Engine Generation',
-    description: 'One prompt dispatched across Veo 3, Kling, Seedance, Runway and more — blended into a single seamless clip.',
+    description: 'One prompt can be sent to more than one engine and cut into a single clip.',
   },
   {
     icon: Film,
@@ -42,7 +42,7 @@ const FEATURES = [
   {
     icon: MonitorPlay,
     title: 'Social Publishing',
-    description: 'Auto-reframe for TikTok, Instagram, YouTube. Schedule and publish from one place.',
+    description: 'Auto-reframe for vertical, square, and widescreen. Schedule and publish from one place.',
   },
   {
     icon: Shield,

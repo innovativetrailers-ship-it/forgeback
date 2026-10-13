@@ -4,6 +4,7 @@
  * matching the original speaker's voice.
  */
 
+import { generateVoiceBuffer } from '@/lib/elevenlabs/client'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { randomUUID } from 'crypto'
 
@@ -21,39 +22,17 @@ export interface OverdubResult {
   durationSec:   number
 }
 
-async function synthesiseReplacement(
-  text:    string,
-  voiceId: string,
-  modelId: string,
-): Promise<Buffer> {
-  const apiKey = process.env.ELEVENLABS_API_KEY
-  if (!apiKey) throw new Error('ELEVENLABS_API_KEY not configured')
-
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-    method:  'POST',
-    headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text,
-      model_id:         modelId,
-      voice_settings:   { stability: 0.5, similarity_boost: 0.75 },
-      output_format:    'mp3_44100_128',
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`ElevenLabs TTS failed: ${err}`)
-  }
-
-  return Buffer.from(await res.arrayBuffer())
-}
-
 export async function overdubClip(params: OverdubParams): Promise<OverdubResult> {
   const { audioUrl, replacement, startSec, endSec, voiceId, modelId } = params
   const model = modelId ?? process.env.ELEVENLABS_MODEL_ID ?? 'eleven_multilingual_v2'
 
   // 1. Synthesise replacement audio via ElevenLabs
-  const synthesisedBuffer = await synthesiseReplacement(replacement, voiceId, model)
+  const synthesisedBuffer = await generateVoiceBuffer(replacement, voiceId, {
+    modelId,
+    stability: 0.5,
+    similarityBoost: 0.75,
+    source: 'audio.voice',
+  })
 
   // 2. Upload synthesis to R2 (temporary)
   const tempKey = `overdub/tmp/${randomUUID()}.mp3`
@@ -93,7 +72,10 @@ export async function overdubClip(params: OverdubParams): Promise<OverdubResult>
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify(jobConfig),
-  }).catch(() => null)
+  }).catch((err) => {
+    console.warn("[caught] src/lib/audio/Overdub.ts:75", err instanceof Error ? { name: err.name, message: err.message } : err)
+    return (null)
+  })
 
   if (ffmpegRes?.ok) {
     const { outputUrl: processedUrl } = await ffmpegRes.json() as { outputUrl: string }

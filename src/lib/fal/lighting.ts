@@ -1,4 +1,5 @@
-import { fal } from './client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { runFal } from './client'
 
 export interface RelightInput {
   imageUrl: string
@@ -13,6 +14,8 @@ export interface RelightOutput {
   normalMapUrl?: string
 }
 
+export const ICLIGHT_ENDPOINT = falEndpoint('iclight-v2')
+
 const PRESET_PROMPTS: Record<string, string> = {
   studio: 'studio lighting, soft boxes, professional photography',
   outdoor_day: 'bright outdoor daylight, sun overhead, natural shadows',
@@ -26,17 +29,15 @@ export async function relightImage(input: RelightInput): Promise<RelightOutput> 
     images?: Array<{ url: string }>
   }
 
-  const result = await fal.run('fal-ai/iclight-v2', {
-    input: {
-      image_url: input.imageUrl,
-      prompt:
-        input.prompt ??
-        PRESET_PROMPTS[input.environmentPreset ?? 'studio'] ??
-        'natural lighting',
-      num_inference_steps: 28,
-      ...(input.hdriUrl && { background_image_url: input.hdriUrl }),
-    },
-  }) as ICLightResult
+  const result = await runFal<ICLightResult>(ICLIGHT_ENDPOINT, {
+    image_url: input.imageUrl,
+    prompt:
+      input.prompt ??
+      PRESET_PROMPTS[input.environmentPreset ?? 'studio'] ??
+      'natural lighting',
+    num_inference_steps: 28,
+    ...(input.hdriUrl && { background_image_url: input.hdriUrl }),
+  })
 
   return { imageUrl: result.images?.[0]?.url ?? input.imageUrl }
 }
@@ -46,9 +47,9 @@ export async function generateDepthMap(imageUrl: string): Promise<string> {
     image?: { url: string }
   }
 
-  const result = await fal.run('fal-ai/depth-anything-v2', {
-    input: { image_url: imageUrl },
-  }) as DepthResult
+  const result = await runFal<DepthResult>(falEndpoint('imageutils/depth'), {
+    image_url: imageUrl,
+  })
 
   return result.image?.url ?? imageUrl
 }
@@ -58,9 +59,9 @@ export async function generateNormalMap(imageUrl: string): Promise<string> {
     image?: { url: string }
   }
 
-  const result = await fal.run('fal-ai/normal-bae', {
-    input: { image_url: imageUrl },
-  }) as NormalResult
+  const result = await runFal<NormalResult>(falEndpoint('normal-bae'), {
+    image_url: imageUrl,
+  })
 
   return result.image?.url ?? imageUrl
 }
@@ -90,7 +91,6 @@ export async function matchLocationLighting(
   locationPlateUrl: string,
   targetImageUrl: string
 ): Promise<{ relitUrl: string }> {
-  // Extract dominant lighting from the plate and apply to target
   const result = await relightImage({
     imageUrl: targetImageUrl,
     prompt: 'match the lighting from the location plate exactly, same colour temperature and direction',

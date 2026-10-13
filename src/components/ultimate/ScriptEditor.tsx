@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { useScriptStore } from '@/store/scriptStore'
 import { Wand2, Download, Upload, ChevronRight, FileText, Loader2 } from 'lucide-react'
 
 export interface ScriptScene {
@@ -14,7 +15,6 @@ export interface ScriptScene {
 
 interface Props {
   onScenesExtracted: (scenes: ScriptScene[]) => void
-  onGenerateStoryboard: (script: string) => void
 }
 
 /* Minimal Fountain-like syntax highlighter using CSS classes applied inline */
@@ -98,52 +98,85 @@ Maya and Alex burst through a back door into a narrow alley slick with last nigh
 
 `
 
-export function ScriptEditor({ onScenesExtracted, onGenerateStoryboard }: Props) {
-  const [script, setScript] = useState(TEMPLATE)
-  const [scenes, setScenes] = useState<ScriptScene[]>([])
-  const [isAnalysing, setIsAnalysing] = useState(false)
+export function ScriptEditor({ onScenesExtracted }: Props) {
+  const { scriptContent, parsedScenes, isParsing, hasHydrated, setScript, setIsParsing, setHasHydrated } = useScriptStore()
   const [showPreview, setShowPreview] = useState(false)
+  const [parseError, setParseError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    setScenes(parseScenes(script))
-  }, [script])
+    if (useScriptStore.persist.hasHydrated()) {
+      setHasHydrated(true)
+    }
+    const unsub = useScriptStore.persist.onFinishHydration(() => setHasHydrated(true))
+    return unsub
+  }, [setHasHydrated])
+
+  useEffect(() => {
+    if (!hasHydrated) return
+    if (!useScriptStore.getState().scriptContent.trim()) {
+      setScript(TEMPLATE)
+    }
+  }, [hasHydrated, setScript])
+
+  const liveScenes = parseScenes(scriptContent)
+  const scenes = parsedScenes.length > 0 ? parsedScenes : liveScenes
 
   const handleAnalyse = useCallback(async () => {
-    setIsAnalysing(true)
-    try {
-      const res = await fetch('/api/studio/storyboard', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scriptText: script }),
-      })
-      const data = await res.json() as { shots?: ScriptScene[] }
-      if (data.shots) {
-        onScenesExtracted(data.shots)
-        onGenerateStoryboard(script)
-      } else {
-        onScenesExtracted(scenes)
-        onGenerateStoryboard(script)
-      }
-    } catch {
-      onScenesExtracted(scenes)
-      onGenerateStoryboard(script)
-    } finally {
-      setIsAnalysing(false)
+    const { scriptContent: content, setIsParsing: setParsing } = useScriptStore.getState()
+
+    if (!content.trim()) {
+      console.warn('[parse] script is empty')
+      return
     }
-  }, [script, scenes, onScenesExtracted, onGenerateStoryboard])
+
+    setParsing(true)
+    setParseError(null)
+    try {
+      const res = await fetch('/api/script/parse', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: content }),
+      })
+      const data = await res.json() as { scenes?: ScriptScene[]; error?: string }
+      if (!res.ok) {
+        setParseError(data.error ?? `Parse failed (${res.status})`)
+      }
+      const extracted = data.scenes?.length
+        ? data.scenes.map((s, i) => ({
+            id: `scene-${i + 1}`,
+            heading: s.heading ?? `Scene ${i + 1}`,
+            action: typeof s.action === 'string' ? s.action : '',
+            dialogue: Array.isArray(s.dialogue) ? s.dialogue.map(String) : [],
+            characters: Array.isArray(s.characters) ? s.characters.map(String) : [],
+            estimatedDuration: typeof s.estimatedDuration === 'number' ? s.estimatedDuration : 5,
+          }))
+        : parseScenes(content)
+
+      onScenesExtracted(extracted)
+    } catch (err) {
+      const msg = (err as Error).message
+      console.error('[parse] failed:', msg)
+      setParseError(msg)
+      const fallback = parseScenes(content)
+      onScenesExtracted(fallback)
+    } finally {
+      setParsing(false)
+    }
+  }, [onScenesExtracted, setIsParsing])
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (ev) => setScript(ev.target?.result as string)
+    reader.onload = (ev) => setScript(String(ev.target?.result ?? ''))
     reader.readAsText(file)
   }
 
   const handleExport = () => {
-    const blob = new Blob([script], { type: 'text/plain' })
+    const blob = new Blob([scriptContent], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -163,6 +196,11 @@ export function ScriptEditor({ onScenesExtracted, onGenerateStoryboard }: Props)
         <div className="flex-1" />
 
         <span className="text-[10px] text-white/25">{scenes.length} scenes · ~{totalEstimated}s</span>
+        {parseError && (
+          <span className="text-[10px] text-red-400 max-w-[200px] truncate" title={parseError}>
+            {parseError}
+          </span>
+        )}
 
         <button onClick={() => fileInputRef.current?.click()}
           className="p-1.5 rounded-lg text-white/30 hover:text-white/70 hover:bg-white/8 transition-colors" title="Import .fountain">
@@ -185,12 +223,12 @@ export function ScriptEditor({ onScenesExtracted, onGenerateStoryboard }: Props)
 
         <button
           onClick={handleAnalyse}
-          disabled={isAnalysing || !script.trim()}
+          disabled={isParsing || !scriptContent.trim()}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#00e5c8] text-black text-[11px] font-semibold
             hover:bg-[#00f0d5] disabled:opacity-50 transition-colors"
         >
-          {isAnalysing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-          {isAnalysing ? 'Analysing…' : 'Parse & Storyboard'}
+          {isParsing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+          {isParsing ? 'Analysing…' : 'Parse & Storyboard'}
         </button>
       </div>
 
@@ -200,7 +238,7 @@ export function ScriptEditor({ onScenesExtracted, onGenerateStoryboard }: Props)
         <div className={`flex flex-col ${showPreview ? 'w-1/2 border-r border-white/8' : 'flex-1'}`}>
           <textarea
             ref={textareaRef}
-            value={script}
+            value={scriptContent}
             onChange={(e) => setScript(e.target.value)}
             spellCheck={false}
             className="flex-1 w-full bg-transparent text-white/70 font-mono text-[13px] leading-relaxed
@@ -214,7 +252,7 @@ export function ScriptEditor({ onScenesExtracted, onGenerateStoryboard }: Props)
         {showPreview && (
           <div className="w-1/2 overflow-y-auto p-6 font-mono text-[13px] leading-loose">
             <div className="max-w-sm mx-auto">
-              {script.split('\n').map((line, i) => (
+              {scriptContent.split('\n').map((line, i) => (
                 <div key={i}>{highlightFountain(line)}</div>
               ))}
             </div>
@@ -230,9 +268,8 @@ export function ScriptEditor({ onScenesExtracted, onGenerateStoryboard }: Props)
               <button
                 key={scene.id}
                 onClick={() => {
-                  const idx = script.indexOf(scene.heading)
+                  const idx = scriptContent.indexOf(scene.heading)
                   if (idx >= 0 && textareaRef.current) {
-                    const line = script.slice(0, idx).split('\n').length - 1
                     textareaRef.current.focus()
                   }
                 }}

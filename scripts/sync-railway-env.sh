@@ -20,8 +20,8 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-if [[ -z "${RAILWAY_TOKEN:-}" ]]; then
-  echo "✗ Set RAILWAY_TOKEN (project token)"
+if [[ -z "${RAILWAY_TOKEN:-}" ]] && ! railway whoami &>/dev/null 2>&1; then
+  echo "✗ Set RAILWAY_TOKEN (project token) or run: railway login"
   exit 1
 fi
 
@@ -74,6 +74,11 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   value="$(echo "$value" | sed -e 's/^["'\'']//' -e 's/["'\'']$//')"
 
   [[ -z "$value" ]] && continue
+  # Canonical name on Railway is FAL_KEY (legacy FAL_API_KEY is remapped).
+  # FAL_WEBHOOK_SECRET must be the same value on Vercel and every service that submits to the provider.
+  if [[ "$key" == "FAL_API_KEY" ]]; then
+    key="FAL_KEY"
+  fi
   should_skip "$key" && continue
 
   ok=0

@@ -1,42 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { resolveReviewVideoUrl } from '@/lib/review'
+import { parseApprovalChain } from '@cinema/core'
+import { openReviewLink, reviewPinFrom } from '@/lib/review/gate'
+import { watermarkLabel } from '@/lib/review/pin'
 
-/** Public review portal payload for `/review/[token]` page */
+/** Public review portal. PIN + expiry. No project or account fields. */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params
+  const opened = await openReviewLink(token, reviewPinFrom(req))
+  if (!opened.ok) return NextResponse.json({ error: opened.error }, { status: opened.status })
 
-  const link = await db.reviewLink.findUnique({
-    where: { token },
-    include: {
-      comments: { orderBy: { createdAt: 'asc' } },
-    },
-  })
-
-  if (!link) return NextResponse.json({ error: 'Review portal not found' }, { status: 404 })
-  if (link.expiresAt && link.expiresAt < new Date()) {
-    return NextResponse.json({ error: 'Review link expired' }, { status: 410 })
-  }
-
-  const videoUrl = await resolveReviewVideoUrl(link.projectId)
-
+  const link = opened.link
+  const versions = Array.isArray(link.versions) ? link.versions : []
   return NextResponse.json({
     title: link.title,
     status: link.status,
     allowDownload: link.allowDownload,
-    projectId: link.projectId,
-    videoUrl,
-    comments: link.comments.map((c) => ({
-      id: c.id,
-      authorName: c.authorName,
-      authorEmail: c.authorEmail,
-      timecode: c.timecode,
-      text: c.text,
-      resolved: c.resolved,
-      createdAt: c.createdAt.toISOString(),
+    videoUrl: link.proxyUrl,
+    watermark: watermarkLabel(link.watermarkName ?? link.title, link.showWatermarkDate),
+    versions,
+    approvalChain: parseApprovalChain(link.approvalChain),
+    comments: link.comments.map((comment) => ({
+      id: comment.id,
+      authorName: comment.authorName,
+      timecode: comment.timecode,
+      text: comment.text,
+      resolved: comment.resolved,
+      createdAt: comment.createdAt.toISOString(),
     })),
   })
 }

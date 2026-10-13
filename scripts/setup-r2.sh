@@ -33,13 +33,14 @@ aws s3api put-bucket-cors \
       {
         "AllowedOrigins": [
           "https://cinema.growthengine.ai",
+          "https://forgecinema.vercel.app",
           "https://*.vercel.app",
           "http://localhost:3000",
           "http://localhost:8081"
         ],
         "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
         "AllowedHeaders": ["*"],
-        "ExposeHeaders": ["ETag", "Content-Length", "Content-Type"],
+        "ExposeHeaders": ["ETag", "Content-Length", "Content-Type", "Content-Range", "Accept-Ranges"],
         "MaxAgeSeconds": 86400
       }
     ]

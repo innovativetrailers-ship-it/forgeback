@@ -39,6 +39,8 @@ export function PaymentOptions({ planId, billing, onSuccess, onBack }: PaymentOp
       if (!res.ok || !data.url) throw new Error(data.error ?? 'Failed to create checkout')
       window.location.href = data.url
     } catch (err) {
+      console.warn("[caught] src/components/auth/PaymentOptions.tsx:41", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setError(err instanceof Error ? err.message : 'Payment failed')
       setLoading(false)
     }

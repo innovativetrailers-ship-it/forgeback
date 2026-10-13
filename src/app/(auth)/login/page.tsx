@@ -1,4 +1,5 @@
 import { LoginForm } from '@/components/auth/LoginForm'
+import { Suspense } from 'react'
 
 export default function LoginPage() {
   return (
@@ -42,9 +43,11 @@ export default function LoginPage() {
       </div>
 
       {/* Right panel — form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-background">
-        <div className="w-full max-w-sm">
-          <LoginForm />
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-black">
+        <div className="w-full max-w-md">
+          <Suspense fallback={null}>
+            <LoginForm />
+          </Suspense>
         </div>
       </div>
     </div>

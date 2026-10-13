@@ -6,12 +6,14 @@ import { CharacterOnboarding } from '@/components/vault/CharacterOnboarding'
 import type { CharacterOnboardingData } from '@/components/vault/CharacterOnboarding'
 import { useVaultStore } from '@/store/vault'
 import { toast } from '@/lib/toast'
+import { ForgeCastPanel } from '@/components/vault/ForgeCastPanel'
 
 interface Character {
   id: string
   name: string
   referenceUrls: string[]
   loraStatus: string
+  loraError?: string | null
   modelFamily?: string | null
   renderCount: number
 }
@@ -31,26 +33,39 @@ const LORA_STATUS_CONFIG = {
 
 export function VaultPanel({ projectId, characters, onCharacterAdded }: Props) {
   const [onboardingOpen, setOnboardingOpen] = useState(false)
+  const [forgeCastId, setForgeCastId] = useState<string | null>(null)
   const { addCharacter } = useVaultStore()
 
   const handleOnboardingComplete = async (data: CharacterOnboardingData) => {
     addCharacter({
       name: data.name,
       role: 'supporting',
-      description: '',
+      description: data.description,
       faceReferenceUrls: data.referenceImages.map((f) => URL.createObjectURL(f)),
       modelFamily: data.modelFamily === 'any' ? 'auto' : data.modelFamily as never,
       triggerWord: data.triggerWord,
       loraJobId: data.loraJobId,
       makeupState: { type: 'clean', effects: [] },
     })
-    const fd = new FormData()
-    fd.append('name', data.name)
-    fd.append('projectId', projectId)
-    fd.append('triggerWord', data.triggerWord)
-    fd.append('modelFamily', data.modelFamily)
-    data.referenceImages.forEach((f) => fd.append('images', f))
-    await fetch('/api/vault/character/create', { method: 'POST', body: fd }).catch(() => null)
+    if (!data.characterId) {
+      const fd = new FormData()
+      fd.append('name', data.name)
+      if (data.description?.trim()) fd.append('description', data.description.trim())
+      fd.append('projectId', projectId)
+      fd.append('triggerWord', data.triggerWord)
+      fd.append('modelFamily', data.modelFamily)
+      fd.append('trainLora', data.trainLora ? 'true' : 'false')
+      if (data.trainLora) {
+        const { primaryCastTrainer, trainingCostUsd } = await import('@cinema/core')
+        fd.append('confirmedCostUsd', String(trainingCostUsd(primaryCastTrainer(), 1000)))
+        fd.append('subjectConsent', 'true')
+      }
+      data.referenceImages.forEach((f) => fd.append('images', f))
+      await fetch('/api/vault/character/create', { method: 'POST', body: fd, credentials: 'include' }).catch((err) => {
+        console.warn("[caught] src/components/editor/VaultPanel.tsx:63", err instanceof Error ? { name: err.name, message: err.message } : err)
+        return (null)
+      })
+    }
     toast.success(`${data.name} added to vault`)
     onCharacterAdded()
   }
@@ -89,6 +104,7 @@ export function VaultPanel({ projectId, characters, onCharacterAdded }: Props) {
             <div
               key={c.id}
               className="cinema-card flex items-center gap-2 cursor-pointer hover:border-[var(--border-mid)] transition-all"
+              onClick={() => setForgeCastId(c.id)}
             >
               {c.referenceUrls[0] ? (
                 <img src={c.referenceUrls[0]} alt={c.name} className="w-8 h-8 rounded-lg object-cover shrink-0" />
@@ -103,6 +119,9 @@ export function VaultPanel({ projectId, characters, onCharacterAdded }: Props) {
                   {statusCfg.icon}
                   {statusCfg.label}
                 </div>
+                {c.loraStatus === 'FAILED' && c.loraError && (
+                  <p className="text-[9px] text-[var(--text-tertiary)] line-clamp-2" title={c.loraError}>{c.loraError}</p>
+                )}
               </div>
               {c.modelFamily && (
                 <span className="text-[9px] text-[var(--text-tertiary)] shrink-0">{c.modelFamily}</span>
@@ -118,6 +137,10 @@ export function VaultPanel({ projectId, characters, onCharacterAdded }: Props) {
         onComplete={handleOnboardingComplete}
         projectId={projectId}
       />
+
+      {forgeCastId && (
+        <ForgeCastPanel characterId={forgeCastId} onClose={() => setForgeCastId(null)} />
+      )}
     </div>
   )
 }

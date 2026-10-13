@@ -10,7 +10,6 @@ export {
   generateRunway,
   generateHunyuan,
   generateWan22,
-  generateCogVideoXSwarm,
   generateLTXSwarm,
   generatePika,
   generateMinimax,
@@ -19,7 +18,6 @@ export {
   generateMochi,
   generateSkyReels,
   generateLTX,
-  generateCogVideoX,
   type SwarmPayload,
 } from '../models/index'
 

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import Anthropic from '@anthropic-ai/sdk'
+import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
 import { generateMusic } from '@/lib/audio/suno'
 import { detectBeats } from '@/lib/audio/beats'
 import { checkAndDeductCredits } from '@/lib/credits'
 import { nanoid } from 'nanoid'
 import type { TimelineRecipe, Track, Clip } from '@/lib/timeline/schema'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const schema = z.object({
   assetUrls: z.array(z.string().url()).min(1).max(30),
@@ -31,10 +32,8 @@ interface AutoSocialPlan {
   hashtagSuggestions: string[]
 }
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
 export async function POST(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
@@ -46,6 +45,8 @@ export async function POST(request: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'auto_social')
   } catch (err) {
+    console.warn("[caught] src/app/api/auto-social/route.ts:46", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
       ? 'horizontal 16:9, longer form allowed, 60-180s'
       : 'horizontal 16:9, 30-90 seconds'
 
-  const response = await client.messages.create({
+  const response = await claudeCall({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 2000,
     system: `You are a professional social media film editor. Analyze visual assets and create an optimised edit list for a compelling social media video. Platform: ${platformGuidance}. Return ONLY valid JSON, no explanations.`,
@@ -97,16 +98,18 @@ export async function POST(request: NextRequest) {
         ],
       },
     ],
-  })
+  }, { source: 'autosocial' })
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '{}'
+  const text = claudeText(response) || '{}'
 
   let plan: AutoSocialPlan
   try {
     // Extract JSON from response (Claude may wrap it in markdown)
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     plan = JSON.parse(jsonMatch?.[0] ?? text) as AutoSocialPlan
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/auto-social/route.ts:107", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: 'Failed to parse AI edit plan' }, { status: 500 })
   }
 
@@ -124,7 +127,9 @@ export async function POST(request: NextRequest) {
 
     const beatAnalysis = await detectBeats(musicUrl)
     beats = beatAnalysis.downbeats
-  } catch {
+  } catch (err) {
+    console.warn("[caught] src/app/api/auto-social/route.ts:125", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     // Music generation failure is non-fatal
   }
 

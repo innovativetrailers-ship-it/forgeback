@@ -108,6 +108,8 @@ export function AutoSocialTab({ onRecipeReady }: Props) {
       onRecipeReady(data)
       setProgress('')
     } catch (err) {
+      console.warn("[caught] src/components/simple/AutoSocialTab.tsx:110", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       setProgress(`Error: ${(err as Error).message}`)
     } finally {
       setIsGenerating(false)

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { searchLocations } from '@/lib/location/mapillary'
 import { buildGenerativeLocationPrompt } from '@/lib/location/osm'
+import { requireUser } from '@/lib/auth/requireUser'
 
 export async function GET(request: NextRequest) {
-  const userId = request.headers.get('x-user-id')
+  const userId = (await requireUser(request))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const q = request.nextUrl.searchParams.get('q')

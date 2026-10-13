@@ -1,6 +1,17 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  async rewrites() {
+    return {
+      beforeFiles: [
+        { source: '/apple-icon.png', destination: '/apple-icon' },
+        { source: '/icon-16.png', destination: '/icon' },
+        { source: '/icon-32.png', destination: '/icon' },
+        { source: '/og-image.png', destination: '/opengraph-image' },
+      ],
+    }
+  },
+
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '*.r2.cloudflarestorage.com' },
@@ -23,6 +34,7 @@ const nextConfig: NextConfig = {
     'music-metadata',
     '@prisma/client',
     '@prisma/adapter-pg',
+    'pg',
     'prisma',
     'ioredis',
     'bullmq',
@@ -30,7 +42,7 @@ const nextConfig: NextConfig = {
   ],
 
   typedRoutes: false,
-  allowedDevOrigins: ['192.168.1.208', 'localhost'],
+  allowedDevOrigins: ['192.168.1.208', 'localhost', '127.0.0.1'],
   turbopack: {},
 }
 

@@ -1,4 +1,5 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { runFal } from '../fal/client'
 import { uploadToR2 } from '../storage/r2'
 import { nanoid } from 'nanoid'
 
@@ -11,13 +12,11 @@ export async function generateFoley(params: {
     audio?: { url: string }
   }
 
-  const result = await fal.run('fal-ai/stable-audio', {
-    input: {
+  const result = await runFal(falEndpoint('stable-audio'), {
       prompt: params.description,
       seconds_total: Math.min(params.durationSeconds, 120),
       seconds_start: 0,
-    },
-  }) as StableAudioResult
+    }) as StableAudioResult
 
   const audioUrl = result.audio_file?.url ?? result.audio?.url
 

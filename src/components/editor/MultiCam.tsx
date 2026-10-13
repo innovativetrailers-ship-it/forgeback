@@ -9,7 +9,10 @@ interface Props {
   onExport?: (switches: AngleSwitch[]) => void
 }
 
-export function MultiCam({ clips, onExport }: Props) {
+/** v1: multicam is off. Do not mount this. */
+export const MULTICAM_ENABLED = false
+
+function MultiCamEditor({ clips, onExport }: Props) {
   const [playing,     setPlaying]     = useState(false)
   const [currentSec,  setCurrentSec]  = useState(0)
   const [activeClipId, setActiveClipId] = useState<string>(clips[0]?.id ?? '')
@@ -136,6 +139,11 @@ export function MultiCam({ clips, onExport }: Props) {
       </div>
     </div>
   )
+}
+
+export function MultiCam(props: Props) {
+  if (!MULTICAM_ENABLED) return null
+  return <MultiCamEditor {...props} />
 }
 
 function formatTime(sec: number): string {

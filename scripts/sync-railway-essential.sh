@@ -3,12 +3,16 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-export RAILWAY_TOKEN="${RAILWAY_TOKEN:?Set RAILWAY_TOKEN}"
+# RAILWAY_TOKEN optional when logged in via `railway login`
+if [[ -z "${RAILWAY_TOKEN:-}" ]] && ! railway whoami &>/dev/null; then
+  echo "✗ Set RAILWAY_TOKEN or run: railway login"
+  exit 1
+fi
 ENV_FILE="${ENV_FILE:-.env.local}"
 RAILWAY="${RAILWAY:-$(command -v railway >/dev/null && echo railway || echo 'npx @railway/cli')}"
 
 ESSENTIAL_KEYS=(
-  DATABASE_URL REDIS_URL FAL_KEY
+  DATABASE_URL REDIS_URL FAL_KEY FAL_WEBHOOK_SECRET
   R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET_NAME R2_PUBLIC_URL
   OPENROUTER_API_KEY ANTHROPIC_API_KEY
   CRON_SECRET WORKER_HEALTH_TOKEN
@@ -24,7 +28,15 @@ SERVICES=(
 
 get_env() {
   local key="$1"
-  grep -E "^${key}=" "$ENV_FILE" | head -1 | cut -d= -f2- | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
+  local value
+  value="$(grep -E "^${key}=" "$ENV_FILE" | head -1 | cut -d= -f2- | sed -e 's/^["'\'']//' -e 's/["'\'']$//' || true)"
+  if [[ -n "$value" ]]; then
+    echo "$value"
+    return 0
+  fi
+  if [[ "$key" == "FAL_KEY" ]]; then
+    grep -E '^FAL_API_KEY=' "$ENV_FILE" | head -1 | cut -d= -f2- | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
+  fi
 }
 
 echo "Essential sync → ${#SERVICES[@]} services…"

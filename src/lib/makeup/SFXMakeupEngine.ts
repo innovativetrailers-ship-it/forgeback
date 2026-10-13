@@ -1,4 +1,6 @@
-import { fal } from '../fal/client'
+import { falEndpoint } from '@cinema/core/endpoints'
+import { runFal } from '../fal/client'
+import { extractVideoFrame } from '../fal/frameExtract'
 import { runModel1 } from '../brain/model1'
 import type { MakeupState, MakeupEffect, MakeupCategory } from '../casting/types'
 import { CastManager } from '../casting/CastManager'
@@ -28,26 +30,20 @@ export class SFXMakeupEngine {
     }
     makeupState.promptInjection = this.castManager.compileMakeupPrompt(makeupState)
 
-    const frameResult = await fal.run('fal-ai/video-frame-extractor', {
-      input: { video_url: params.videoUrl, timestamp: 0.5 },
-    }) as unknown as { image_url: string }
+    const frameUrl = await extractVideoFrame(params.videoUrl, { timestamp: 0.5 })
 
-    const makeupResult = await fal.run('fal-ai/flux-general/image-to-image', {
-      input: {
-        image_url: frameResult.image_url,
+    const makeupResult = await runFal(falEndpoint('flux-general/image-to-image'), {
+        image_url: frameUrl,
         prompt: `Apply realistic SFX makeup to this face/body: ${makeupState.promptInjection}. Keep everything else identical, only modify the appearance as described. Ultra-realistic, film-quality.`,
         strength: Math.min(0.35 + params.intensity * 0.3, 0.65),
         num_inference_steps: 40,
-      },
-    }) as unknown as { images: Array<{ url: string }> }
+      }) as unknown as { images: Array<{ url: string }> }
 
-    const appliedVideoResult = await fal.run('fal-ai/seedance-v1-lite-i2v', {
-      input: {
+    const appliedVideoResult = await runFal(falEndpoint('seedance-v1-lite-i2v'), {
         image_url: makeupResult.images[0].url,
         prompt: makeupState.promptInjection,
         duration: 5,
-      },
-    }) as unknown as { video: { url: string } }
+      }) as unknown as { video: { url: string } }
 
     return appliedVideoResult.video.url
   }
@@ -59,9 +55,7 @@ export class SFXMakeupEngine {
     characterFaceUrl?: string
     intensity: number
   }): Promise<string> {
-    const frame = await fal.run('fal-ai/video-frame-extractor', {
-      input: { video_url: params.sourceVideoUrl, timestamp: 0.5 },
-    }) as unknown as { image_url: string }
+    const frameUrl = await extractVideoFrame(params.sourceVideoUrl, { timestamp: 0.5 })
 
     const makeupDescription = await runModel1({
       systemPrompt: 'You are an expert SFX makeup artist and visual analyst. Describe the makeup or special effects visible on the face/body in this reference image in precise technical terms for a generation model. Be specific about colours, textures, locations, and intensity. Return only the description.',
@@ -70,21 +64,17 @@ export class SFXMakeupEngine {
       requireJSON: false,
     })
 
-    const transferred = await fal.run('fal-ai/flux-general/image-to-image', {
-      input: {
-        image_url: frame.image_url,
+    const transferred = await runFal(falEndpoint('flux-general/image-to-image'), {
+        image_url: frameUrl,
         prompt: `Apply this exact makeup/SFX to this person's face: ${makeupDescription.content}. Reference image style. Film-quality, photorealistic. Keep all other features identical.`,
         strength: 0.35 + params.intensity * 0.25,
-      },
-    }) as unknown as { images: Array<{ url: string }> }
+      }) as unknown as { images: Array<{ url: string }> }
 
-    const result = await fal.run('fal-ai/seedance-v1-lite-i2v', {
-      input: {
+    const result = await runFal(falEndpoint('seedance-v1-lite-i2v'), {
         image_url: transferred.images[0].url,
         prompt: makeupDescription.content,
         duration: 5,
-      },
-    }) as unknown as { video: { url: string } }
+      }) as unknown as { video: { url: string } }
 
     return result.video.url
   }

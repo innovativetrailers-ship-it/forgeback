@@ -3,12 +3,13 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { checkAndDeductCredits, refundOperationCredits } from '@/lib/credits'
 import { SeriesManager } from '@/lib/series/SeriesManager'
+import { requireUser } from '@/lib/auth/requireUser'
 
 const manager = new SeriesManager()
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {
@@ -28,6 +29,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, 'series_bible_generation')
   } catch (err) {
+    console.warn("[caught] src/app/api/series/create/route.ts:30", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -69,6 +72,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ series, bible, committed: true }, { status: 201 })
   } catch (err) {
+    console.warn("[caught] src/app/api/series/create/route.ts:71", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     await refundOperationCredits(userId, 'series_bible_generation')
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Generation failed' }, { status: 500 })
   }
@@ -76,7 +81,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const series = await db.seriesProject.findMany({

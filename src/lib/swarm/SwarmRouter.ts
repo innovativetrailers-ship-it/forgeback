@@ -1,11 +1,15 @@
+import { falEndpoint } from '@cinema/core/endpoints'
 import { EventEmitter } from 'events'
+import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 import { Shot, ShotList, ModelId, OutcomeTier, SceneCategory, SwarmResult } from './types'
 import { CASTING_DIRECTOR_PROMPT, ART_DIRECTOR_PROMPT, QA_INSPECTOR_PROMPT, STITCH_COORDINATOR_PROMPT } from './brain-prompts'
 import { runModel1 } from '../brain/model1'
 import { callCouncil } from '../brain/council'
 import { redis, channelKey } from '../redis'
 import { db } from '../db'
-import { fal } from '../fal/client'
+import { runFal } from '../fal/client'
+import { extractVideoFrame } from '../fal/frameExtract'
+import { relightImage } from '../fal/lighting'
 import * as models from '../models'
 import { captureFlywheelSignal } from '../telemetry/flywheel'
 
@@ -30,8 +34,8 @@ function createLimiter(concurrency: number) {
 // ── Tier permissions ─────────────────────────────────────────
 const TIER_MODELS: Record<OutcomeTier, Set<ModelId>> = {
   Draft:       new Set(['ltx_2_3', 'wan_2_2', 'pika_2_2', 'mochi_1', 'pixverse']),
-  Studio:      new Set(['wan_2_2', 'hunyuan_1_5', 'cogvideox', 'kling_3_0', 'seedance_2_0', 'skyreels_v1', 'minimax_hailuo', 'pika_2_2', 'mochi_1', 'pixverse']),
-  Blockbuster: new Set(['seedance_2_0', 'veo_3_1', 'kling_3_0', 'runway_gen4_5', 'skyreels_v1', 'hunyuan_1_5', 'wan_2_2', 'cogvideox', 'ltx_2_3', 'pika_2_2', 'minimax_hailuo', 'mochi_1', 'pixverse']),
+  Studio:      new Set(['wan_2_2', 'hunyuan_1_5', 'pixverse', 'kling_3_0', 'seedance_2_0', 'skyreels_v1', 'minimax_hailuo', 'pika_2_2', 'mochi_1', 'pixverse']),
+  Blockbuster: new Set(['seedance_2_0', 'veo_3_1', 'kling_3_0', 'runway_gen4_5', 'skyreels_v1', 'hunyuan_1_5', 'wan_2_2', 'pixverse', 'ltx_2_3', 'pika_2_2', 'minimax_hailuo', 'mochi_1', 'pixverse']),
 }
 
 // ── Canonical routing table ──────────────────────────────────
@@ -59,7 +63,7 @@ const SCENE_TO_MODEL: Partial<Record<SceneCategory, ModelId>> = {
   environment_arid_desert:       'wan_2_2',
   environment_golden_hour:       'veo_3_1',
   urban_dense_cyberpunk:         'hunyuan_1_5',
-  urban_architectural_detail:    'cogvideox',
+  urban_architectural_detail:    'pixverse',
   urban_building_hero:           'veo_3_1',
   urban_crowd:                   'hunyuan_1_5',
   urban_night_neon:              'hunyuan_1_5',
@@ -78,10 +82,10 @@ const SCENE_TO_MODEL: Partial<Record<SceneCategory, ModelId>> = {
   vehicle_crash_impact:          'veo_3_1',
   vehicle_spacecraft:            'hunyuan_1_5',
   vehicle_macro_detail:          'veo_3_1',
-  text_in_frame:                 'cogvideox',
-  text_neon_sign:                'cogvideox',
-  text_digital_display:          'cogvideox',
-  text_document:                 'cogvideox',
+  text_in_frame:                 'pixverse',
+  text_neon_sign:                'pixverse',
+  text_digital_display:          'pixverse',
+  text_document:                 'pixverse',
   vfx_stylized:                  'seedance_2_0',
   vfx_practical_explosion:       'veo_3_1',
   vfx_particles:                 'veo_3_1',
@@ -110,7 +114,7 @@ const STUDIO_DOWNGRADE: Partial<Record<ModelId, ModelId>> = {
 
 // ── Credits per 5 seconds ────────────────────────────────────
 const CREDITS: Record<ModelId, number> = {
-  ltx_2_3: 1, wan_2_2: 2, mochi_1: 2, cogvideox: 3, pixverse: 4,
+  ltx_2_3: 1, wan_2_2: 2, mochi_1: 2, pixverse: 4,
   hunyuan_1_5: 4, pika_2_2: 5, minimax_hailuo: 5,
   skyreels_v1: 7, seedance_2_0: 7, kling_3_0: 9,
   runway_gen4_5: 9, veo_3_1: 18,
@@ -135,7 +139,9 @@ export class SwarmRouter extends EventEmitter {
         useAgenticLoop: params.tier === 'Blockbuster',
       })
       raw = r.content
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/swarm/SwarmRouter.ts:141", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       const r = await callCouncil({
         task: 'decompose',
         messages: [{ role: 'user', content: params.userInput }],
@@ -173,22 +179,32 @@ export class SwarmRouter extends EventEmitter {
     }
   }
 
+  /** Long-form swarm picker. Director shots use delegate(), not this. */
   routeShot(shot: Shot, tier: OutcomeTier): ModelId {
     const permitted = TIER_MODELS[tier]
 
-    if (shot.has_text_in_frame) return permitted.has('cogvideox') ? 'cogvideox' : 'wan_2_2'
-    if (shot.duration_seconds > 30 || shot.is_long_form) return permitted.has('minimax_hailuo') ? 'minimax_hailuo' : 'wan_2_2'
-    if (shot.has_fluid_physics && shot.is_hero_shot) return permitted.has('veo_3_1') ? 'veo_3_1' : 'wan_2_2'
+    if (shot.has_text_in_frame) {
+      if (permitted.has('pixverse')) return 'pixverse'
+      return refuseSilentModelSwap('pixverse', 'wan_2_2')
+    }
+    if (shot.duration_seconds > 30 || shot.is_long_form) {
+      if (permitted.has('minimax_hailuo')) return 'minimax_hailuo'
+      return refuseSilentModelSwap('minimax_hailuo', 'wan_2_2')
+    }
+    if (shot.has_fluid_physics && shot.is_hero_shot) {
+      if (permitted.has('veo_3_1')) return 'veo_3_1'
+      return refuseSilentModelSwap('veo_3_1', 'wan_2_2')
+    }
 
     const primary = SCENE_TO_MODEL[shot.scene_category]
-    if (!primary) return 'wan_2_2'
+    if (!primary) return refuseSilentModelSwap(shot.scene_category, 'wan_2_2')
     if (permitted.has(primary)) return primary
 
     const downgraded = STUDIO_DOWNGRADE[primary]
     if (downgraded && permitted.has(downgraded)) return downgraded
 
-    const ladder: ModelId[] = ['seedance_2_0', 'kling_3_0', 'skyreels_v1', 'hunyuan_1_5', 'wan_2_2', 'cogvideox', 'ltx_2_3', 'mochi_1']
-    return ladder.find(m => permitted.has(m)) ?? 'wan_2_2'
+    const ladder: ModelId[] = ['seedance_2_0', 'kling_3_0', 'skyreels_v1', 'hunyuan_1_5', 'wan_2_2', 'pixverse', 'ltx_2_3', 'mochi_1']
+    return ladder.find(m => permitted.has(m)) ?? refuseSilentModelSwap(shot.scene_category, 'wan_2_2')
   }
 
   async enhancePrompt(shot: Shot, model: ModelId): Promise<string> {
@@ -256,7 +272,9 @@ export class SwarmRouter extends EventEmitter {
       distribution: params.shotList.model_distribution,
       tier: params.shotList.tier,
       quality: assessed.map(r => ({ id: r.shot_id, score: r.quality_score })),
-    }, params.userId).catch(() => { /* non-fatal */ })
+    }, params.userId).catch((err) => {
+      console.warn("[caught] src/lib/swarm/SwarmRouter.ts:273", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal */ })
 
     return assessed.sort((a, b) => {
       const ia = params.shotList.shots.find(s => s.shot_id === a.shot_id)!.sequence_index
@@ -273,18 +291,20 @@ export class SwarmRouter extends EventEmitter {
 
     try {
       url = await this.callModel(model, prompt, shot)
-    } catch {
+    } catch (err) {
+      console.warn("[caught] src/lib/swarm/SwarmRouter.ts:288", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       const fallback = this.routeShot(shot, 'Studio')
       url = await this.callModel(fallback, prompt, shot)
     }
 
     if (shot.requires_face_enhance) {
-      const res = await fal.run('fal-ai/codeformer', { input: { image_url: url, fidelity: 0.75 } }) as { image?: { url: string } }
+      const res = await runFal(falEndpoint('codeformer'), { image_url: url, fidelity: 0.75 }) as { image?: { url: string } }
       url = res.image?.url ?? url
     }
     if (shot.requires_relight) {
-      const res = await fal.run('fal-ai/ic-light', { input: { image_url: url, prompt: `match ${shot.mood} mood` } }) as { image?: { url: string } }
-      url = res.image?.url ?? url
+      const res = await relightImage({ imageUrl: url, prompt: `match ${shot.mood} mood` })
+      url = res.imageUrl
     }
 
     const proxy = await this.makeProxy(url)
@@ -299,7 +319,9 @@ export class SwarmRouter extends EventEmitter {
         latencyMs: Date.now() - start,
         success: true,
       },
-    }).catch(() => { /* non-fatal */ })
+    }).catch((err) => {
+      console.warn("[caught] src/lib/swarm/SwarmRouter.ts:318", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal */ })
 
     return {
       shot_id: shot.shot_id,
@@ -331,7 +353,6 @@ export class SwarmRouter extends EventEmitter {
       case 'skyreels_v1':    return models.generateSkyReelsSwarm(base)
       case 'hunyuan_1_5':    return models.generateHunyuan(base)
       case 'wan_2_2':        return models.generateWan22(base)
-      case 'cogvideox':      return models.generateCogVideoXSwarm(base)
       case 'ltx_2_3':        return models.generateLTXSwarm(base)
       case 'pika_2_2':       return models.generatePika(base)
       case 'minimax_hailuo': return models.generateMinimax(base)
@@ -343,9 +364,10 @@ export class SwarmRouter extends EventEmitter {
 
   private async makeProxy(url: string): Promise<string> {
     try {
-      const r = await fal.run('fal-ai/video-frame-extractor', { input: { video_url: url, timestamp: 0.5 } }) as unknown as { image_url?: string }
-      return r.image_url ?? url
-    } catch {
+      return await extractVideoFrame(url, { timestamp: 0.5 })
+    } catch (err) {
+      console.warn("[caught] src/lib/swarm/SwarmRouter.ts:358", err instanceof Error ? { name: err.name, message: err.message } : err)
+
       return url
     }
   }
@@ -363,7 +385,9 @@ export class SwarmRouter extends EventEmitter {
         })
         const parsed = JSON.parse(qa.content)
         return { ...r, quality_score: parsed.quality_score, needs_repaint: parsed.needs_repaint, repaint_regions: parsed.repaint_regions ?? [] }
-      } catch {
+      } catch (err) {
+        console.warn("[caught] src/lib/swarm/SwarmRouter.ts:376", err instanceof Error ? { name: err.name, message: err.message } : err)
+
         return r
       }
     }))
@@ -387,12 +411,14 @@ export class SwarmRouter extends EventEmitter {
         if (stitch.colour_normalise) {
           const res = results.find(res => res.shot_id === shots[i].shot_id)
           if (res) {
-            await fal.run('fal-ai/ic-light', {
-              input: { image_url: res.output_url, prompt: stitch.ic_light_instruction },
-            }).catch(() => { /* non-fatal */ })
+            await relightImage({ imageUrl: res.output_url, prompt: stitch.ic_light_instruction }).catch((err) => {
+              console.warn("[caught] src/lib/swarm/SwarmRouter.ts:408", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal */ })
           }
         }
-      } catch { /* non-fatal — keep default stitch config */ }
+      } catch (err) {
+        console.warn("[caught] src/lib/swarm/SwarmRouter.ts:403", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal — keep default stitch config */ }
     }
   }
 
@@ -404,14 +430,21 @@ export class SwarmRouter extends EventEmitter {
           shot_id: shot.shot_id,
           video_url: r.output_url,
           character_ids: shot.character_ids,
-        })).catch(() => { /* non-fatal */ })
+        })).catch((err) => {
+          console.warn("[caught] src/lib/swarm/SwarmRouter.ts:425", err instanceof Error ? { name: err.name, message: err.message } : err)
+ /* non-fatal */ })
       }
     }))
   }
 
   private async retryFailed(shots: Shot[], userId: string, projectId: string): Promise<SwarmResult[]> {
     return Promise.all(shots.map(shot => {
-      const downgrade = STUDIO_DOWNGRADE[shot.assigned_model!] ?? 'wan_2_2'
+      const selected = shot.assigned_model
+      if (!selected) refuseSilentModelSwap(shot.shot_id, 'wan_2_2')
+      const downgrade = STUDIO_DOWNGRADE[selected] ?? refuseSilentModelSwap(shot.shot_id, 'wan_2_2')
+      if (downgrade !== selected) {
+        console.warn('[costGuard] visible model downgrade', { selected, wouldHaveBeen: downgrade })
+      }
       shot.assigned_model = downgrade
       return this.generateShot(shot, userId, projectId)
     }))

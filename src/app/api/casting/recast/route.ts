@@ -4,12 +4,14 @@ import { db } from '@/lib/db'
 import { checkAndDeductCredits, refundOperationCredits } from '@/lib/credits'
 import { Recaster } from '@/lib/casting/Recaster'
 import type { CastMember } from '@/lib/casting/types'
+import { requireUser } from '@/lib/auth/requireUser'
+import { recordConsent } from '@/lib/privacy/consent'
 
 const recaster = new Recaster()
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  const userId = req.headers.get('x-user-id') ?? session?.user?.id
+  const userId = (await requireUser(req))?.id ??  session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {
@@ -21,11 +23,17 @@ export async function POST(req: NextRequest) {
     scope: 'face_only' | 'full_character' | 'silhouette_only'
     applyToAllClips?: boolean
     intensity?: number
+    likenessConsent?: boolean
+    notMinor?: boolean
   }
 
   if (!body.projectId || !body.originalCharacterId || !body.scope) {
     return NextResponse.json({ error: 'projectId, originalCharacterId and scope are required' }, { status: 400 })
   }
+  if (body.likenessConsent !== true || body.notMinor !== true) {
+    return NextResponse.json({ error: 'Likeness consent is required, and the person must not be a minor. Nothing was recast.' }, { status: 400 })
+  }
+  await recordConsent(userId, 'likeness', 'casting.recast')
 
   const creditKey = body.scope === 'face_only' ? 'recast_face_swap'
     : body.applyToAllClips ? 'recast_project_wide'
@@ -34,6 +42,8 @@ export async function POST(req: NextRequest) {
   try {
     await checkAndDeductCredits(userId, creditKey)
   } catch (err) {
+    console.warn("[caught] src/app/api/casting/recast/route.ts:36", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     return NextResponse.json({ error: (err as Error).message }, { status: 402 })
   }
 
@@ -91,6 +101,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ outputUrl })
   } catch (err) {
+    console.warn("[caught] src/app/api/casting/recast/route.ts:93", err instanceof Error ? { name: err.name, message: err.message } : err)
+
     await refundOperationCredits(userId, creditKey)
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Recast failed' }, { status: 500 })
   }
