@@ -4,7 +4,9 @@ Do this in order. Do not skip the snapshot. Do not apply migrations to productio
 
 ## 1. Snapshot the database
 
-Take a Neon snapshot of the production branch before any migration. Keep the snapshot id. The rollback is to restore that snapshot, not to run a down migration. These migrations do not drop columns. `20261013073000_retire_user_work` replaces foreign keys so a scene, project, character, user, or playbook parent can no longer cascade-delete child work. Restoring the snapshot is the way back.
+Take a Neon snapshot of the production branch before any migration. Keep the snapshot id. The rollback is to restore that snapshot, not to run a down migration.
+
+Snapshot taken for this release: name `forge-pre-run38-39-2026-10-13`, id `snap-noisy-fog-a7ic38x0`, created `2026-10-13T02:50:59Z`. These migrations do not drop columns. `20261013073000_retire_user_work` replaces foreign keys so a scene, project, character, user, or playbook parent can no longer cascade-delete child work. Restoring the snapshot is the way back.
 
 ## 2. Confirm the migration order
 
