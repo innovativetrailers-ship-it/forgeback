@@ -15,8 +15,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
   const { prompt, style, duration, instrumental, title } = body
-
-  const { prompt, style, duration, instrumental, title } = body
   if (!prompt?.trim()) return NextResponse.json({ error: 'prompt is required' }, { status: 400 })
 
   const durationSecs = duration ?? 60
