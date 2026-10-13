@@ -34,6 +34,7 @@ const nextConfig: NextConfig = {
     'music-metadata',
     '@prisma/client',
     '@prisma/adapter-pg',
+    'pg',
     'prisma',
     'ioredis',
     'bullmq',
@@ -41,7 +42,7 @@ const nextConfig: NextConfig = {
   ],
 
   typedRoutes: false,
-  allowedDevOrigins: ['192.168.1.208', 'localhost'],
+  allowedDevOrigins: ['192.168.1.208', 'localhost', '127.0.0.1'],
   turbopack: {},
 }
 

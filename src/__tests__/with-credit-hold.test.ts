@@ -26,6 +26,13 @@ describe('withCreditHold', () => {
     expect(release).not.toHaveBeenCalled()
   })
 
+  it('does not call the provider when the hold is refused', async () => {
+    open.mockRejectedValueOnce(new Error('Insufficient credits: need 12 held, have 0'))
+    const run = jest.fn()
+    await expect(withCreditHold('user-1', 9, run)).rejects.toThrow(/Insufficient credits/)
+    expect(run).not.toHaveBeenCalled()
+  })
+
   it('releases the hold when the paid call throws', async () => {
     await expect(withCreditHold('user-1', 2, async () => { throw new Error('provider down') })).rejects.toThrow('provider down')
     expect(open).toHaveBeenCalled()

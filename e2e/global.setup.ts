@@ -14,7 +14,7 @@ setup('create authenticated user session', async ({ page, request }) => {
 
   // Register via API (faster than UI flow)
   const regRes = await request.post('/api/auth/register', {
-    data: { name: 'Playwright User', email, password },
+    data: { name: 'Playwright User', email, password, dateOfBirth: '1990-01-01' },
   })
 
   // 200 = new user created, 409 = already exists (re-run) — both are fine
