@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getFCCCharacter } from '@/lib/character/fccManager'
 import { ingestPhotoReferences } from '@/lib/character/ingestion'
 import { requireUserId } from '@/lib/character/auth'
+import { recordConsent } from '@/lib/privacy/consent'
 
 export async function POST(
   request: NextRequest,
@@ -19,6 +20,15 @@ export async function POST(
   if (!character || character.project.userId !== userId) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
+
+  const body = await request.json().catch((err) => {
+    console.warn('[character-ingest]', err instanceof Error ? err.message : err)
+    return {}
+  }) as { likenessConsent?: boolean; notMinor?: boolean }
+  if (body.likenessConsent !== true || body.notMinor !== true) {
+    return NextResponse.json({ error: 'Likeness consent is required, and the person must not be a minor. Nothing was ingested.' }, { status: 400 })
+  }
+  await recordConsent(userId, 'likeness', 'vault.character.ingest')
 
   if (character.referenceUrls.length === 0) {
     return NextResponse.json({ error: 'No reference images on character' }, { status: 400 })

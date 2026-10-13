@@ -5,6 +5,7 @@ import { checkAndDeductCredits, refundOperationCredits } from '@/lib/credits'
 import { Recaster } from '@/lib/casting/Recaster'
 import type { CastMember } from '@/lib/casting/types'
 import { requireUser } from '@/lib/auth/requireUser'
+import { recordConsent } from '@/lib/privacy/consent'
 
 const recaster = new Recaster()
 
@@ -22,11 +23,17 @@ export async function POST(req: NextRequest) {
     scope: 'face_only' | 'full_character' | 'silhouette_only'
     applyToAllClips?: boolean
     intensity?: number
+    likenessConsent?: boolean
+    notMinor?: boolean
   }
 
   if (!body.projectId || !body.originalCharacterId || !body.scope) {
     return NextResponse.json({ error: 'projectId, originalCharacterId and scope are required' }, { status: 400 })
   }
+  if (body.likenessConsent !== true || body.notMinor !== true) {
+    return NextResponse.json({ error: 'Likeness consent is required, and the person must not be a minor. Nothing was recast.' }, { status: 400 })
+  }
+  await recordConsent(userId, 'likeness', 'casting.recast')
 
   const creditKey = body.scope === 'face_only' ? 'recast_face_swap'
     : body.applyToAllClips ? 'recast_project_wide'

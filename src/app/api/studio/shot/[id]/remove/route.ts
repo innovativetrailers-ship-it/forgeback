@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { deleteFromR2, objectKeyFromStored } from '@/lib/storage/r2'
 import { requireUser } from '@/lib/auth/requireUser'
 
 export async function POST(
@@ -17,12 +16,9 @@ export async function POST(
   if (!clip || clip.scene.project.userId !== userId) {
     return NextResponse.json({ error: 'Shot not found' }, { status: 404 })
   }
-  const key = clip.storageKey?.trim() || objectKeyFromStored(clip.videoUrl) || objectKeyFromStored(clip.rawVideoUrl)
-  if (key) {
-    await deleteFromR2(key).catch((err) => {
-      console.warn('[shot] storage delete failed', err instanceof Error ? err.message : err)
-    })
-  }
-  await db.studioClip.delete({ where: { id } })
+  await db.studioClip.update({
+    where: { id },
+    data: { orphanedAt: new Date(), statusReason: 'removed by user' },
+  })
   return NextResponse.json({ id, tombstone: true })
 }

@@ -6,8 +6,8 @@ import { requireUser } from '@/lib/auth/requireUser'
 const falSubscribe = falSubscribeBound('app.api.highlights.extract.route')
 import { uploadToR2 } from '../../../../lib/storage/r2'
 import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
-import { execSync } from 'child_process'
-import { mkdirSync, rmSync, existsSync } from 'fs'
+import { mkdirSync, rmSync, existsSync, readFileSync } from 'fs'
+import { runArgv } from '@/lib/shell/argv'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
 
     // Get video duration
     const totalDur = parseFloat(
-      execSync(`ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${videoUrl}"`).toString().trim()
+      runArgv('ffprobe', ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', videoUrl]).toString().trim()
     )
 
     // Group chunks into 30-90s segments
@@ -133,10 +133,8 @@ Return ONLY valid JSON array:
 
       const clipPath = join(tmpDir, `highlight_${rank}.mp4`)
       try {
-        execSync(
-          `ffmpeg -i "${videoUrl}" -ss ${seg.start} -t ${seg.end - seg.start} -c copy "${clipPath}" -y 2>/dev/null`
-        )
-        const buffer = execSync(`cat "${clipPath}"`)
+        runArgv('ffmpeg', ['-i', videoUrl, '-ss', String(seg.start), '-t', String(seg.end - seg.start), '-c', 'copy', clipPath, '-y'])
+        const buffer = readFileSync(clipPath)
         const clipUrl = await uploadToR2(buffer, `highlights/${jobId}_${rank}.mp4`, 'video/mp4')
 
         highlights.push({

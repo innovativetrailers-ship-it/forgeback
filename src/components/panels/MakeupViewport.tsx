@@ -62,7 +62,7 @@ export function MakeupViewport({ colour, label }: { colour: string; label: strin
   return (
     <div className="space-y-1">
       <div ref={host} className="h-[180px] w-full overflow-hidden rounded bg-black/40" />
-      <p className="text-[10px] text-[var(--text-tertiary)]">{label} Drag to orbit. This preview is approximate and is not the final render.</p>
+      <p className="text-[10px] text-[var(--text-tertiary)]">{label} Tinted sphere. Drag to orbit. This preview is approximate and is not the final render.</p>
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 import { synthesiseVoice }                from '@/lib/engines/elevenLabs'
 import { uploadToR2 }                     from '@/lib/storage/r2'
 import { deductCredits, OPERATION_COSTS } from '@/lib/credits'
@@ -45,6 +46,6 @@ export async function POST(req: Request) {
 
   // Short text — synchronous, returns the audio URL immediately
   const buf = await synthesiseVoice({ text, voiceId, stability, similarity })
-  const url = await uploadToR2(buf, `audio/${userId}/${Date.now()}.mp3`, 'audio/mpeg')
+  const url = await storeForUser(userId, buf, 'mp3', 'audio/mpeg')
   return Response.json({ audioUrl: url, cost })
 }

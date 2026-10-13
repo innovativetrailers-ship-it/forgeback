@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 import { logCaught } from '@/lib/diagnostics/caught'
 // Suppress expected teardown errors that fire when Redis/BullMQ connections
 // close in non-deterministic order during graceful shutdown.
@@ -749,7 +750,7 @@ const workerProcessor = async (job: { name: string; data: RenderJobPayload; id?:
         )
         const { uploadToR2 } = await import('@/lib/storage/r2')
         const buf    = await fetch(result.audioUrl).then(r => r.arrayBuffer())
-        const r2Url  = await uploadToR2(Buffer.from(buf), `music/${uid}/${Date.now()}.mp3`, 'audio/mpeg')
+        const r2Url  = await storeForUser(uid, Buffer.from(buf), 'mp3', 'audio/mpeg')
         await db.renderJob.update({
           where: { id: jobId },
           data: { status: 'COMPLETE', progressPct: 100, etaSeconds: 0, statusMessage: 'Complete', outputUrl: r2Url, completedAt: new Date() },
@@ -786,7 +787,7 @@ const workerProcessor = async (job: { name: string; data: RenderJobPayload; id?:
         }
         const combined = Buffer.concat(parts)
         const { uploadToR2 } = await import('@/lib/storage/r2')
-        const r2Url = await uploadToR2(combined, `audio/${uid}/${Date.now()}.mp3`, 'audio/mpeg')
+        const r2Url = await storeForUser(uid, combined, 'mp3', 'audio/mpeg')
         await db.renderJob.update({
           where: { id: jobId },
           data: { status: 'COMPLETE', progressPct: 100, etaSeconds: 0, statusMessage: 'Complete', outputUrl: r2Url, completedAt: new Date() },

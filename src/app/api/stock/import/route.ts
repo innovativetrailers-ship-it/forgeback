@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { uploadToR2 } from '@/lib/storage/r2'
 import { requireUser } from '@/lib/auth/requireUser'
+import { hostAllowed, safeFetch } from '@/lib/net/safeFetch'
+import { opaqueObjectKey } from '@/lib/upload/sniff'
 
 const PEXELS_LICENCE = 'Pexels License — free to use, including commercially. Attribution is appreciated and is stored with the file. This copy is not used to train models.'
 
@@ -20,16 +22,16 @@ export async function POST(req: NextRequest) {
     console.warn('[stock-import]', err instanceof Error ? err.message : err)
     return NextResponse.json({ error: 'A Pexels file URL is required' }, { status: 400 })
   }
-  if (!host.endsWith('pexels.com')) {
+  if (!hostAllowed(host, ['images.pexels.com', 'videos.pexels.com'])) {
     return NextResponse.json({ error: 'Only a Pexels file can be copied into the library.' }, { status: 400 })
   }
   try {
-    const res = await fetch(url)
+    const res = await safeFetch(url, ['images.pexels.com', 'videos.pexels.com'])
     if (!res.ok) return NextResponse.json({ error: 'Pexels did not return the file' }, { status: 502 })
     const type = body?.type === 'video' ? 'video' : 'image'
     const stored = await uploadToR2(
       Buffer.from(await res.arrayBuffer()),
-      `stock/${userId}/${Date.now()}.${type === 'video' ? 'mp4' : 'jpg'}`,
+      opaqueObjectKey(type === 'video' ? 'mp4' : 'jpg'),
       type === 'video' ? 'video/mp4' : 'image/jpeg',
     )
     const asset = await db.asset.create({

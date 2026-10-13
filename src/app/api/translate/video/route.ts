@@ -7,8 +7,8 @@ const falSubscribe = falSubscribeBound('app.api.translate.video.route')
 import { synthesiseSpeech } from '../../../../lib/audio/elevenlabs'
 import { uploadToR2 } from '../../../../lib/storage/r2'
 import { claudeCall, claudeText } from '@/lib/llm/anthropicClient'
-import { execSync } from 'child_process'
-import { mkdirSync, rmSync, existsSync } from 'fs'
+import { mkdirSync, rmSync, existsSync, readFileSync } from 'fs'
+import { runArgv } from '@/lib/shell/argv'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 
@@ -124,10 +124,8 @@ export async function POST(req: NextRequest) {
         ? `[0:a][1:a]amix=inputs=2:duration=shortest`
         : `[1:a]anull`
 
-      execSync(
-        `ffmpeg -i "${sourceVideoUrl}" -i "${audioPath}" -filter_complex "${mixArg}" -c:v copy "${outputPath}" -y 2>/dev/null`
-      )
-      const outBuf = execSync(`cat "${outputPath}"`)
+      runArgv('ffmpeg', ['-i', sourceVideoUrl, '-i', audioPath, '-filter_complex', mixArg, '-c:v', 'copy', outputPath, '-y'])
+      const outBuf = readFileSync(outputPath)
       finalVideoUrl = await uploadToR2(outBuf, `translated/${jobId}.mp4`, 'video/mp4')
     }
 

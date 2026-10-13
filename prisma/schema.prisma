@@ -100,6 +100,8 @@ model User {
   subscriptionTier     String    @default("free")
   subscriptionStatus String    @default("trial")
   privacy            Json?
+  dateOfBirth        DateTime?
+  deletionRequestedAt DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -127,6 +129,8 @@ model User {
   trainingRuns    TrainingRun[]
   trainedAssets   TrainedAsset[]
   assets          Asset[]
+  consentRecords  ConsentRecord[]
+  storedObjects   StoredObject[]
   playbooks       Playbook[]
   projectMemberships ProjectMember[]
   filmTemplates   FilmTemplate[]
@@ -281,7 +285,8 @@ model AudioTrack {
   audioLoraId         String?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
-  project             Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  retiredAt           DateTime?
+  project             Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
   @@index([projectId, type])
   @@index([shotPlanId])
@@ -294,6 +299,7 @@ model StudioScene {
   title           String?
   transitionFrame String?
   status          StudioSceneStatus @default(PENDING)
+  orphanedAt      DateTime?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
@@ -316,6 +322,7 @@ model StudioClip {
   status          StudioClipStatus @default(PENDING)
   /** Why a clip was retagged. The clip row stays. */
   statusReason    String?
+  orphanedAt      DateTime?
   /** Sweeper may resubmit this clip once generation is not paused. */
   retryEligible   Boolean          @default(false)
   videoUrl        String?
@@ -360,12 +367,13 @@ model StudioClip {
   characterLoraId  String?
   styleLoraId      String?
   genrePresetId    String?
-  scene           StudioScene      @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  scene           StudioScene      @relation(fields: [sceneId], references: [id], onDelete: Restrict)
   location        LocationPlate?   @relation(fields: [locationId], references: [id], onDelete: SetNull)
 
   @@unique([sceneId, clipNumber])
   @@index([sceneId])
   @@index([locationId])
+  @@index([status, generatingAt])
 }
 
 model VaultCharacter {
@@ -394,6 +402,7 @@ model VaultCharacter {
   trainedAssetId  String?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
+  retiredAt       DateTime?
 
   project         Project     @relation(fields: [projectId], references: [id])
   wardrobe        WardrobeItem[]
@@ -409,11 +418,12 @@ model WardrobeItem {
   refImageUrl  String
   lockedHash   String
   appliedAt    DateTime       @default(now())
-  character    VaultCharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  character    VaultCharacter @relation(fields: [characterId], references: [id], onDelete: Restrict)
 
   @@index([characterId])
 }
 
+/// Retired. New locations are Asset rows with kind "location". This table stays so old rows are not dropped.
 model VaultLocation {
   id               String          @id @default(cuid())
   projectId        String
@@ -485,6 +495,31 @@ model CreditHold {
   job         RenderJob  @relation(fields: [jobId], references: [id])
 
   @@index([userId])
+  @@index([status])
+}
+
+model StoredObject {
+  id         String   @id @default(cuid())
+  ownerId    String?
+  storageKey String   @unique
+  createdAt  DateTime @default(now())
+
+  owner      User?    @relation(fields: [ownerId], references: [id])
+
+  @@index([ownerId])
+}
+
+model ConsentRecord {
+  id          String   @id @default(cuid())
+  userId      String
+  subject     String
+  scope       String
+  textVersion String
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, subject, scope])
 }
 
 model SegmentCheckpoint {
@@ -820,6 +855,7 @@ model FilmCastMember {
   @@index([filmProjectId])
 }
 
+/// Retired. Film locations are not written. The table stays so old rows are not dropped.
 model FilmLocation {
   id              String      @id @default(cuid())
   filmProjectId   String
@@ -923,6 +959,7 @@ model MediaBin {
   name      String
   colour    String         @default("#00e5c8")
   sortOrder Int            @default(0)
+  retiredAt DateTime?
   entries   BinClipEntry[]
   project   Project        @relation(fields: [projectId], references: [id])
 
@@ -939,6 +976,7 @@ model BinClipEntry {
   thumbnailUrl    String?
   metadata        Json?
   createdAt       DateTime  @default(now())
+  retiredAt       DateTime?
   bin             MediaBin  @relation(fields: [binId], references: [id])
 
   @@index([binId])
@@ -1523,7 +1561,7 @@ model Asset {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  owner  User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner  User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   folder MediaFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   plates LocationPlate[]
 
@@ -1584,8 +1622,9 @@ model Playbook {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  retiredAt DateTime?
+  user    User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
   @@index([userId, projectId])
   @@index([userId])

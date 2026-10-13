@@ -3,11 +3,13 @@ import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { allowRate } from '@/lib/http/rateLimit'
+import { ageYears } from '@/lib/privacy/consent'
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth is required'),
 })
 
 export async function POST(request: NextRequest) {
@@ -25,7 +27,11 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const { name, email, password } = parsed.data
+  const { name, email, password, dateOfBirth } = parsed.data
+  const born = new Date(`${dateOfBirth}T00:00:00.000Z`)
+  if (Number.isNaN(born.getTime()) || ageYears(born) < 18) {
+    return NextResponse.json({ error: { dateOfBirth: ['Accounts are for adults'] } }, { status: 400 })
+  }
 
   const existing = await db.user.findUnique({ where: { email } })
   if (existing) {
@@ -38,7 +44,7 @@ export async function POST(request: NextRequest) {
   const passwordHash = await bcrypt.hash(password, 12)
 
   const user = await db.user.create({
-    data: { name, email, passwordHash },
+    data: { name, email, passwordHash, dateOfBirth: born },
     select: { id: true, email: true, name: true, role: true, creditBalance: true },
   })
 

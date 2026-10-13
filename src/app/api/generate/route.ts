@@ -14,6 +14,15 @@ import { parseCreativeLicense } from '@/lib/cognition/license'
 import { defaultWizard, parseWizard, type DirectorRunMode } from '@/lib/orchestration/wizardState'
 import { refuseSilentModelSwap } from '@/lib/orchestration/costGuard'
 import { db }                                      from '@/lib/db'
+import { assertPublicHost } from '@/lib/net/safeFetch'
+
+async function publicMediaUrl(value: unknown): Promise<string | undefined> {
+  if (typeof value !== 'string' || value.length === 0) return undefined
+  const parsed = new URL(value)
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('A media link must be an http(s) URL')
+  await assertPublicHost(parsed.hostname)
+  return parsed.toString()
+}
 
 export async function POST(req: Request) {
   const userId = (await requireUser(req))?.id ?? null
@@ -55,7 +64,16 @@ export async function POST(req: Request) {
   const wizard = mode === 'director'
     ? (parseWizard(body.wizard) ?? defaultWizard(directorMode))
     : undefined
-  const { projectId, characterId, musicUrl, ambienceUrl } = body
+  const { projectId, characterId } = body
+  let musicUrl: string | undefined
+  let ambienceUrl: string | undefined
+  try {
+    musicUrl = await publicMediaUrl(body.musicUrl)
+    ambienceUrl = await publicMediaUrl(body.ambienceUrl)
+  } catch (err) {
+    console.warn('[generate] media url', err instanceof Error ? err.message : err)
+    return Response.json({ error: err instanceof Error ? err.message : 'That media link is not allowed' }, { status: 400 })
+  }
   if (body.musicVideo?.audioUrl && body.musicVideo.rights !== true) {
     return Response.json({ error: 'Music rights are required before a video can be made from this track' }, { status: 400 })
   }

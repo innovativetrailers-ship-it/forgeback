@@ -38,7 +38,10 @@ export async function POST(request: NextRequest) {
   // Fetch available vault assets
   const [characters, locations] = await Promise.all([
     db.vaultCharacter.findMany({ where: { projectId } }),
-    db.vaultLocation.findMany({ where: { projectId } }),
+    db.asset.findMany({
+      where: { kind: 'location', boundary: { path: ['projectId'], equals: projectId } },
+      select: { id: true, label: true },
+    }),
   ])
 
   const { recipe, directorNotes } = await runAIDirector({
@@ -48,7 +51,7 @@ export async function POST(request: NextRequest) {
     projectId,
     userId,
     availableCharacters: characters.map((c) => ({ id: c.id, name: c.name })),
-    availableLocations: locations.map((l) => ({ id: l.id, name: l.name })),
+    availableLocations: locations.map((l) => ({ id: l.id, name: l.label ?? 'Location' })),
   })
 
   return NextResponse.json({ recipe, directorNotes, queued: false, autoQueue })

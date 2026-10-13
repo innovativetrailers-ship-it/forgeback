@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react'
 import { useSession } from 'next-auth/react'
 import { nanoid } from 'nanoid'
-import { FileText, Film, Brain, Layers, ShieldCheck, Sliders, Play, Pause, ChevronLeft, ChevronRight, MapPin } from 'lucide-react'
+import { Play, Pause } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { IconRail } from '@/components/layout/IconRail'
 import { LeftPanel } from '@/components/layout/LeftPanel'
@@ -78,16 +78,6 @@ const PANEL_TO_FILM_TAB: Partial<Record<PanelId, UltimateTab>> = {
   location:    'locations',
 }
 
-const TABS: Array<{ id: UltimateTab; label: string; icon: React.ReactNode }> = [
-  { id: 'script',      label: 'Script',      icon: <FileText className="w-3.5 h-3.5" /> },
-  { id: 'storyboard',  label: 'Storyboard',  icon: <Film className="w-3.5 h-3.5" /> },
-  { id: 'director',    label: 'AI Director', icon: <Brain className="w-3.5 h-3.5" /> },
-  { id: 'cgi',         label: 'CGI',         icon: <Layers className="w-3.5 h-3.5" /> },
-  { id: 'continuity',  label: 'Continuity',  icon: <ShieldCheck className="w-3.5 h-3.5" /> },
-  { id: 'audio',       label: 'Audio Mix',   icon: <Sliders className="w-3.5 h-3.5" /> },
-  { id: 'locations',   label: 'Locations',   icon: <MapPin className="w-3.5 h-3.5" /> },
-]
-
 const DEFAULT_TRACKS: Track[] = [
   { id: 't-v1', type: 'video', label: 'VIDEO 1', muted: false, locked: false, solo: false, clips: [] },
   { id: 't-v2', type: 'video', label: 'VIDEO 2', muted: false, locked: false, solo: false, clips: [] },
@@ -122,7 +112,7 @@ export default function UltimatePage() {
   const [readyProjectId, setReadyProjectId] = useState<string | null>(null)
 
   // UIStore — icon rail / film toolbar panel selection
-  const { activePanel, activeTool, workspace } = useUIStore()
+  const { activePanel, activeTool } = useUIStore()
 
   const script = useScriptStore((s) => s.scriptContent)
   const scenes = useScriptStore((s) => s.parsedScenes)
@@ -164,11 +154,6 @@ export default function UltimatePage() {
   }, [session])
 
   const [activeTab, setActiveTab] = useState<UltimateTab>('script')
-  const [leftCollapsed, setLeftCollapsed] = useState(false)
-  useEffect(() => {
-    const tool = workspace === 'Colour' || workspace === 'Audio' || workspace === 'VFX' || workspace === 'Compositor' || workspace === 'Motion' || workspace === 'Look-dev' || workspace === 'Review'
-    setLeftCollapsed(tool)
-  }, [workspace])
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return 320
     const stored = localStorage.getItem('cinema-left-panel-width')
@@ -283,13 +268,7 @@ export default function UltimatePage() {
   useEffect(() => {
     if (!activePanel) return
     const mapped = PANEL_TO_FILM_TAB[activePanel]
-    if (mapped) {
-      setActiveTab(mapped)
-      setLeftCollapsed(false)
-    } else {
-      // Non-film panel (Cast, Makeup, Vault, etc.) — expand panel area so <LeftPanel /> is visible
-      setLeftCollapsed(false)
-    }
+    if (mapped) setActiveTab(mapped)
   }, [activePanel])
 
   const selectedClip = selectedClipId ? allClips.find((c) => c.id === selectedClipId) ?? null : null
@@ -613,48 +592,10 @@ export default function UltimatePage() {
 
         <div
           className={`flex flex-col border-r border-[var(--border)] transition-all duration-200 flex-shrink-0 bg-[var(--bg-elevated)]
-            ${leftCollapsed ? 'w-10' : activePanel && !FILM_PANEL_IDS.has(activePanel) ? 'w-0 overflow-hidden' : 'w-[360px]'}`}
+            ${activePanel && !FILM_PANEL_IDS.has(activePanel) ? 'w-0 overflow-hidden' : 'w-[360px]'}`}
         >
-          {/* Tab pills */}
-          <div className={`flex flex-col border-b border-[var(--border)] ${leftCollapsed ? 'items-center py-2 gap-1' : 'flex-row flex-wrap gap-0'}`}>
-            {leftCollapsed ? (
-              <>
-                {TABS.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => { setActiveTab(tab.id); setLeftCollapsed(false) }}
-                    title={tab.label}
-                    className={`p-2 rounded-lg transition-colors ${activeTab === tab.id ? 'text-[var(--teal-bright)] bg-[var(--teal-glow)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'}`}
-                  >
-                    {tab.icon}
-                  </button>
-                ))}
-                <button onClick={() => setLeftCollapsed(false)} className="p-2 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] mt-2">
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-              </>
-            ) : (
-              <>
-                {TABS.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-1.5 px-3 py-2 border-b border-[var(--border)] text-[10px] font-medium transition-colors
-                      ${activeTab === tab.id ? 'text-[var(--teal-bright)] bg-[var(--teal-glow)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'}`}
-                  >
-                    {tab.icon}
-                    <span className="whitespace-nowrap">{tab.label}</span>
-                  </button>
-                ))}
-                <button onClick={() => setLeftCollapsed(true)} className="ml-auto p-2 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors">
-                  <ChevronLeft className="w-3 h-3" />
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Panel content */}
-          {!leftCollapsed && (
+          {/* Panel content. The top bar chooses the workspace. */}
+          {(
             <div className="flex-1 overflow-hidden">
               <Suspense fallback={<div className="flex items-center justify-center h-full text-zinc-500 text-sm">Loading…</div>}>
               <div className={activeTab === 'script' ? 'h-full' : 'hidden'}>
@@ -724,7 +665,7 @@ export default function UltimatePage() {
           )}
 
           {/* Drag-to-resize handle — right edge */}
-          {!leftCollapsed && !(activePanel && !FILM_PANEL_IDS.has(activePanel)) && (
+          {!(activePanel && !FILM_PANEL_IDS.has(activePanel)) && (
             <div
               onMouseDown={startLeftResize}
               className="absolute bottom-0 right-0 top-0 z-30 w-2 cursor-col-resize group"

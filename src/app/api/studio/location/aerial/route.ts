@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 import { buildFluxDevT2iInput } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAccess } from '@/lib/access/guard'
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
     const imageUrl = data.images?.[0]?.url
     if (!imageUrl) return NextResponse.json({ error: 'The aerial plate did not return an image' }, { status: 502 })
     const bytes = Buffer.from(await (await fetch(imageUrl)).arrayBuffer())
-    const stored = await uploadToR2(bytes, `locations/${userId}/${Date.now()}.png`, 'image/png')
+    const stored = await storeForUser(userId, bytes, 'png', 'image/png')
     const place = body.place!.trim()
     const asset = await db.asset.create({
       data: {

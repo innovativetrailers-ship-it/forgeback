@@ -1,4 +1,4 @@
-import { buildImagePayload, scoutPlatePrompt } from '@cinema/core'
+import { buildImagePayload, MAPILLARY_LICENCE, scoutPlatePrompt } from '@cinema/core'
 import { buildFluxDevT2iInput } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAccess } from '@/lib/access/guard'
@@ -7,6 +7,8 @@ import { isGenerationPausedError } from '@/lib/generation/pause'
 import { IMAGE_FAL_TIMEOUT_MS, runFal } from '@/lib/fal/client'
 import { db } from '@/lib/db'
 import { uploadToR2 } from '@/lib/storage/r2'
+import { opaqueObjectKey } from '@/lib/upload/sniff'
+import { safeFetch } from '@/lib/net/safeFetch'
 import { referenceImagePlan } from '@/lib/studio/referenceImage'
 import { AERIAL_CREDITS } from '@/lib/studio/generationUtilities'
 import { requireUser } from '@/lib/auth/requireUser'
@@ -92,7 +94,8 @@ export async function POST(req: NextRequest) {
     ))
     const imageUrl = data.images?.[0]?.url
     if (!imageUrl) return NextResponse.json({ error: 'The plate did not return an image' }, { status: 502 })
-    const stored = await uploadToR2(Buffer.from(await (await fetch(imageUrl)).arrayBuffer()), `locations/${userId}/${Date.now()}.png`, 'image/png')
+    const imageRes = await safeFetch(imageUrl, [])
+    const stored = await uploadToR2(Buffer.from(await imageRes.arrayBuffer()), opaqueObjectKey('png'), 'image/png')
     const name = body.name!.trim()
     const asset = await db.asset.create({
       data: {
@@ -108,7 +111,9 @@ export async function POST(req: NextRequest) {
         variationOf: parent?.id,
         boundary: {
           source: plan.imageUrls.length ? 'generated-from-scout' : 'describe',
-          licence: 'Generated plate. Scout references were not kept as the stored image.',
+          licence: plan.imageUrls.some((url) => /mapillary/i.test(url))
+            ? `${MAPILLARY_LICENCE} Generated plate. Scout references were not kept as the stored image.`
+            : 'Generated plate. Scout references were not kept as the stored image.',
           lat: body.lat,
           lng: body.lng,
           camera: { height: body.height, heading: body.heading, pitch: body.pitch, fov: body.fov, time: body.time, season: body.season, weather: body.weather },

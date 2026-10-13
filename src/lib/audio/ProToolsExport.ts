@@ -7,7 +7,7 @@ import { logCaught } from '@/lib/diagnostics/caught'
 import fs from 'fs/promises'
 import path from 'path'
 import os from 'os'
-import { execSync } from 'child_process'
+import { runArgv } from '../shell/argv'
 import { nanoid } from 'nanoid'
 import { uploadToR2 } from '../storage/r2'
 import type { TimelineRecipe, Track } from '../timeline/schema'
@@ -59,22 +59,19 @@ export async function exportBWF(params: BWFParams): Promise<string> {
   const codecMap = { 16: 'pcm_s16le', 24: 'pcm_s24le', 32: 'pcm_f32le' }
   const codec = codecMap[params.bitDepth] ?? 'pcm_s24le'
 
-  execSync(
-    [
-      'ffmpeg', '-y',
-      '-i', `"${inputPath}"`,
-      '-ar', params.sampleRate.toString(),
-      '-sample_fmt', sampleFmt,
-      '-c:a', codec,
-      '-metadata', `description="${params.description ?? 'CINÉMA Export'}"`,
-      '-metadata', 'originator="CINEMA"',
-      '-metadata', `originator_reference="${params.originatorRef ?? nanoid()}"`,
-      '-metadata', `time_reference=${timeRef}`,
-      '-rf64', 'auto',
-      `"${outputPath}"`,
-    ].join(' '),
-    { stdio: 'pipe' }
-  )
+  runArgv('ffmpeg', [
+    '-y',
+    '-i', inputPath,
+    '-ar', params.sampleRate.toString(),
+    '-sample_fmt', sampleFmt,
+    '-c:a', codec,
+    '-metadata', `description=${params.description ?? 'CINÉMA Export'}`,
+    '-metadata', 'originator=CINEMA',
+    '-metadata', `originator_reference=${params.originatorRef ?? nanoid()}`,
+    '-metadata', `time_reference=${timeRef}`,
+    '-rf64', 'auto',
+    outputPath,
+  ])
 
   const fileBuffer = await fs.readFile(outputPath)
   const key = `pro_tools/bwf_${nanoid()}.wav`
@@ -124,13 +121,11 @@ export async function renderStemPackage(params: StemRenderParams): Promise<StemP
     const allClips = tracks.flatMap(t => t.clips).filter(c => c.sourceUrl)
     if (allClips.length === 0) return ''
 
-    const inputs = allClips.map(c => `-i "${c.sourceUrl}"`).join(' ')
     const mixFilter = `[${allClips.map((_, i) => `${i}:a`).join('][')}]amix=inputs=${allClips.length}:duration=longest[out]`
-
-    execSync(
-      `ffmpeg -y ${inputs} -filter_complex "${mixFilter}" -map "[out]" -ar ${sampleRate} -c:a pcm_s24le -rf64 auto "${outputPath}"`,
-      { stdio: 'pipe' }
-    )
+    const mixArgs = ['-y']
+    for (const clip of allClips) mixArgs.push('-i', clip.sourceUrl!)
+    mixArgs.push('-filter_complex', mixFilter, '-map', '[out]', '-ar', String(sampleRate), '-c:a', 'pcm_s24le', '-rf64', 'auto', outputPath)
+    runArgv('ffmpeg', mixArgs)
 
     const fileBuffer = await fs.readFile(outputPath)
     const key = `pro_tools/stems/${label}_${nanoid()}.wav`
@@ -238,7 +233,8 @@ export async function exportOMF(params: {
   if (audioClips.length === 0) throw new Error('No audio clips found in timeline')
 
   // Build inputs list
-  const inputs = audioClips.map(c => `-i "${c.sourceUrl}"`).join(' ')
+  const omfArgs = ['-y']
+  for (const clip of audioClips) omfArgs.push('-i', clip.sourceUrl!)
 
   // For OMF we build a concat with handles
   const filterParts = audioClips
@@ -251,10 +247,8 @@ export async function exportOMF(params: {
   const mixMap = audioClips.map((_, i) => `[a${i}]`).join('')
   const filter = `${filterParts}; ${mixMap}amix=inputs=${audioClips.length}:duration=longest[out]`
 
-  execSync(
-    `ffmpeg -y ${inputs} -filter_complex "${filter}" -map "[out]" -f wav "${outputPath}"`,
-    { stdio: 'pipe' }
-  )
+  omfArgs.push('-filter_complex', filter, '-map', '[out]', '-f', 'wav', outputPath)
+  runArgv('ffmpeg', omfArgs)
 
   const fileBuffer = await fs.readFile(outputPath)
   const key = `pro_tools/omf_${nanoid()}.omf`

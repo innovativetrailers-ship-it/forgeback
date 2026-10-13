@@ -1,7 +1,9 @@
 import { GOOGLE_IMAGERY_NOTE, MAPILLARY_LICENCE } from '@cinema/core'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { safeFetch } from '@/lib/net/safeFetch'
 import { uploadToR2 } from '@/lib/storage/r2'
+import { opaqueObjectKey } from '@/lib/upload/sniff'
 import { requireUser } from '@/lib/auth/requireUser'
 
 interface LocationMeta {
@@ -48,9 +50,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const imgRes = await fetch(imageUrl)
+    const imgRes = await safeFetch(imageUrl, [])
     if (!imgRes.ok) return NextResponse.json({ error: 'The source image could not be copied' }, { status: 502 })
-    const r2Url = await uploadToR2(Buffer.from(await imgRes.arrayBuffer()), `location-plates/${userId}/${Date.now()}.jpg`, 'image/jpeg')
+    const r2Url = await uploadToR2(Buffer.from(await imgRes.arrayBuffer()), opaqueObjectKey('jpg'), 'image/jpeg')
     const label = location?.displayName || location?.city || type
     const licence = location?.licence || (type === 'street' ? MAPILLARY_LICENCE : 'ArcGIS World Imagery, copied into the library')
     const asset = await db.asset.create({

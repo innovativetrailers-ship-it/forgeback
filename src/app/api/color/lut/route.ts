@@ -10,7 +10,7 @@ import { checkAndDeductCredits,
          refundCredits }              from '@/lib/credits'
 import { FILM_EMULATION_PRESETS }    from '@/lib/color/LUTLoader'
 import { uploadToR2 }                from '@/lib/storage/r2'
-import { execSync }                  from 'child_process'
+import { runArgv } from '@/lib/shell/argv'
 import { mkdirSync, rmSync,
          writeFileSync }             from 'fs'
 import { join }                      from 'path'
@@ -66,10 +66,7 @@ export async function POST(req: NextRequest) {
       vf = `split[a][b],[b]lut3d='${lutPath}'[lut],[a][lut]blend=all_expr='A*(1-${intensity})+B*${intensity}'`
     }
 
-    execSync(
-      `ffmpeg -i "${videoUrl}" -vf "${vf}" -c:v libx264 -preset fast -crf 22 -c:a copy "${outFile}" -y 2>/dev/null`,
-      { timeout: 120_000 },
-    )
+    runArgv('ffmpeg', ['-i', videoUrl, '-vf', vf, '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-c:a', 'copy', outFile, '-y'])
 
     const key      = `color/lut/${randomUUID()}.mp4`
     const buffer   = require('fs').readFileSync(outFile) as Buffer

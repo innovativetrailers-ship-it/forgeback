@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 import { buildPayload } from '@cinema/core'
 import { buildFluxDevT2iInput } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
   const imageUrl = result.images?.[0]?.url
   if (!imageUrl) return NextResponse.json({ error: 'Image model returned no image' }, { status: 502 })
   const bytes = Buffer.from(await (await fetch(imageUrl)).arrayBuffer())
-  const stored = await uploadToR2(bytes, `assets/${userId}/${Date.now()}.png`, 'image/png')
+  const stored = await storeForUser(userId, bytes, 'png', 'image/png')
   await db.asset.update({
     where: { id },
     data: { generatedImage: stored, resolutionState: 'generated', usableAsReference: true },

@@ -7,18 +7,22 @@ import { db } from '@/lib/db'
 import { signedUrlForStoredKey } from '@/lib/media/resolveStoredMedia'
 import { objectKeyFromStored } from '@/lib/storage/r2'
 import { requireUser } from '@/lib/auth/requireUser'
+import { recordConsent } from '@/lib/privacy/consent'
 
 const schema = z.object({
   projectId: z.string().min(1),
   shotId: z.string().min(1),
   text: z.string().min(1),
+  likenessConsent: z.literal(true),
+  notMinor: z.literal(true),
 })
 
 export async function POST(req: NextRequest) {
   const userId = (await requireUser(req))?.id ?? null
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = schema.safeParse(await req.json())
-  if (!parsed.success) return NextResponse.json({ error: 'Invalid lip-sync request' }, { status: 400 })
+  if (!parsed.success) return NextResponse.json({ error: 'Likeness consent is required, and the person must not be a minor. Lip-sync was not run.' }, { status: 400 })
+  await recordConsent(userId, 'likeness', 'studio.voice.lipsync')
   const line = await db.audioTrack.findFirst({
     where: { projectId: parsed.data.projectId, shotPlanId: parsed.data.shotId, type: 'DIALOGUE' },
   })

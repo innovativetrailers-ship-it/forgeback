@@ -83,7 +83,7 @@ export function SFXMakeupPanel() {
             className={cn('rounded border px-2 py-1.5 text-left text-[10px]', selected?.id === look.id ? 'border-[var(--teal-border)] text-[var(--teal-bright)]' : 'border-[var(--border)] text-[var(--text-secondary)]')}
           >
             {look.name}
-            <span className="mt-0.5 block text-[9px] text-[var(--text-tertiary)]">bake live · video needs a model</span>
+            <span className="mt-0.5 block text-[9px] text-[var(--text-tertiary)]">{look.methods.bake === 'live' ? 'bake live' : 'bake needs a model'} · {look.methods.video === 'live' ? 'video live' : 'video needs a model'}</span>
           </button>
         ))}
       </div>

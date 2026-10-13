@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 import { falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { uploadToR2 } from '@/lib/storage/r2'
@@ -55,10 +56,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const stamp = `${userId}/${Date.now()}`
-    const frameUrl = await uploadToR2(decodeB64(frameB64), `edits/${stamp}_frame.jpg`, 'image/jpeg')
+    const frameUrl = await storeForUser(userId, decodeB64(frameB64), 'jpg', 'image/jpeg')
     const maskUrl = maskB64
-      ? await uploadToR2(decodeB64(maskB64), `edits/${stamp}_mask.png`, 'image/png')
+      ? await storeForUser(userId, decodeB64(maskB64), 'png', 'image/png')
       : undefined
 
     // IC-Light relight — full-frame, reuses the existing lighting helper.

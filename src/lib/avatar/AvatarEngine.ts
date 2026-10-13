@@ -13,8 +13,7 @@ export async function createInstantAvatar(params: {
   const { recordingUrl, userId, name } = params
 
   // Extract face thumbnail
-  const { execSync } = await import('child_process')
-  const { mkdirSync, rmSync, existsSync } = await import('fs')
+  const { mkdirSync, rmSync, existsSync, readFileSync } = await import('fs')
   const { join } = await import('path')
   const { nanoid } = await import('nanoid')
 
@@ -28,8 +27,9 @@ export async function createInstantAvatar(params: {
   try {
     // Extract a good face frame
     const thumbPath = join(tmpDir, 'thumb.jpg')
-    execSync(`ffmpeg -i "${recordingUrl}" -vframes 1 -ss 00:00:02 "${thumbPath}" -y 2>/dev/null`)
-    const thumbBuf = execSync(`cat "${thumbPath}"`)
+    const { runArgv } = await import('../shell/argv')
+    runArgv('ffmpeg', ['-i', recordingUrl, '-vframes', '1', '-ss', '00:00:02', thumbPath, '-y'])
+    const thumbBuf = readFileSync(thumbPath)
     thumbnailUrl = await uploadToR2(thumbBuf, `avatars/${jobId}_thumb.jpg`, 'image/jpeg')
 
     // Clone voice from recording
@@ -94,8 +94,8 @@ export async function scriptToAvatarVideo(params: {
 
   // Composite over background
   if (backgroundUrl) {
-    const { execSync } = await import('child_process')
-    const { mkdirSync, rmSync, existsSync } = await import('fs')
+    const { runArgv } = await import('../shell/argv')
+    const { mkdirSync, rmSync, existsSync, readFileSync } = await import('fs')
     const { join } = await import('path')
     const { nanoid } = await import('nanoid')
     const jobId = nanoid()
@@ -108,11 +108,9 @@ export async function scriptToAvatarVideo(params: {
       require('fs').writeFileSync(avatarPath, avatarBuf)
       const outputPath = join(tmpDir, 'composited.mp4')
 
-      execSync(
-        `ffmpeg -i "${backgroundUrl}" -i "${avatarPath}" -filter_complex "[0:v][1:v]overlay=x=(W-w)/2:y=(H-h)/2" -c:a copy "${outputPath}" -y 2>/dev/null`
-      )
+      runArgv('ffmpeg', ['-i', backgroundUrl, '-i', avatarPath, '-filter_complex', '[0:v][1:v]overlay=x=(W-w)/2:y=(H-h)/2', '-c:a', 'copy', outputPath, '-y'])
 
-      const outBuf = execSync(`cat "${outputPath}"`)
+      const outBuf = readFileSync(outputPath)
       videoUrl = await uploadToR2(outBuf, `avatar-videos/${jobId}.mp4`, 'video/mp4')
     } finally {
       if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true })

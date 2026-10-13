@@ -40,9 +40,20 @@ export async function GET(req: NextRequest) {
 
     const [characters, locations] = await Promise.all([
       db.vaultCharacter.findMany({ where: { projectId } }),
-      db.vaultLocation.findMany({ where: { projectId } }),
+      db.asset.findMany({
+        where: { kind: 'location', boundary: { path: ['projectId'], equals: projectId } },
+        select: { id: true, label: true, sourceRefs: true, generatedImage: true },
+      }),
     ])
-    return NextResponse.json({ characters, locations })
+    return NextResponse.json({
+      characters,
+      locations: locations.map((row) => ({
+        id: row.id,
+        name: row.label ?? 'Location',
+        referenceUrls: row.sourceRefs,
+        imageUrl: row.generatedImage,
+      })),
+    })
   }
 
   return NextResponse.json({ error: 'Invalid resource' }, { status: 400 })

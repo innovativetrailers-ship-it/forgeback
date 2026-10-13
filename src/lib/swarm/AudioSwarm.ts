@@ -174,8 +174,8 @@ export class AudioSwarm {
       this.downloadToPath(audioUrl, aPath),
     ])
 
-    const { execSync } = await import('child_process')
-    execSync(`ffmpeg -y -i "${vPath}" -i "${aPath}" -c:v copy -c:a aac -shortest "${oPath}"`)
+    const { runArgv } = await import('@/lib/shell/argv')
+    runArgv('ffmpeg', ['-y', '-i', vPath, '-i', aPath, '-c:v', 'copy', '-c:a', 'aac', '-shortest', oPath])
 
     const { readFile } = await import('fs/promises')
     const buffer = await readFile(oPath)

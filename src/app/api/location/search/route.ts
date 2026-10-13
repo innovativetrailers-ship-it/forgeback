@@ -61,10 +61,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         hasStreetView: street.shown.length > 0,
         licence: MAPILLARY_LICENCE,
         google: GOOGLE_IMAGERY_NOTE,
-        unavailable: [
-          'KartaView nearby search returned HTTP 400 (query timeout) and is not listed.',
-          'Wikimedia Commons geosearch returned no photos for a sample point and is not listed.',
-        ],
+        unavailable: [] as string[],
       },
     })
   } catch (err: unknown) {

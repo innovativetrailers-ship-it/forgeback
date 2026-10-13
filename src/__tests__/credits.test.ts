@@ -1,14 +1,21 @@
-import { OPERATION_COSTS, CreditError } from '../lib/credits'
+import { OPERATION_COSTS } from '../lib/credits'
 
 // Use a simple mock that bypasses Prisma type checks
 jest.mock('../lib/db', () => ({
   db: {
+    user: { findUnique: jest.fn(), update: jest.fn() },
+    creditTransaction: { create: jest.fn() },
     $transaction: jest.fn(),
   },
 }))
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { db } = require('../lib/db') as { db: { $transaction: jest.Mock } }
+const { db } = require('../lib/db') as {
+  db: {
+    user: { findUnique: jest.Mock; update: jest.Mock }
+    $transaction: jest.Mock
+  }
+}
 import { checkAndDeductCredits } from '../lib/credits'
 
 describe('OPERATION_COSTS', () => {
@@ -30,31 +37,19 @@ describe('OPERATION_COSTS', () => {
 describe('checkAndDeductCredits', () => {
   beforeEach(() => jest.clearAllMocks())
 
-  it('throws CreditError when user has insufficient credits', async () => {
-    db.$transaction.mockImplementationOnce(async (fn: (tx: unknown) => Promise<void>) => {
-      return fn({
-        user: {
-          findUnique: jest.fn().mockResolvedValue({ creditBalance: 5 }),
-          update: jest.fn(),
-        },
-        creditTransaction: { create: jest.fn() },
-      })
-    })
-
+  it('throws when the balance cannot cover the operation', async () => {
+    db.user.findUnique.mockResolvedValue({ creditBalance: 5, role: 'FREE' })
     await expect(
       checkAndDeductCredits('user-123', 'generate_kling_standard')
-    ).rejects.toThrow(CreditError)
+    ).rejects.toThrow(/Insufficient credits/)
   })
 
   it('deducts credits when user has sufficient balance', async () => {
-    const mockUpdate = jest.fn().mockResolvedValue({ creditBalance: 982 })
-
+    const mockUpdate = jest.fn().mockResolvedValue({ creditBalance: 992 })
+    db.user.findUnique.mockResolvedValue({ creditBalance: 1000, role: 'FREE' })
     db.$transaction.mockImplementationOnce(async (fn: (tx: unknown) => Promise<void>) => {
       return fn({
-        user: {
-          findUnique: jest.fn().mockResolvedValue({ creditBalance: 1000 }),
-          update: mockUpdate,
-        },
+        user: { update: mockUpdate },
         creditTransaction: { create: jest.fn() },
       })
     })
@@ -63,9 +58,8 @@ describe('checkAndDeductCredits', () => {
     expect(mockUpdate).toHaveBeenCalled()
   })
 
-  it('throws CreditError for unknown operation', async () => {
-    await expect(
-      checkAndDeductCredits('user-123', 'unknown_operation_xyz')
-    ).rejects.toThrow(CreditError)
+  it('does not charge an operation that has no listed cost', async () => {
+    await expect(checkAndDeductCredits('user-123', 'unknown_operation_xyz')).resolves.toBeUndefined()
+    expect(db.user.findUnique).not.toHaveBeenCalled()
   })
 })

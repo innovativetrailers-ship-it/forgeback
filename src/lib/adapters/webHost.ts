@@ -8,7 +8,6 @@ import {
   shotToStudioClipData,
   studioClipToShot,
   vaultCharacterToCharacter,
-  vaultLocationToLocation,
   type StudioClipRow,
 } from './mappers'
 
@@ -52,8 +51,20 @@ export const webHost: HostAdapter = {
   },
 
   async getLocations(projectId) {
-    const vault = await db.vaultLocation.findMany({ where: { projectId } })
-    return vault.map(vaultLocationToLocation)
+    const rows = await db.asset.findMany({
+      where: { kind: 'location', boundary: { path: ['projectId'], equals: projectId } },
+      select: { id: true, label: true, generatedImage: true, sourceRefs: true, boundary: true },
+    })
+    return rows.map((row) => {
+      const boundary = row.boundary as { lat?: number; lng?: number } | null
+      return locationPlateToLocation({
+        id: row.id,
+        displayName: row.label,
+        imageUrl: row.generatedImage || row.sourceRefs[0] || '',
+        lat: typeof boundary?.lat === 'number' ? boundary.lat : null,
+        lng: typeof boundary?.lng === 'number' ? boundary.lng : null,
+      }, projectId)
+    })
   },
 
   async enqueue(job) {

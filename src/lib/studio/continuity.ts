@@ -1,5 +1,5 @@
-import { execSync } from 'child_process'
-import { mkdirSync, rmSync, existsSync } from 'fs'
+import { runArgv } from '@/lib/shell/argv'
+import { mkdirSync, rmSync, existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 import type { TimelineRecipe } from '../timeline/schema'
@@ -33,10 +33,8 @@ export async function checkContinuity(recipe: TimelineRecipe): Promise<Continuit
     for (const clip of videoClips) {
       const framePath = join(tmpDir, `${clip.id}.jpg`)
       try {
-        execSync(
-          `ffmpeg -i "${clip.sourceUrl}" -vframes 1 -ss 00:00:01 "${framePath}" -y 2>/dev/null`
-        )
-        const b64 = execSync(`base64 "${framePath}"`).toString().trim()
+        runArgv("ffmpeg", ["-i", clip.sourceUrl, "-vframes", "1", "-ss", "00:00:01", framePath, "-y"])
+        const b64 = readFileSync(framePath).toString('base64')
         frames.push({ clipId: clip.id, base64: b64 })
       } catch (err) {
         console.warn("[caught] src/lib/studio/continuity.ts:41", err instanceof Error ? { name: err.name, message: err.message } : err)

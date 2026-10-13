@@ -28,7 +28,7 @@ export async function importPremiereProject(fileBuffer: Buffer): Promise<Importe
   }
 
   return {
-    projectName: root?.Name?.[0] ?? 'Imported Premiere Project',
+    projectName: root?.Name?.[0] ?? 'Imported project',
     sequences,
     bins,
     mediaItems,

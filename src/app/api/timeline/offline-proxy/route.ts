@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 import { createWriteStream, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
   try {
     await download(parsed.data.sourceUrl, input)
     await transcode(input, output)
-    const proxyUrl = await uploadToR2(readFileSync(output), `proxies/${userId}/${Date.now()}.mp4`, 'video/mp4')
+    const proxyUrl = await storeForUser(userId, readFileSync(output), 'mp4', 'video/mp4')
     return NextResponse.json({ proxyUrl })
   } catch (err) {
     console.warn('[proxy]', err instanceof Error ? err.message : err)

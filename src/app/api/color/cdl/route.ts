@@ -12,7 +12,7 @@ import { cdlToFFmpeg,
          validateCDL }               from '@/lib/color/CDLWheels'
 import type { CDLValues }            from '@/lib/color/CDLWheels'
 import { uploadToR2 }                from '@/lib/storage/r2'
-import { execSync }                  from 'child_process'
+import { runArgv } from '@/lib/shell/argv'
 import { mkdirSync, rmSync }         from 'fs'
 import { join }                      from 'path'
 import { randomUUID }                from 'crypto'
@@ -43,10 +43,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const outFile = join(tmpDir, 'graded.mp4')
-    execSync(
-      `ffmpeg -i "${videoUrl}" -vf "${filter}" -c:v libx264 -preset fast -crf 22 -c:a copy "${outFile}" -y 2>/dev/null`,
-      { timeout: 120_000 },
-    )
+    runArgv('ffmpeg', ['-i', videoUrl, '-vf', filter, '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-c:a', 'copy', outFile, '-y'])
 
     const key      = `color/cdl/${randomUUID()}.mp4`
     const buffer   = require('fs').readFileSync(outFile) as Buffer

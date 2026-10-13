@@ -21,15 +21,15 @@ const SOURCE_APP_LABELS: Record<ImportSourceApp, string> = {
 }
 
 const SOURCE_APP_ICONS: Record<ImportSourceApp, string> = {
-  premiere:  '🅿️',
-  davinci:   '🎬',
-  capcut:    '✂️',
-  finalcut:  '🍎',
-  avid:      '🎞️',
-  edl:       '📋',
-  otio:      '🔗',
-  raw_media: '🎥',
-  unknown:   '❓',
+  premiere:  'PR',
+  davinci:   'CO',
+  capcut:    'ME',
+  finalcut:  'FC',
+  avid:      'AV',
+  edl:       'EDL',
+  otio:      'OTIO',
+  raw_media: 'RAW',
+  unknown:   '?',
 }
 
 const SOURCE_APP_DESCRIPTIONS: Partial<Record<ImportSourceApp, string>> = {
@@ -203,7 +203,7 @@ export function ImportProjectPanel({ onClose }: ImportProjectPanelProps) {
                 <div key={app} className="text-center p-2 bg-[#0d1117] rounded-lg">
                   <div className="text-xl">{SOURCE_APP_ICONS[app]}</div>
                   <div className="text-xs text-gray-400 mt-1">
-                    {SOURCE_APP_LABELS[app].split(' ')[0]}
+                    {SOURCE_APP_LABELS[app]}
                   </div>
                 </div>
               ))}

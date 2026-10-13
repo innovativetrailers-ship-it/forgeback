@@ -1,3 +1,4 @@
+import { storeForUser } from '@/lib/storage/objects'
 import { falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -178,7 +179,7 @@ export async function PATCH(req: NextRequest) {
     const remote = extractImageUrl(result)?.trim()
     if (!remote) return NextResponse.json({ error: 'Frame extract returned no image' }, { status: 502 })
     const bytes = Buffer.from(await (await fetch(remote)).arrayBuffer())
-    const stored = await uploadToR2(bytes, `assets/${userId}/frames/${Date.now()}.jpg`, 'image/jpeg')
+    const stored = await storeForUser(userId, bytes, 'jpg', 'image/jpeg')
     const kind = body.videoFrame.kind === 'location' ? 'location' : 'character'
     const current = await loadWizardRefs(jobId) ?? { characters: [], locations: [] }
     const bucket = kind === 'location' ? current.locations : current.characters

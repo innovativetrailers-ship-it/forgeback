@@ -1,3 +1,5 @@
+import { rememberObject } from '@/lib/storage/objects'
+import { opaqueObjectKey } from '@/lib/upload/sniff'
 import { type NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@/generated/prisma/client'
 import { db } from '@/lib/db'
@@ -54,7 +56,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const buffer = Buffer.from(await video.arrayBuffer())
     const ext = video.type.includes('webm') ? 'webm' : 'mp4'
     const contentType = ext === 'webm' ? 'video/webm' : 'video/mp4'
-    const key = `embeds/shoppable/${userId}/${Date.now()}.${ext}`
+    const key = opaqueObjectKey(ext)
+    await rememberObject(userId, key)
     const videoUrl = await uploadToR2(buffer, key, contentType)
 
     const embed = await db.shoppableEmbed.create({

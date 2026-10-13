@@ -64,17 +64,17 @@ export async function createBin(params: {
 
 export async function getBinsForProject(projectId: string): Promise<MediaBin[]> {
   const bins = await db.mediaBin.findMany({
-    where: { projectId },
-    include: { clips: true },
+    where: { projectId, retiredAt: null },
+    include: { clips: { where: { retiredAt: null } } },
     orderBy: { createdAt: 'asc' },
   })
   return bins.map(b => ({ ...b, clips: b.clips.map(normaliseBinClip) }))
 }
 
 export async function deleteBin(binId: string): Promise<void> {
-  // Cascade: delete clips first, then the bin
-  await db.binClipEntry.deleteMany({ where: { binId } })
-  await db.mediaBin.delete({ where: { id: binId } })
+  const retiredAt = new Date()
+  await db.binClipEntry.updateMany({ where: { binId }, data: { retiredAt } })
+  await db.mediaBin.update({ where: { id: binId }, data: { retiredAt } })
 }
 
 // ── Clip management ───────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ export async function updateClipTags(clipId: string, tags: string[]): Promise<vo
 }
 
 export async function removeClipFromBin(clipId: string): Promise<void> {
-  await db.binClipEntry.delete({ where: { id: clipId } })
+  await db.binClipEntry.update({ where: { id: clipId }, data: { retiredAt: new Date() } })
 }
 
 // ── Semantic search ───────────────────────────────────────────────────────────

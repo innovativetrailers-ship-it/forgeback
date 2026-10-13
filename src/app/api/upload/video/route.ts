@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid'
 import { db } from '@/lib/db'
 import { ensureMainFolder } from '@/lib/library/folders'
 import { requireUser } from '@/lib/auth/requireUser'
+import { opaqueObjectKey, sniffMedia } from '@/lib/upload/sniff'
 
 const MAX_SIZE = 500 * 1024 * 1024 // 500MB
 
@@ -15,14 +16,16 @@ export async function POST(request: NextRequest) {
   const file = formData.get('video') as File | null
 
   if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
-  if (!file.type.startsWith('video/')) return NextResponse.json({ error: 'Invalid file type' }, { status: 400 })
   if (file.size > MAX_SIZE) return NextResponse.json({ error: 'File too large (max 500MB)' }, { status: 400 })
 
   const buffer = Buffer.from(await file.arrayBuffer())
-  const ext = file.name.split('.').pop() ?? 'mp4'
-  const key = `uploads/${userId}/videos/${nanoid()}.${ext}`
+  const sniffed = sniffMedia(buffer)
+  if (!sniffed || sniffed.mime !== 'video/mp4') {
+    return NextResponse.json({ error: 'File contents are not an allowed video' }, { status: 400 })
+  }
+  const key = opaqueObjectKey(sniffed.ext)
 
-  const storedUrl = await uploadToR2(buffer, key, file.type)
+  const storedUrl = await uploadToR2(buffer, key, sniffed.mime)
   const id = nanoid()
   const projectId = String(formData.get('projectId') ?? '')
   const folder = projectId

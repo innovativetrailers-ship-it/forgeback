@@ -1,9 +1,9 @@
+import { storeForUser } from '@/lib/storage/objects'
 // Phase 6: concatenate discrete shots. Cuts are edits, not interpolated morphs.
 
 import { falEndpoint } from '@cinema/core/endpoints'
 import { runFal, extractVideoUrl } from '@/lib/fal/client'
 import { stripGeneratedClipAudio } from '@/lib/fal/stripVideoAudio'
-import { uploadToR2 }        from '@/lib/storage/r2'
 import type { GeneratedSegment } from './types'
 
 export async function stitchSegments(
@@ -46,11 +46,7 @@ export async function stitchSegments(
   }
 
   const buf      = await fetch(stitchedUrl).then(r => r.arrayBuffer())
-  const finalUrl = await uploadToR2(
-    Buffer.from(buf),
-    `films/${userId}/${Date.now()}_final.mp4`,
-    'video/mp4'
-  )
+  const finalUrl = await storeForUser(userId, Buffer.from(buf), 'mp4', 'video/mp4')
 
   return finalUrl
 }

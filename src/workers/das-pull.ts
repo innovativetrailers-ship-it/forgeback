@@ -1,3 +1,5 @@
+import { rememberObject } from '@/lib/storage/objects'
+import { opaqueObjectKey } from '@/lib/upload/sniff'
 /**
  * DAS Pull Worker — Run as standalone process: `npx tsx src/workers/das-pull.ts`
  * Continuously dequeues completed video jobs from Redis and:
@@ -55,7 +57,7 @@ async function processItem(item: DASQueueItem, dasAvailable: boolean): Promise<v
   console.log(`[das-pull] Processing job ${item.jobId}`)
 
   let outputUrl = item.videoUrl
-  const r2Key = `videos/${item.userId}/${item.projectId ?? 'global'}/${item.jobId}.mp4`
+  const r2Key = opaqueObjectKey('mp4')
 
   // Fetch the video data
   const response = await fetch(item.videoUrl)
@@ -69,6 +71,7 @@ async function processItem(item: DASQueueItem, dasAvailable: boolean): Promise<v
       console.log(`[das-pull] Saved to DAS (Neon): ${dasPath}`)
 
       // Upload to R2 from buffer
+      await rememberObject(item.userId, r2Key)
       outputUrl = await uploadToR2FromBuffer(buffer, r2Key)
       console.log(`[das-pull] Uploaded to R2: ${outputUrl}`)
 

@@ -1,7 +1,5 @@
 /**
- * C2PA (Coalition for Content Provenance and Authenticity) metadata injection.
- * Injects C2PA manifest into exported video files via FFmpeg -metadata.
- * Visible in Adobe Content Authenticity Inspect tool.
+ * Container comment metadata. This is not a signed content-credentials manifest.
  */
 
 export interface C2PAManifest {

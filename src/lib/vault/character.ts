@@ -281,14 +281,14 @@ export async function resolveCharacterVoiceId(characterId: string): Promise<stri
 export async function listCharacters(projectId?: string, userId?: string) {
   return db.vaultCharacter.findMany({
     where: userId
-      ? { project: { userId } }
+      ? { project: { userId }, retiredAt: null }
       : projectId
-        ? { projectId }
-        : {},
+        ? { projectId, retiredAt: null }
+        : { retiredAt: null },
     orderBy: { renderCount: 'desc' },
   })
 }
 
 export async function deleteCharacter(id: string) {
-  return db.vaultCharacter.delete({ where: { id } })
+  return db.vaultCharacter.update({ where: { id }, data: { retiredAt: new Date() } })
 }

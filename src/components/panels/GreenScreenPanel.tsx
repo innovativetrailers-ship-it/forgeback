@@ -679,7 +679,7 @@ export function GreenScreenPanel() {
           </button>
         )}
         <button type="button" className="pill" disabled={busy} onClick={saveOnClip}>Save key on selected clip</button>
-        <button type="button" className="pill" disabled={busy} onClick={() => void addToTimeline()}>Add video layers to timeline</button>
+        <button type="button" className="pill" disabled title="Stills only. A video matte is not placed from this panel.">Stills only</button>
         {quote && (
           <div className="rounded border border-[var(--teal-border)] p-2 space-y-1">
             <p className="text-[10px] text-[var(--text-secondary)]">{quote.label} · {quote.estimateCredits} credits</p>

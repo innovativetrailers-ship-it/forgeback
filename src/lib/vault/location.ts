@@ -1,6 +1,4 @@
 import { db } from '../db'
-import { uploadToR2 } from '../storage/r2'
-import { nanoid } from 'nanoid'
 
 export async function createLocation(params: {
   projectId: string
@@ -14,35 +12,36 @@ export async function createLocation(params: {
   depthMapUrl?: string
   metaJson?: Record<string, unknown>
 }) {
-  return db.vaultLocation.create({
+  const project = await db.project.findUnique({
+    where: { id: params.projectId },
+    select: { userId: true },
+  })
+  if (!project) throw new Error('Project not found')
+  return db.asset.create({
     data: {
-      projectId: params.projectId,
-      name: params.name,
-      source: params.source,
-      lat: params.lat,
-      lng: params.lng,
-      referenceUrls: params.imageUrls ?? [],
-      generativePrompt: params.generativePrompt,
-      hdriUrl: params.hdriUrl,
-      depthMapUrl: params.depthMapUrl,
-      metaJson: params.metaJson ? JSON.parse(JSON.stringify(params.metaJson)) : undefined,
+      ownerId: project.userId,
+      kind: 'location',
+      label: params.name,
+      sourcePrompt: params.generativePrompt ?? params.name,
+      generatedImage: params.imageUrls?.[0],
+      sourceRefs: params.imageUrls ?? [],
+      usableAsReference: Boolean(params.imageUrls?.[0]),
+      boundary: {
+        projectId: params.projectId,
+        source: params.source,
+        lat: params.lat ?? null,
+        lng: params.lng ?? null,
+        hdriUrl: params.hdriUrl ?? null,
+        depthMapUrl: params.depthMapUrl ?? null,
+        look: params.metaJson?.look ?? null,
+      },
     },
   })
 }
 
 export async function listLocations(projectId: string) {
-  return db.vaultLocation.findMany({
-    where: { projectId },
+  return db.asset.findMany({
+    where: { kind: 'location', boundary: { path: ['projectId'], equals: projectId } },
     orderBy: { createdAt: 'desc' },
   })
-}
-
-export async function uploadLocationImage(
-  buffer: Buffer,
-  projectId: string,
-  contentType: string
-): Promise<string> {
-  const ext = contentType.split('/')[1] ?? 'jpg'
-  const key = `vault/locations/${projectId}/${nanoid()}.${ext}`
-  return uploadToR2(buffer, key, contentType)
 }

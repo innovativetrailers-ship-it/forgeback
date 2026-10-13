@@ -8,7 +8,7 @@ export async function importCapCutProject(fileBuffer: Buffer): Promise<ImportedP
     zip.getEntry('draft_content.json') ??
     zip.getEntry('draft/draft_content.json')
 
-  if (!draftEntry) throw new Error('Not a valid CapCut project file')
+  if (!draftEntry) throw new Error('Not a valid mobile editor project file')
 
   const draft = JSON.parse(draftEntry.getData().toString('utf8')) as {
     name?: string
@@ -52,7 +52,7 @@ export async function importCapCutProject(fileBuffer: Buffer): Promise<ImportedP
   }))
 
   return {
-    projectName: draft.name ?? 'CapCut Project',
+    projectName: draft.name ?? 'Mobile editor project',
     sequences: [
       {
         name: 'Main Timeline',

@@ -349,7 +349,10 @@ export function TopBar() {
                 >
                   <Download className="w-3.5 h-3.5" /> Forge Extreme Download
                 </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-[12px] cursor-pointer text-[var(--text-secondary)]">
+                <DropdownMenuItem
+                  onClick={() => setActivePanel('settings')}
+                  className="gap-2 text-[12px] cursor-pointer text-[var(--text-secondary)]"
+                >
                   <Settings className="w-3.5 h-3.5" /> Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-[var(--border)]" />
@@ -397,11 +400,16 @@ export function TopBar() {
               {tab.label}
             </button>
           ))}
+          <div className="ml-auto flex items-center gap-0.5">
+            {(workspace === 'Editor' || workspace === 'Creator') && EDIT_TOOLS.map((tool) => (
+              <button key={tool.id} type="button" title={`${tool.label} (${tool.key})`} onClick={() => activateTool(tool.id)} className="px-1 text-[10px] text-[var(--text-tertiary)]">{tool.label}</button>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* ── ROW 3 — Edit toolbar (Advanced + Ultimate, 30px) ── */}
-      {isAdvancedOrUltimate && (
+      {/* Edit tools sit on the film row in Ultimate. This row is only the advanced editor. */}
+      {isAdvancedOrUltimate && !isUltimate && (
         <div className="flex items-center gap-1 px-3 h-[30px] border-b border-[var(--border)] bg-[var(--bg-elevated)]">
           {/* Edit tools */}
           <div className="flex items-center gap-0.5">

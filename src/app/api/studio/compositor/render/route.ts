@@ -1,3 +1,5 @@
+import { rememberObject } from '@/lib/storage/objects'
+import { opaqueObjectKey } from '@/lib/upload/sniff'
 import { falEndpoint } from '@cinema/core/endpoints'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -75,7 +77,8 @@ export async function POST(req: NextRequest) {
       const png = await executeCompositorGraphToPng(parsed.data.graph as CompositorGraph, {
         mediaUrls: { ...(parsed.data.mediaUrls ?? {}), subject: cutoutRemote },
       })
-      const key = `compositor/${userId}/${nanoid()}.png`
+      const key = opaqueObjectKey('png')
+      await rememberObject(userId, key)
       const url = await uploadToR2(png, key, 'image/png')
       return NextResponse.json({
         url,
@@ -102,7 +105,8 @@ export async function POST(req: NextRequest) {
       { mediaUrls: parsed.data.mediaUrls },
     )
 
-    const key = `compositor/${userId}/${nanoid()}.png`
+    const key = opaqueObjectKey('png')
+    await rememberObject(userId, key)
     const url = await uploadToR2(png, key, 'image/png')
     if (!wantsMatte) return NextResponse.json({ url, key, size: png.length })
     if (!confirmed) {
